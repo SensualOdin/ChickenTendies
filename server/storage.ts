@@ -1,37 +1,366 @@
-import { type User, type InsertUser } from "@shared/schema";
 import { randomUUID } from "crypto";
+import type { 
+  Group, 
+  GroupMember, 
+  GroupPreferences, 
+  Restaurant, 
+  Swipe,
+  InsertGroup,
+  JoinGroup 
+} from "@shared/schema";
 
-// modify the interface with any CRUD methods
-// you might need
-
-export interface IStorage {
-  getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
+function generateCode(): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code = "";
+  for (let i = 0; i < 6; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return code;
 }
 
+export interface IStorage {
+  createGroup(data: InsertGroup): Promise<{ group: Group; memberId: string }>;
+  joinGroup(data: JoinGroup): Promise<{ group: Group; memberId: string } | null>;
+  getGroup(id: string): Promise<Group | undefined>;
+  getGroupByCode(code: string): Promise<Group | undefined>;
+  updateGroupPreferences(groupId: string, preferences: GroupPreferences): Promise<Group | undefined>;
+  updateGroupStatus(groupId: string, status: Group["status"]): Promise<Group | undefined>;
+  addMember(groupId: string, member: GroupMember): Promise<Group | undefined>;
+  removeMember(groupId: string, memberId: string): Promise<Group | undefined>;
+  getRestaurantsForGroup(groupId: string): Promise<Restaurant[]>;
+  recordSwipe(groupId: string, memberId: string, restaurantId: string, liked: boolean): Promise<Swipe>;
+  getSwipesForGroup(groupId: string): Promise<Swipe[]>;
+  getMatchesForGroup(groupId: string): Promise<Restaurant[]>;
+}
+
+const mockRestaurants: Restaurant[] = [
+  {
+    id: "r1",
+    name: "Bella Italia",
+    cuisine: "Italian",
+    priceRange: "$$",
+    rating: 4.5,
+    reviewCount: 324,
+    imageUrl: "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=800&h=600&fit=crop",
+    address: "123 Main St",
+    distance: 0.8,
+    dietaryOptions: ["vegetarian"],
+    description: "Authentic Italian cuisine with homemade pasta, wood-fired pizzas, and an extensive wine selection in a cozy atmosphere."
+  },
+  {
+    id: "r2",
+    name: "Tokyo Garden",
+    cuisine: "Japanese",
+    priceRange: "$$$",
+    rating: 4.7,
+    reviewCount: 512,
+    imageUrl: "https://images.unsplash.com/photo-1579871494447-9811cf80d66c?w=800&h=600&fit=crop",
+    address: "456 Oak Ave",
+    distance: 1.2,
+    dietaryOptions: ["gluten-free", "pescatarian"],
+    description: "Premium sushi and traditional Japanese dishes crafted by master chefs using the freshest ingredients flown in daily."
+  },
+  {
+    id: "r3",
+    name: "El Mariachi",
+    cuisine: "Mexican",
+    priceRange: "$",
+    rating: 4.3,
+    reviewCount: 287,
+    imageUrl: "https://images.unsplash.com/photo-1565299585323-38d6b0865b47?w=800&h=600&fit=crop",
+    address: "789 Elm St",
+    distance: 0.5,
+    dietaryOptions: ["vegetarian", "vegan"],
+    description: "Vibrant Mexican cantina serving authentic street tacos, fresh guacamole, and the best margaritas in town."
+  },
+  {
+    id: "r4",
+    name: "The Grill House",
+    cuisine: "Steakhouse",
+    priceRange: "$$$$",
+    rating: 4.8,
+    reviewCount: 456,
+    imageUrl: "https://images.unsplash.com/photo-1544025162-d76694265947?w=800&h=600&fit=crop",
+    address: "321 Pine Rd",
+    distance: 2.1,
+    dietaryOptions: [],
+    description: "Prime cuts of aged beef, classic steakhouse sides, and an award-winning wine cellar in an upscale setting."
+  },
+  {
+    id: "r5",
+    name: "Spice Route",
+    cuisine: "Indian",
+    priceRange: "$$",
+    rating: 4.4,
+    reviewCount: 198,
+    imageUrl: "https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=800&h=600&fit=crop",
+    address: "555 Spice Ln",
+    distance: 1.5,
+    dietaryOptions: ["vegetarian", "vegan", "gluten-free"],
+    description: "A culinary journey through India with aromatic curries, fresh naan bread, and authentic regional specialties."
+  },
+  {
+    id: "r6",
+    name: "Golden Dragon",
+    cuisine: "Chinese",
+    priceRange: "$$",
+    rating: 4.2,
+    reviewCount: 345,
+    imageUrl: "https://images.unsplash.com/photo-1563245372-f21724e3856d?w=800&h=600&fit=crop",
+    address: "888 Dragon Way",
+    distance: 0.9,
+    dietaryOptions: ["vegetarian"],
+    description: "Traditional Cantonese and Szechuan dishes featuring dim sum, hand-pulled noodles, and Peking duck."
+  },
+  {
+    id: "r7",
+    name: "Mediterranean Breeze",
+    cuisine: "Mediterranean",
+    priceRange: "$$",
+    rating: 4.6,
+    reviewCount: 267,
+    imageUrl: "https://images.unsplash.com/photo-1544124065-6e44b000ca18?w=800&h=600&fit=crop",
+    address: "222 Olive St",
+    distance: 1.8,
+    dietaryOptions: ["vegetarian", "gluten-free"],
+    description: "Fresh Mediterranean flavors with grilled meats, falafel, hummus, and vibrant salads in a casual setting."
+  },
+  {
+    id: "r8",
+    name: "Bangkok Street",
+    cuisine: "Thai",
+    priceRange: "$",
+    rating: 4.4,
+    reviewCount: 178,
+    imageUrl: "https://images.unsplash.com/photo-1559314809-0d155014e29e?w=800&h=600&fit=crop",
+    address: "444 Thai Ave",
+    distance: 1.1,
+    dietaryOptions: ["vegetarian", "vegan"],
+    description: "Authentic Thai street food experience with pad thai, green curry, and refreshing Thai iced tea."
+  },
+  {
+    id: "r9",
+    name: "Seoul Kitchen",
+    cuisine: "Korean",
+    priceRange: "$$",
+    rating: 4.5,
+    reviewCount: 234,
+    imageUrl: "https://images.unsplash.com/photo-1498654896293-37aacf113fd9?w=800&h=600&fit=crop",
+    address: "777 Seoul Blvd",
+    distance: 2.3,
+    dietaryOptions: ["gluten-free"],
+    description: "Korean BBQ at your table with premium marinated meats, banchan, and traditional Korean dishes."
+  },
+  {
+    id: "r10",
+    name: "Burger Barn",
+    cuisine: "Burger",
+    priceRange: "$",
+    rating: 4.3,
+    reviewCount: 567,
+    imageUrl: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=800&h=600&fit=crop",
+    address: "111 Burger Ln",
+    distance: 0.4,
+    dietaryOptions: ["vegetarian"],
+    description: "Gourmet burgers with locally sourced beef, creative toppings, hand-cut fries, and craft milkshakes."
+  },
+  {
+    id: "r11",
+    name: "Pizzeria Napoli",
+    cuisine: "Pizza",
+    priceRange: "$$",
+    rating: 4.6,
+    reviewCount: 423,
+    imageUrl: "https://images.unsplash.com/photo-1574071318508-1cdbab80d002?w=800&h=600&fit=crop",
+    address: "333 Pizza Way",
+    distance: 0.7,
+    dietaryOptions: ["vegetarian"],
+    description: "Neapolitan-style pizzas baked in a wood-fired oven with imported Italian ingredients and fresh toppings."
+  },
+  {
+    id: "r12",
+    name: "Ocean Catch",
+    cuisine: "Seafood",
+    priceRange: "$$$",
+    rating: 4.7,
+    reviewCount: 289,
+    imageUrl: "https://images.unsplash.com/photo-1559339352-11d035aa65de?w=800&h=600&fit=crop",
+    address: "999 Harbor Dr",
+    distance: 3.2,
+    dietaryOptions: ["gluten-free", "pescatarian"],
+    description: "Fresh catches of the day, raw bar, lobster rolls, and seafood platters with stunning waterfront views."
+  }
+];
+
 export class MemStorage implements IStorage {
-  private users: Map<string, User>;
+  private groups: Map<string, Group>;
+  private swipes: Map<string, Swipe[]>;
 
   constructor() {
-    this.users = new Map();
+    this.groups = new Map();
+    this.swipes = new Map();
   }
 
-  async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
-  }
-
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
-  }
-
-  async createUser(insertUser: InsertUser): Promise<User> {
+  async createGroup(data: InsertGroup): Promise<{ group: Group; memberId: string }> {
     const id = randomUUID();
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
-    return user;
+    const memberId = randomUUID();
+    const code = generateCode();
+
+    const host: GroupMember = {
+      id: memberId,
+      name: data.hostName,
+      isHost: true,
+      joinedAt: Date.now()
+    };
+
+    const group: Group = {
+      id,
+      code,
+      name: data.name,
+      members: [host],
+      preferences: null,
+      status: "waiting",
+      createdAt: Date.now()
+    };
+
+    this.groups.set(id, group);
+    this.swipes.set(id, []);
+
+    return { group, memberId };
+  }
+
+  async joinGroup(data: JoinGroup): Promise<{ group: Group; memberId: string } | null> {
+    const group = await this.getGroupByCode(data.code);
+    if (!group) return null;
+
+    const memberId = randomUUID();
+    const member: GroupMember = {
+      id: memberId,
+      name: data.memberName,
+      isHost: false,
+      joinedAt: Date.now()
+    };
+
+    group.members.push(member);
+    this.groups.set(group.id, group);
+
+    return { group, memberId };
+  }
+
+  async getGroup(id: string): Promise<Group | undefined> {
+    return this.groups.get(id);
+  }
+
+  async getGroupByCode(code: string): Promise<Group | undefined> {
+    for (const group of this.groups.values()) {
+      if (group.code === code.toUpperCase()) {
+        return group;
+      }
+    }
+    return undefined;
+  }
+
+  async updateGroupPreferences(groupId: string, preferences: GroupPreferences): Promise<Group | undefined> {
+    const group = this.groups.get(groupId);
+    if (!group) return undefined;
+
+    group.preferences = preferences;
+    group.status = "swiping";
+    this.groups.set(groupId, group);
+
+    return group;
+  }
+
+  async updateGroupStatus(groupId: string, status: Group["status"]): Promise<Group | undefined> {
+    const group = this.groups.get(groupId);
+    if (!group) return undefined;
+
+    group.status = status;
+    this.groups.set(groupId, group);
+
+    return group;
+  }
+
+  async addMember(groupId: string, member: GroupMember): Promise<Group | undefined> {
+    const group = this.groups.get(groupId);
+    if (!group) return undefined;
+
+    group.members.push(member);
+    this.groups.set(groupId, group);
+
+    return group;
+  }
+
+  async removeMember(groupId: string, memberId: string): Promise<Group | undefined> {
+    const group = this.groups.get(groupId);
+    if (!group) return undefined;
+
+    group.members = group.members.filter(m => m.id !== memberId);
+    this.groups.set(groupId, group);
+
+    return group;
+  }
+
+  async getRestaurantsForGroup(groupId: string): Promise<Restaurant[]> {
+    const group = this.groups.get(groupId);
+    if (!group || !group.preferences) return mockRestaurants;
+
+    let filtered = [...mockRestaurants];
+
+    if (group.preferences.priceRange.length > 0) {
+      filtered = filtered.filter(r => group.preferences!.priceRange.includes(r.priceRange));
+    }
+
+    if (group.preferences.cuisineTypes.length > 0) {
+      filtered = filtered.filter(r => group.preferences!.cuisineTypes.includes(r.cuisine));
+    }
+
+    filtered = filtered.filter(r => r.distance <= group.preferences!.radius);
+
+    return filtered.length > 0 ? filtered : mockRestaurants;
+  }
+
+  async recordSwipe(groupId: string, memberId: string, restaurantId: string, liked: boolean): Promise<Swipe> {
+    const swipe: Swipe = {
+      id: randomUUID(),
+      groupId,
+      memberId,
+      restaurantId,
+      liked,
+      swipedAt: Date.now()
+    };
+
+    const groupSwipes = this.swipes.get(groupId) || [];
+    groupSwipes.push(swipe);
+    this.swipes.set(groupId, groupSwipes);
+
+    return swipe;
+  }
+
+  async getSwipesForGroup(groupId: string): Promise<Swipe[]> {
+    return this.swipes.get(groupId) || [];
+  }
+
+  async getMatchesForGroup(groupId: string): Promise<Restaurant[]> {
+    const group = this.groups.get(groupId);
+    if (!group) return [];
+
+    const swipes = this.swipes.get(groupId) || [];
+    const restaurants = await this.getRestaurantsForGroup(groupId);
+    const memberIds = group.members.map(m => m.id);
+
+    const matches: Restaurant[] = [];
+
+    for (const restaurant of restaurants) {
+      const restaurantSwipes = swipes.filter(s => s.restaurantId === restaurant.id && s.liked);
+      const likedByMembers = new Set(restaurantSwipes.map(s => s.memberId));
+      
+      if (memberIds.every(id => likedByMembers.has(id))) {
+        matches.push(restaurant);
+      }
+    }
+
+    return matches;
   }
 }
 

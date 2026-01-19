@@ -1,0 +1,150 @@
+import { useLocation } from "wouter";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation } from "@tanstack/react-query";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { joinGroupSchema, type JoinGroup } from "@shared/schema";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { ArrowLeft, Utensils, Loader2 } from "lucide-react";
+import { Link } from "wouter";
+
+export default function JoinGroupPage() {
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
+
+  const form = useForm<JoinGroup>({
+    resolver: zodResolver(joinGroupSchema),
+    defaultValues: {
+      code: "",
+      memberName: "",
+    },
+  });
+
+  const joinMutation = useMutation({
+    mutationFn: async (data: JoinGroup) => {
+      const response = await apiRequest("POST", "/api/groups/join", data);
+      return response.json();
+    },
+    onSuccess: (data) => {
+      localStorage.setItem("grubmatch-member-id", data.memberId);
+      localStorage.setItem("grubmatch-group-id", data.group.id);
+      setLocation(`/group/${data.group.id}`);
+    },
+    onError: () => {
+      toast({
+        title: "Invalid Code",
+        description: "Could not find a group with that code. Please check and try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const onSubmit = (data: JoinGroup) => {
+    joinMutation.mutate({ ...data, code: data.code.toUpperCase() });
+  };
+
+  return (
+    <div className="min-h-screen bg-background">
+      <header className="flex items-center justify-between p-4 md:p-6">
+        <Link href="/">
+          <Button variant="ghost" size="icon" data-testid="button-back">
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
+        </Link>
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+            <Utensils className="w-4 h-4 text-primary-foreground" />
+          </div>
+          <span className="font-bold">GrubMatch</span>
+        </div>
+        <ThemeToggle />
+      </header>
+
+      <main className="px-4 md:px-6 py-8 max-w-md mx-auto">
+        <Card>
+          <CardHeader className="text-center">
+            <CardTitle className="text-2xl">Join a Group</CardTitle>
+            <CardDescription>
+              Enter the 6-digit code shared by the group host
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Form {...form}>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                <FormField
+                  control={form.control}
+                  name="code"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Group Code</FormLabel>
+                      <FormControl>
+                        <Input 
+                          placeholder="ABC123" 
+                          maxLength={6}
+                          className="text-center text-2xl tracking-widest font-mono uppercase"
+                          {...field}
+                          onChange={(e) => field.onChange(e.target.value.toUpperCase())}
+                          data-testid="input-group-code"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="memberName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Your Name</FormLabel>
+                      <FormControl>
+                        <Input 
+                          placeholder="Enter your name" 
+                          {...field}
+                          data-testid="input-member-name"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <Button 
+                  type="submit" 
+                  className="w-full" 
+                  size="lg"
+                  disabled={joinMutation.isPending}
+                  data-testid="button-submit-join"
+                >
+                  {joinMutation.isPending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Joining...
+                    </>
+                  ) : (
+                    "Join Group"
+                  )}
+                </Button>
+              </form>
+            </Form>
+
+            <div className="mt-6 text-center">
+              <p className="text-sm text-muted-foreground">
+                Want to start your own?{" "}
+                <Link href="/create" className="text-primary hover:underline" data-testid="link-create-instead">
+                  Create a group
+                </Link>
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </main>
+    </div>
+  );
+}

@@ -1,18 +1,158 @@
-import { sql } from "drizzle-orm";
-import { pgTable, text, varchar } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
+// Dietary restrictions enum
+export const dietaryRestrictions = [
+  "vegetarian",
+  "vegan", 
+  "gluten-free",
+  "halal",
+  "kosher",
+  "dairy-free",
+  "nut-free",
+  "pescatarian"
+] as const;
+
+export type DietaryRestriction = typeof dietaryRestrictions[number];
+
+// Cuisine types
+export const cuisineTypes = [
+  "Italian",
+  "Mexican",
+  "Chinese",
+  "Japanese",
+  "Indian",
+  "Thai",
+  "American",
+  "Mediterranean",
+  "French",
+  "Korean",
+  "Vietnamese",
+  "Greek",
+  "Middle Eastern",
+  "Spanish",
+  "Seafood",
+  "Steakhouse",
+  "Pizza",
+  "Burger",
+  "Sushi",
+  "BBQ"
+] as const;
+
+export type CuisineType = typeof cuisineTypes[number];
+
+// Price range
+export const priceRanges = ["$", "$$", "$$$", "$$$$"] as const;
+export type PriceRange = typeof priceRanges[number];
+
+// Group member
+export const groupMemberSchema = z.object({
+  id: z.string(),
+  name: z.string().min(1),
+  isHost: z.boolean().default(false),
+  joinedAt: z.number()
 });
 
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
+export type GroupMember = z.infer<typeof groupMemberSchema>;
+
+// Group preferences
+export const groupPreferencesSchema = z.object({
+  zipCode: z.string().min(5).max(10),
+  radius: z.number().min(1).max(50).default(10),
+  dietaryRestrictions: z.array(z.enum(dietaryRestrictions)).default([]),
+  cuisineTypes: z.array(z.enum(cuisineTypes)).default([]),
+  priceRange: z.array(z.enum(priceRanges)).default(["$", "$$", "$$$"])
+});
+
+export type GroupPreferences = z.infer<typeof groupPreferencesSchema>;
+
+// Group
+export const groupSchema = z.object({
+  id: z.string(),
+  code: z.string().length(6),
+  name: z.string().min(1),
+  members: z.array(groupMemberSchema),
+  preferences: groupPreferencesSchema.nullable(),
+  status: z.enum(["waiting", "configuring", "swiping", "completed"]).default("waiting"),
+  createdAt: z.number()
+});
+
+export type Group = z.infer<typeof groupSchema>;
+
+// Restaurant
+export const restaurantSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  cuisine: z.enum(cuisineTypes),
+  priceRange: z.enum(priceRanges),
+  rating: z.number().min(0).max(5),
+  reviewCount: z.number(),
+  imageUrl: z.string(),
+  address: z.string(),
+  distance: z.number(),
+  dietaryOptions: z.array(z.enum(dietaryRestrictions)).default([]),
+  description: z.string()
+});
+
+export type Restaurant = z.infer<typeof restaurantSchema>;
+
+// Swipe
+export const swipeSchema = z.object({
+  id: z.string(),
+  groupId: z.string(),
+  memberId: z.string(),
+  restaurantId: z.string(),
+  liked: z.boolean(),
+  swipedAt: z.number()
+});
+
+export type Swipe = z.infer<typeof swipeSchema>;
+
+// Match (restaurant all members liked)
+export const matchSchema = z.object({
+  id: z.string(),
+  groupId: z.string(),
+  restaurantId: z.string(),
+  matchedAt: z.number()
+});
+
+export type Match = z.infer<typeof matchSchema>;
+
+// Insert schemas
+export const insertGroupSchema = z.object({
+  name: z.string().min(1, "Group name is required"),
+  hostName: z.string().min(1, "Your name is required")
+});
+
+export type InsertGroup = z.infer<typeof insertGroupSchema>;
+
+export const joinGroupSchema = z.object({
+  code: z.string().length(6, "Code must be 6 characters"),
+  memberName: z.string().min(1, "Your name is required")
+});
+
+export type JoinGroup = z.infer<typeof joinGroupSchema>;
+
+// WebSocket message types
+export type WSMessage = 
+  | { type: "member_joined"; member: GroupMember }
+  | { type: "member_left"; memberId: string }
+  | { type: "preferences_updated"; preferences: GroupPreferences }
+  | { type: "status_changed"; status: Group["status"] }
+  | { type: "swipe_made"; memberId: string; restaurantId: string }
+  | { type: "match_found"; restaurant: Restaurant }
+  | { type: "sync"; group: Group; restaurants: Restaurant[]; matches: Restaurant[] };
+
+// Legacy user types for compatibility
+export const users = {
+  id: "id",
+  username: "username",
+  password: "password"
+};
+
+export const insertUserSchema = z.object({
+  username: z.string(),
+  password: z.string()
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = typeof users.$inferSelect;
+export type User = { id: string; username: string; password: string };
