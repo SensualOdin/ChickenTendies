@@ -8,6 +8,7 @@ import type {
   InsertGroup,
   JoinGroup 
 } from "@shared/schema";
+import { fetchRestaurantsFromGoogle } from "./google-places";
 
 function generateCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -195,10 +196,12 @@ const mockRestaurants: Restaurant[] = [
 export class MemStorage implements IStorage {
   private groups: Map<string, Group>;
   private swipes: Map<string, Swipe[]>;
+  private restaurantCache: Map<string, Restaurant[]>;
 
   constructor() {
     this.groups = new Map();
     this.swipes = new Map();
+    this.restaurantCache = new Map();
   }
 
   async createGroup(data: InsertGroup): Promise<{ group: Group; memberId: string }> {
@@ -306,6 +309,22 @@ export class MemStorage implements IStorage {
     const group = this.groups.get(groupId);
     if (!group || !group.preferences) return mockRestaurants;
 
+    const cached = this.restaurantCache.get(groupId);
+    if (cached && cached.length > 0) {
+      return cached;
+    }
+
+    try {
+      const googleRestaurants = await fetchRestaurantsFromGoogle(group.preferences);
+      
+      if (googleRestaurants.length > 0) {
+        this.restaurantCache.set(groupId, googleRestaurants);
+        return googleRestaurants;
+      }
+    } catch (error) {
+      console.error("Error fetching from Google Places:", error);
+    }
+
     let filtered = [...mockRestaurants];
 
     if (group.preferences.priceRange.length > 0) {
@@ -318,7 +337,9 @@ export class MemStorage implements IStorage {
 
     filtered = filtered.filter(r => r.distance <= group.preferences!.radius);
 
-    return filtered.length > 0 ? filtered : mockRestaurants;
+    const result = filtered.length > 0 ? filtered : mockRestaurants;
+    this.restaurantCache.set(groupId, result);
+    return result;
   }
 
   async recordSwipe(groupId: string, memberId: string, restaurantId: string, liked: boolean): Promise<Swipe> {
