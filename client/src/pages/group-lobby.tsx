@@ -6,8 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ThemeToggle } from "@/components/theme-toggle";
 import { MemberAvatars } from "@/components/member-avatars";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Utensils, Copy, Check, Users, ArrowRight, Loader2 } from "lucide-react";
+import { ArrowLeft, Flame, Copy, Check, Users, ArrowRight, Loader2, PartyPopper, Sparkles } from "lucide-react";
 import { Link } from "wouter";
+import { motion } from "framer-motion";
 import type { Group, WSMessage } from "@shared/schema";
 
 export default function GroupLobby() {
@@ -50,8 +51,8 @@ export default function GroupLobby() {
           members: [...prev.members, message.member],
         } : null);
         toast({
-          title: "New member joined!",
-          description: `${message.member.name} has joined the group`,
+          title: "🎉 New party member!",
+          description: `${message.member.name} just joined the fun!`,
         });
       } else if (message.type === "status_changed") {
         if (message.status === "swiping") {
@@ -72,8 +73,8 @@ export default function GroupLobby() {
     await navigator.clipboard.writeText(group.code);
     setCopied(true);
     toast({
-      title: "Copied!",
-      description: "Share this code with your friends",
+      title: "Copied! 📋",
+      description: "Now share it with your hungry friends!",
     });
     setTimeout(() => setCopied(false), 2000);
   }, [group, toast]);
@@ -87,7 +88,12 @@ export default function GroupLobby() {
   if (isLoading || !group) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+        >
+          <Flame className="w-8 h-8 text-primary" />
+        </motion.div>
       </div>
     );
   }
@@ -101,77 +107,116 @@ export default function GroupLobby() {
           </Button>
         </Link>
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-            <Utensils className="w-4 h-4 text-primary-foreground" />
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-orange-500 flex items-center justify-center">
+            <Flame className="w-4 h-4 text-primary-foreground" />
           </div>
-          <span className="font-bold">GrubMatch</span>
+          <span className="font-bold bg-gradient-to-r from-primary to-orange-500 bg-clip-text text-transparent">ChickenTinders</span>
         </div>
         <ThemeToggle />
       </header>
 
       <main className="px-4 md:px-6 py-8 max-w-lg mx-auto space-y-6">
-        <Card>
-          <CardHeader className="text-center">
-            <CardTitle className="text-2xl">{group.name}</CardTitle>
-            <CardDescription>
-              Share this code with friends to invite them
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <button
-              onClick={copyCode}
-              className="w-full p-4 bg-muted rounded-lg flex items-center justify-center gap-3 hover-elevate"
-              data-testid="button-copy-code"
-            >
-              <span className="text-3xl font-mono font-bold tracking-widest" data-testid="text-group-code">
-                {group.code}
-              </span>
-              {copied ? (
-                <Check className="w-5 h-5 text-accent" />
-              ) : (
-                <Copy className="w-5 h-5 text-muted-foreground" />
-              )}
-            </button>
-
-            <div className="text-center text-sm text-muted-foreground">
-              Share this code or copy the link below
+        <motion.div
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+        >
+          <Card className="border-2 overflow-hidden">
+            <div className="bg-gradient-to-r from-primary/10 to-orange-500/10 p-6 text-center border-b">
+              <motion.div 
+                className="text-4xl mb-2"
+                animate={{ scale: [1, 1.1, 1] }}
+                transition={{ duration: 2, repeat: Infinity }}
+              >
+                🎊
+              </motion.div>
+              <h2 className="text-xl font-bold">{group.name}</h2>
+              <p className="text-sm text-muted-foreground">Your food adventure awaits!</p>
             </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Users className="w-5 h-5 text-muted-foreground" />
-              <CardTitle className="text-lg">Members ({group.members.length})</CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <MemberAvatars members={group.members} showNames size="md" />
-          </CardContent>
-        </Card>
-
-        {isHost ? (
-          <Button 
-            size="lg" 
-            className="w-full"
-            onClick={handleContinue}
-            disabled={group.members.length < 1}
-            data-testid="button-continue"
-          >
-            Set Preferences
-            <ArrowRight className="w-5 h-5 ml-2" />
-          </Button>
-        ) : (
-          <Card className="bg-muted/50">
-            <CardContent className="py-6 text-center">
-              <Loader2 className="w-6 h-6 animate-spin text-primary mx-auto mb-3" />
-              <p className="text-sm text-muted-foreground">
-                Waiting for the host to set preferences and start swiping...
-              </p>
+            <CardContent className="p-6 space-y-4">
+              <div>
+                <p className="text-sm text-muted-foreground text-center mb-3">
+                  Share this super secret code with your crew:
+                </p>
+                <button
+                  onClick={copyCode}
+                  className="w-full p-4 bg-gradient-to-r from-muted to-muted/80 rounded-xl flex items-center justify-center gap-3 hover-elevate border-2 border-dashed border-primary/30 transition-all hover:border-primary"
+                  data-testid="button-copy-code"
+                >
+                  <span className="text-3xl font-mono font-bold tracking-[0.2em] bg-gradient-to-r from-primary to-orange-500 bg-clip-text text-transparent" data-testid="text-group-code">
+                    {group.code}
+                  </span>
+                  {copied ? (
+                    <Check className="w-5 h-5 text-accent" />
+                  ) : (
+                    <Copy className="w-5 h-5 text-muted-foreground" />
+                  )}
+                </button>
+              </div>
             </CardContent>
           </Card>
-        )}
+        </motion.div>
+
+        <motion.div
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.1 }}
+        >
+          <Card className="border-2">
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Users className="w-5 h-5 text-primary" />
+                <CardTitle className="text-lg">The Squad ({group.members.length}) 👥</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <MemberAvatars members={group.members} showNames size="md" />
+              {group.members.length === 1 && (
+                <motion.p 
+                  className="text-sm text-muted-foreground mt-4 text-center"
+                  animate={{ opacity: [0.5, 1, 0.5] }}
+                  transition={{ duration: 2, repeat: Infinity }}
+                >
+                  Waiting for your friends to join... 👀
+                </motion.p>
+              )}
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        <motion.div
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.2 }}
+        >
+          {isHost ? (
+            <Button 
+              size="lg" 
+              className="w-full bg-gradient-to-r from-primary to-orange-500 hover:from-primary/90 hover:to-orange-500/90 shadow-lg shadow-primary/30"
+              onClick={handleContinue}
+              disabled={group.members.length < 1}
+              data-testid="button-continue"
+            >
+              <Sparkles className="w-5 h-5 mr-2" />
+              Set the Vibes
+              <ArrowRight className="w-5 h-5 ml-2" />
+            </Button>
+          ) : (
+            <Card className="bg-gradient-to-r from-muted/50 to-muted/30 border-2 border-dashed">
+              <CardContent className="py-6 text-center">
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                  className="inline-block mb-3"
+                >
+                  <Loader2 className="w-6 h-6 text-primary" />
+                </motion.div>
+                <p className="text-sm text-muted-foreground">
+                  Hang tight! The host is getting things ready... 🎬
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </motion.div>
       </main>
     </div>
   );

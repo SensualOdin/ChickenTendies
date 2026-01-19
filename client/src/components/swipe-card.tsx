@@ -2,7 +2,7 @@ import { motion, useMotionValue, useTransform, PanInfo } from "framer-motion";
 import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Star, MapPin, DollarSign, Heart, X, Leaf } from "lucide-react";
+import { Star, MapPin, Heart, X, Leaf, Flame } from "lucide-react";
 import type { Restaurant } from "@shared/schema";
 
 interface SwipeCardProps {
@@ -32,7 +32,7 @@ export function SwipeCard({ restaurant, onSwipe, isTop }: SwipeCardProps) {
 
   if (!isTop) {
     return (
-      <Card className="absolute inset-0 overflow-hidden">
+      <Card className="absolute inset-0 overflow-hidden border-0">
         <div 
           className="absolute inset-0 bg-cover bg-center"
           style={{ backgroundImage: `url(${restaurant.imageUrl})` }}
@@ -53,21 +53,21 @@ export function SwipeCard({ restaurant, onSwipe, isTop }: SwipeCardProps) {
       animate={{ x: exitX }}
       transition={{ type: "spring", stiffness: 300, damping: 30 }}
     >
-      <Card className="relative h-full overflow-hidden border-0 shadow-xl">
+      <Card className="relative h-full overflow-hidden border-0 shadow-2xl">
         <div 
           className="absolute inset-0 bg-cover bg-center"
           style={{ backgroundImage: `url(${restaurant.imageUrl})` }}
         >
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
         </div>
 
         <motion.div
           className="absolute top-8 left-8 z-10"
           style={{ opacity: nopeOpacity }}
         >
-          <div className="flex items-center gap-2 px-6 py-3 border-4 border-destructive rounded-lg rotate-[-20deg]">
+          <div className="flex items-center gap-2 px-6 py-3 border-4 border-destructive rounded-xl rotate-[-20deg] bg-destructive/20 backdrop-blur-sm">
             <X className="w-8 h-8 text-destructive" />
-            <span className="text-3xl font-bold text-destructive">NOPE</span>
+            <span className="text-3xl font-extrabold text-destructive">NOPE</span>
           </div>
         </motion.div>
 
@@ -75,18 +75,18 @@ export function SwipeCard({ restaurant, onSwipe, isTop }: SwipeCardProps) {
           className="absolute top-8 right-8 z-10"
           style={{ opacity: likeOpacity }}
         >
-          <div className="flex items-center gap-2 px-6 py-3 border-4 border-accent rounded-lg rotate-[20deg]">
-            <Heart className="w-8 h-8 text-accent fill-accent" />
-            <span className="text-3xl font-bold text-accent">LIKE</span>
+          <div className="flex items-center gap-2 px-6 py-3 border-4 border-accent rounded-xl rotate-[20deg] bg-accent/20 backdrop-blur-sm">
+            <Flame className="w-8 h-8 text-accent" />
+            <span className="text-3xl font-extrabold text-accent">YUM!</span>
           </div>
         </motion.div>
 
         <div className="absolute bottom-0 left-0 right-0 p-6 text-white">
           <div className="flex flex-wrap items-center gap-2 mb-3">
-            <Badge className="bg-white/20 backdrop-blur-sm text-white border-0">
+            <Badge className="bg-white/20 backdrop-blur-sm text-white border-0 font-semibold">
               {restaurant.cuisine}
             </Badge>
-            <Badge className="bg-white/20 backdrop-blur-sm text-white border-0">
+            <Badge className="bg-white/20 backdrop-blur-sm text-white border-0 font-semibold">
               {restaurant.priceRange}
             </Badge>
             {restaurant.dietaryOptions.length > 0 && (
@@ -97,19 +97,19 @@ export function SwipeCard({ restaurant, onSwipe, isTop }: SwipeCardProps) {
             )}
           </div>
 
-          <h2 className="text-3xl font-bold mb-2" data-testid="text-restaurant-name">
+          <h2 className="text-3xl font-extrabold mb-2" data-testid="text-restaurant-name">
             {restaurant.name}
           </h2>
 
           <div className="flex flex-wrap items-center gap-4 text-sm text-white/90 mb-3">
             <div className="flex items-center gap-1">
               <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-              <span className="font-medium">{restaurant.rating.toFixed(1)}</span>
+              <span className="font-bold">{restaurant.rating.toFixed(1)}</span>
               <span className="text-white/70">({restaurant.reviewCount})</span>
             </div>
             <div className="flex items-center gap-1">
               <MapPin className="w-4 h-4" />
-              <span>{restaurant.distance.toFixed(1)} mi</span>
+              <span>{restaurant.distance.toFixed(1)} mi away</span>
             </div>
           </div>
 
@@ -131,22 +131,26 @@ export function SwipeButtons({
 }) {
   return (
     <div className="flex items-center justify-center gap-6 mt-6">
-      <button
+      <motion.button
         onClick={() => onSwipe(false)}
         disabled={disabled}
-        className="w-16 h-16 rounded-full bg-card border-2 border-destructive/30 flex items-center justify-center transition-all hover:scale-110 hover:border-destructive hover:bg-destructive/10 disabled:opacity-50 disabled:hover:scale-100"
+        className="w-16 h-16 rounded-full bg-card border-3 border-destructive/30 flex items-center justify-center shadow-lg disabled:opacity-50"
+        whileHover={{ scale: 1.1 }}
+        whileTap={{ scale: 0.95 }}
         data-testid="button-swipe-left"
       >
         <X className="w-8 h-8 text-destructive" />
-      </button>
-      <button
+      </motion.button>
+      <motion.button
         onClick={() => onSwipe(true)}
         disabled={disabled}
-        className="w-20 h-20 rounded-full bg-accent flex items-center justify-center transition-all hover:scale-110 shadow-lg shadow-accent/30 disabled:opacity-50 disabled:hover:scale-100"
+        className="w-20 h-20 rounded-full bg-gradient-to-br from-accent to-emerald-500 flex items-center justify-center shadow-xl shadow-accent/40 disabled:opacity-50"
+        whileHover={{ scale: 1.1 }}
+        whileTap={{ scale: 0.95 }}
         data-testid="button-swipe-right"
       >
-        <Heart className="w-10 h-10 text-white fill-white" />
-      </button>
+        <Flame className="w-10 h-10 text-white" />
+      </motion.button>
     </div>
   );
 }

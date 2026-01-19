@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { ArrowLeft, Utensils, Loader2, Star, MapPin, ExternalLink, Heart, PartyPopper } from "lucide-react";
+import { ArrowLeft, Flame, Loader2, Star, MapPin, ExternalLink, Heart, PartyPopper, Trophy, Sparkles } from "lucide-react";
+import { motion } from "framer-motion";
 import type { Group, Restaurant } from "@shared/schema";
 
 export default function MatchesPage() {
@@ -25,7 +26,12 @@ export default function MatchesPage() {
   if (isLoading || !group) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+        >
+          <Flame className="w-8 h-8 text-primary" />
+        </motion.div>
       </div>
     );
   }
@@ -39,8 +45,8 @@ export default function MatchesPage() {
           </Button>
         </Link>
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-            <Utensils className="w-4 h-4 text-primary-foreground" />
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-orange-500 flex items-center justify-center">
+            <Flame className="w-4 h-4 text-primary-foreground" />
           </div>
           <span className="font-bold">{group.name}</span>
         </div>
@@ -48,108 +54,141 @@ export default function MatchesPage() {
       </header>
 
       <main className="px-4 md:px-6 py-6 max-w-2xl mx-auto">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-accent/10 mb-4">
-            <PartyPopper className="w-8 h-8 text-accent" />
-          </div>
-          <h1 className="text-2xl font-bold mb-2">Your Matches!</h1>
+        <motion.div 
+          className="text-center mb-8"
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+        >
+          <motion.div 
+            className="text-6xl mb-4"
+            animate={{ scale: [1, 1.1, 1], rotate: [0, 5, -5, 0] }}
+            transition={{ duration: 2, repeat: Infinity }}
+          >
+            🎊
+          </motion.div>
+          <h1 className="text-3xl font-extrabold mb-2">
+            {matches?.length ? "Your Matches!" : "No Matches Yet"}
+          </h1>
           <p className="text-muted-foreground">
             {matches?.length 
-              ? `Everyone in ${group.name} agreed on ${matches.length} restaurant${matches.length !== 1 ? "s" : ""}!`
-              : "No matches yet. Keep swiping to find places everyone loves!"
+              ? `The squad agreed on ${matches.length} spot${matches.length !== 1 ? "s" : ""}! Time to eat! 🍽️`
+              : "Keep swiping to find spots everyone loves!"
             }
           </p>
-        </div>
+        </motion.div>
 
         {matches && matches.length > 0 ? (
           <div className="space-y-4">
             {matches.map((restaurant, index) => (
-              <Card key={restaurant.id} className="overflow-hidden hover-elevate">
-                <div className="flex flex-col sm:flex-row">
-                  <div 
-                    className="h-48 sm:h-auto sm:w-40 bg-cover bg-center shrink-0"
-                    style={{ backgroundImage: `url(${restaurant.imageUrl})` }}
-                  />
-                  <CardContent className="flex-1 p-4">
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          {index === 0 && (
-                            <Badge className="bg-accent text-accent-foreground">
-                              <Heart className="w-3 h-3 mr-1 fill-current" />
-                              Top Match
-                            </Badge>
-                          )}
+              <motion.div
+                key={restaurant.id}
+                initial={{ y: 30, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ delay: index * 0.1 }}
+              >
+                <Card className="overflow-hidden border-2 hover-elevate">
+                  <div className="flex flex-col sm:flex-row">
+                    <div 
+                      className="h-48 sm:h-auto sm:w-40 bg-cover bg-center shrink-0 relative"
+                      style={{ backgroundImage: `url(${restaurant.imageUrl})` }}
+                    >
+                      {index === 0 && (
+                        <div className="absolute top-2 left-2">
+                          <Badge className="bg-gradient-to-r from-yellow-500 to-orange-500 text-white border-0 shadow-lg">
+                            <Trophy className="w-3 h-3 mr-1" />
+                            #1 Pick!
+                          </Badge>
                         </div>
-                        <h3 className="text-lg font-semibold" data-testid={`text-match-name-${restaurant.id}`}>
-                          {restaurant.name}
-                        </h3>
-                      </div>
-                      <Badge variant="outline">{restaurant.priceRange}</Badge>
+                      )}
                     </div>
-
-                    <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground mb-3">
-                      <span className="font-medium text-foreground">{restaurant.cuisine}</span>
-                      <div className="flex items-center gap-1">
-                        <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-                        <span>{restaurant.rating.toFixed(1)}</span>
-                        <span className="text-muted-foreground">({restaurant.reviewCount})</span>
+                    <CardContent className="flex-1 p-4">
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div>
+                          <h3 className="text-lg font-bold" data-testid={`text-match-name-${restaurant.id}`}>
+                            {restaurant.name}
+                          </h3>
+                          <span className="text-sm text-muted-foreground">{restaurant.cuisine}</span>
+                        </div>
+                        <Badge variant="outline" className="font-bold">{restaurant.priceRange}</Badge>
                       </div>
-                      <div className="flex items-center gap-1">
-                        <MapPin className="w-4 h-4" />
-                        <span>{restaurant.distance.toFixed(1)} mi</span>
+
+                      <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground mb-3">
+                        <div className="flex items-center gap-1">
+                          <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
+                          <span className="font-medium text-foreground">{restaurant.rating.toFixed(1)}</span>
+                          <span>({restaurant.reviewCount})</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <MapPin className="w-4 h-4" />
+                          <span>{restaurant.distance.toFixed(1)} mi</span>
+                        </div>
                       </div>
-                    </div>
 
-                    <p className="text-sm text-muted-foreground mb-4 line-clamp-2">
-                      {restaurant.description}
-                    </p>
+                      <p className="text-sm text-muted-foreground mb-4 line-clamp-2">
+                        {restaurant.description}
+                      </p>
 
-                    <div className="flex items-center gap-2">
-                      <Button size="sm" variant="outline" className="text-xs" data-testid={`button-directions-${restaurant.id}`}>
-                        <MapPin className="w-3 h-3 mr-1" />
-                        Directions
-                      </Button>
-                      <Button size="sm" variant="outline" className="text-xs" data-testid={`button-website-${restaurant.id}`}>
-                        <ExternalLink className="w-3 h-3 mr-1" />
-                        Website
-                      </Button>
-                    </div>
-                  </CardContent>
-                </div>
-              </Card>
+                      <div className="flex items-center gap-2">
+                        <Button size="sm" className="bg-gradient-to-r from-primary to-orange-500 text-xs" data-testid={`button-directions-${restaurant.id}`}>
+                          <MapPin className="w-3 h-3 mr-1" />
+                          Let's Go!
+                        </Button>
+                        <Button size="sm" variant="outline" className="text-xs" data-testid={`button-website-${restaurant.id}`}>
+                          <ExternalLink className="w-3 h-3 mr-1" />
+                          Menu
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </div>
+                </Card>
+              </motion.div>
             ))}
           </div>
         ) : (
-          <Card className="text-center py-12">
-            <CardContent>
-              <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
-                <Heart className="w-8 h-8 text-muted-foreground" />
-              </div>
-              <h3 className="font-semibold mb-2">No matches yet</h3>
-              <p className="text-sm text-muted-foreground mb-6">
-                Wait for everyone to finish swiping, or go back and swipe more!
-              </p>
-              <Link href={`/group/${params.id}/swipe`}>
-                <Button data-testid="button-back-to-swiping">
-                  Back to Swiping
-                </Button>
-              </Link>
-            </CardContent>
-          </Card>
+          <motion.div
+            initial={{ y: 30, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+          >
+            <Card className="text-center py-12 border-2 border-dashed">
+              <CardContent>
+                <motion.div 
+                  className="text-5xl mb-4"
+                  animate={{ y: [0, -10, 0] }}
+                  transition={{ duration: 1.5, repeat: Infinity }}
+                >
+                  🍕
+                </motion.div>
+                <h3 className="font-bold text-lg mb-2">No matches yet!</h3>
+                <p className="text-sm text-muted-foreground mb-6">
+                  Keep swiping — your perfect spot is waiting!
+                </p>
+                <Link href={`/group/${params.id}/swipe`}>
+                  <Button className="bg-gradient-to-r from-primary to-orange-500" data-testid="button-back-to-swiping">
+                    <Sparkles className="w-4 h-4 mr-2" />
+                    Back to Swiping
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+          </motion.div>
         )}
 
         {matches && matches.length > 0 && (
-          <div className="mt-8 text-center">
+          <motion.div 
+            className="mt-8 text-center"
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.5 }}
+          >
             <p className="text-sm text-muted-foreground mb-4">
-              Want to find more options?
+              Want more options? 👀
             </p>
             <Link href={`/group/${params.id}/swipe`}>
-              <Button variant="outline" data-testid="button-continue-swiping">
-                Continue Swiping
+              <Button variant="outline" className="border-2" data-testid="button-continue-swiping">
+                Keep Swiping
               </Button>
             </Link>
-          </div>
+          </motion.div>
         )}
       </main>
     </div>

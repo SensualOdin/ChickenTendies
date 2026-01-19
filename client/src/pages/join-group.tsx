@@ -10,8 +10,9 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { joinGroupSchema, type JoinGroup } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Utensils, Loader2 } from "lucide-react";
+import { ArrowLeft, Flame, Loader2, Ticket, User } from "lucide-react";
 import { Link } from "wouter";
+import { motion } from "framer-motion";
 
 export default function JoinGroupPage() {
   const [, setLocation] = useLocation();
@@ -37,8 +38,8 @@ export default function JoinGroupPage() {
     },
     onError: () => {
       toast({
-        title: "Invalid Code",
-        description: "Could not find a group with that code. Please check and try again.",
+        title: "Hmm, that didn't work 🤔",
+        description: "Double-check that code and try again!",
         variant: "destructive",
       });
     },
@@ -57,93 +58,115 @@ export default function JoinGroupPage() {
           </Button>
         </Link>
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-            <Utensils className="w-4 h-4 text-primary-foreground" />
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-orange-500 flex items-center justify-center">
+            <Flame className="w-4 h-4 text-primary-foreground" />
           </div>
-          <span className="font-bold">GrubMatch</span>
+          <span className="font-bold bg-gradient-to-r from-primary to-orange-500 bg-clip-text text-transparent">ChickenTinders</span>
         </div>
         <ThemeToggle />
       </header>
 
       <main className="px-4 md:px-6 py-8 max-w-md mx-auto">
-        <Card>
-          <CardHeader className="text-center">
-            <CardTitle className="text-2xl">Join a Group</CardTitle>
-            <CardDescription>
-              Enter the 6-digit code shared by the group host
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                <FormField
-                  control={form.control}
-                  name="code"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Group Code</FormLabel>
-                      <FormControl>
-                        <Input 
-                          placeholder="ABC123" 
-                          maxLength={6}
-                          className="text-center text-2xl tracking-widest font-mono uppercase"
-                          {...field}
-                          onChange={(e) => field.onChange(e.target.value.toUpperCase())}
-                          data-testid="input-group-code"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+        <motion.div
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.4 }}
+        >
+          <Card className="border-2">
+            <CardHeader className="text-center">
+              <motion.div 
+                className="text-4xl mb-2"
+                animate={{ rotate: [0, 10, -10, 0] }}
+                transition={{ duration: 1.5, repeat: Infinity }}
+              >
+                🎟️
+              </motion.div>
+              <CardTitle className="text-2xl">Join the Party!</CardTitle>
+              <CardDescription>
+                Got a secret code? Let's get you in!
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                  <FormField
+                    control={form.control}
+                    name="code"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="flex items-center gap-2">
+                          <Ticket className="w-4 h-4 text-primary" />
+                          Secret Party Code
+                        </FormLabel>
+                        <FormControl>
+                          <Input 
+                            placeholder="ABC123" 
+                            maxLength={6}
+                            className="text-center text-2xl tracking-[0.3em] font-mono uppercase border-2 bg-muted/50"
+                            {...field}
+                            onChange={(e) => field.onChange(e.target.value.toUpperCase())}
+                            data-testid="input-group-code"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-                <FormField
-                  control={form.control}
-                  name="memberName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Your Name</FormLabel>
-                      <FormControl>
-                        <Input 
-                          placeholder="Enter your name" 
-                          {...field}
-                          data-testid="input-member-name"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                  <FormField
+                    control={form.control}
+                    name="memberName"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="flex items-center gap-2">
+                          <User className="w-4 h-4 text-accent" />
+                          Your Name
+                        </FormLabel>
+                        <FormControl>
+                          <Input 
+                            placeholder="What should we call you?" 
+                            className="border-2"
+                            {...field}
+                            data-testid="input-member-name"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-                <Button 
-                  type="submit" 
-                  className="w-full" 
-                  size="lg"
-                  disabled={joinMutation.isPending}
-                  data-testid="button-submit-join"
-                >
-                  {joinMutation.isPending ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Joining...
-                    </>
-                  ) : (
-                    "Join Group"
-                  )}
-                </Button>
-              </form>
-            </Form>
+                  <Button 
+                    type="submit" 
+                    className="w-full bg-gradient-to-r from-primary to-orange-500 hover:from-primary/90 hover:to-orange-500/90" 
+                    size="lg"
+                    disabled={joinMutation.isPending}
+                    data-testid="button-submit-join"
+                  >
+                    {joinMutation.isPending ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Joining the fun...
+                      </>
+                    ) : (
+                      <>
+                        🚀 Jump In!
+                      </>
+                    )}
+                  </Button>
+                </form>
+              </Form>
 
-            <div className="mt-6 text-center">
-              <p className="text-sm text-muted-foreground">
-                Want to start your own?{" "}
-                <Link href="/create" className="text-primary hover:underline" data-testid="link-create-instead">
-                  Create a group
-                </Link>
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+              <div className="mt-6 text-center">
+                <p className="text-sm text-muted-foreground">
+                  No code yet?{" "}
+                  <Link href="/create" className="text-primary font-medium hover:underline" data-testid="link-create-instead">
+                    Start your own party!
+                  </Link>
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
       </main>
     </div>
   );

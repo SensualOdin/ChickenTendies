@@ -3,13 +3,13 @@ import { useParams, useLocation, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { SwipeCard, SwipeButtons } from "@/components/swipe-card";
 import { MemberAvatars } from "@/components/member-avatars";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Utensils, Loader2, Trophy, ChevronRight, Sparkles } from "lucide-react";
+import { Flame, Loader2, Trophy, ChevronRight, Sparkles, PartyPopper } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import type { Group, Restaurant, WSMessage } from "@shared/schema";
 
 export default function SwipePage() {
@@ -21,6 +21,8 @@ export default function SwipePage() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [matches, setMatches] = useState<Restaurant[]>([]);
   const [group, setGroup] = useState<Group | null>(null);
+  const [showMatchCelebration, setShowMatchCelebration] = useState(false);
+  const [latestMatch, setLatestMatch] = useState<Restaurant | null>(null);
 
   const memberId = localStorage.getItem("grubmatch-member-id");
 
@@ -58,10 +60,9 @@ export default function SwipePage() {
         setMatches(message.matches);
       } else if (message.type === "match_found") {
         setMatches((prev) => [...prev, message.restaurant]);
-        toast({
-          title: "It's a Match!",
-          description: `Everyone likes ${message.restaurant.name}!`,
-        });
+        setLatestMatch(message.restaurant);
+        setShowMatchCelebration(true);
+        setTimeout(() => setShowMatchCelebration(false), 3000);
       }
     };
 
@@ -83,8 +84,8 @@ export default function SwipePage() {
     },
     onError: () => {
       toast({
-        title: "Error",
-        description: "Failed to record swipe. Please try again.",
+        title: "Oops! 😅",
+        description: "That didn't work. Try again!",
         variant: "destructive",
       });
     },
@@ -106,22 +107,61 @@ export default function SwipePage() {
   if (isLoading || !group) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+        >
+          <Flame className="w-8 h-8 text-primary" />
+        </motion.div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col relative">
+      <AnimatePresence>
+        {showMatchCelebration && latestMatch && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          >
+            <motion.div 
+              className="text-center p-8"
+              initial={{ y: 50 }}
+              animate={{ y: 0 }}
+            >
+              <motion.div
+                animate={{ scale: [1, 1.2, 1], rotate: [0, 10, -10, 0] }}
+                transition={{ duration: 0.5, repeat: 3 }}
+                className="text-8xl mb-6"
+              >
+                🎉
+              </motion.div>
+              <h2 className="text-4xl font-extrabold text-white mb-2">IT'S A MATCH!</h2>
+              <p className="text-xl text-white/80 mb-4">Everyone wants {latestMatch.name}!</p>
+              <div className="flex justify-center gap-2 text-4xl">
+                <motion.span animate={{ y: [0, -10, 0] }} transition={{ duration: 0.5, delay: 0 }}>🍗</motion.span>
+                <motion.span animate={{ y: [0, -10, 0] }} transition={{ duration: 0.5, delay: 0.1 }}>🍕</motion.span>
+                <motion.span animate={{ y: [0, -10, 0] }} transition={{ duration: 0.5, delay: 0.2 }}>🌮</motion.span>
+                <motion.span animate={{ y: [0, -10, 0] }} transition={{ duration: 0.5, delay: 0.3 }}>🍔</motion.span>
+                <motion.span animate={{ y: [0, -10, 0] }} transition={{ duration: 0.5, delay: 0.4 }}>🍣</motion.span>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <header className="flex items-center justify-between p-4 md:p-6 shrink-0">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-            <Utensils className="w-4 h-4 text-primary-foreground" />
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-orange-500 flex items-center justify-center">
+            <Flame className="w-4 h-4 text-primary-foreground" />
           </div>
           <div>
             <span className="font-bold block">{group.name}</span>
             <span className="text-xs text-muted-foreground">
-              {restaurants.length - currentIndex} restaurants left
+              {restaurants.length - currentIndex} spots left 🍽️
             </span>
           </div>
         </div>
@@ -132,20 +172,28 @@ export default function SwipePage() {
       </header>
 
       {matches.length > 0 && (
-        <div className="px-4 md:px-6 shrink-0">
+        <motion.div 
+          className="px-4 md:px-6 shrink-0"
+          initial={{ y: -20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+        >
           <Link href={`/group/${params.id}/matches`}>
-            <Card className="bg-gradient-to-r from-accent/10 to-primary/10 border-accent/30 hover-elevate cursor-pointer">
+            <Card className="bg-gradient-to-r from-accent/20 to-primary/10 border-2 border-accent/50 hover-elevate cursor-pointer">
               <CardContent className="py-3 px-4 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-accent/20 flex items-center justify-center">
-                    <Sparkles className="w-5 h-5 text-accent" />
-                  </div>
+                  <motion.div 
+                    className="w-10 h-10 rounded-full bg-accent/30 flex items-center justify-center"
+                    animate={{ scale: [1, 1.1, 1] }}
+                    transition={{ duration: 1, repeat: Infinity }}
+                  >
+                    <PartyPopper className="w-5 h-5 text-accent" />
+                  </motion.div>
                   <div>
-                    <div className="font-semibold text-sm">
-                      {matches.length} Match{matches.length !== 1 ? "es" : ""}!
+                    <div className="font-bold text-sm">
+                      {matches.length} Match{matches.length !== 1 ? "es" : ""}! 🎉
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      Tap to see restaurants everyone loves
+                      Tap to see where everyone agrees!
                     </div>
                   </div>
                 </div>
@@ -153,36 +201,43 @@ export default function SwipePage() {
               </CardContent>
             </Card>
           </Link>
-        </div>
+        </motion.div>
       )}
 
       <main className="flex-1 px-4 md:px-6 py-6 flex flex-col">
         {isComplete ? (
-          <div className="flex-1 flex items-center justify-center">
-            <Card className="w-full max-w-md text-center">
+          <motion.div 
+            className="flex-1 flex items-center justify-center"
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+          >
+            <Card className="w-full max-w-md text-center border-2">
               <CardContent className="py-12">
-                <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6">
-                  <Trophy className="w-10 h-10 text-primary" />
-                </div>
-                <h2 className="text-2xl font-bold mb-2">You're all done!</h2>
+                <motion.div 
+                  className="text-6xl mb-6"
+                  animate={{ rotate: [0, 10, -10, 0] }}
+                  transition={{ duration: 2, repeat: Infinity }}
+                >
+                  🏆
+                </motion.div>
+                <h2 className="text-2xl font-extrabold mb-2">You're Done!</h2>
                 <p className="text-muted-foreground mb-6">
-                  You've swiped through all the restaurants. 
                   {matches.length > 0 
-                    ? ` You have ${matches.length} match${matches.length !== 1 ? "es" : ""} with your group!`
-                    : " Wait for your group to finish swiping to see matches."
+                    ? `Amazing! You've got ${matches.length} match${matches.length !== 1 ? "es" : ""} with your crew!`
+                    : "Waiting for your squad to finish swiping..."
                   }
                 </p>
                 {matches.length > 0 && (
                   <Link href={`/group/${params.id}/matches`}>
-                    <Button size="lg" data-testid="button-view-matches">
-                      View Matches
+                    <Button size="lg" className="bg-gradient-to-r from-primary to-orange-500" data-testid="button-view-matches">
+                      See Your Matches! 🎉
                       <ChevronRight className="w-5 h-5 ml-2" />
                     </Button>
                   </Link>
                 )}
               </CardContent>
             </Card>
-          </div>
+          </motion.div>
         ) : (
           <>
             <div className="flex-1 relative max-w-md mx-auto w-full" style={{ minHeight: "400px" }}>
@@ -212,7 +267,7 @@ export default function SwipePage() {
 
               <div className="flex justify-center gap-1 mt-6">
                 {restaurants.slice(0, 10).map((_, i) => (
-                  <div
+                  <motion.div
                     key={i}
                     className={`w-2 h-2 rounded-full transition-all ${
                       i < currentIndex
@@ -221,6 +276,8 @@ export default function SwipePage() {
                         ? "bg-primary w-4"
                         : "bg-muted"
                     }`}
+                    animate={i === currentIndex ? { scale: [1, 1.2, 1] } : {}}
+                    transition={{ duration: 1, repeat: Infinity }}
                   />
                 ))}
                 {restaurants.length > 10 && (
