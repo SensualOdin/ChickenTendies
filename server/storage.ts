@@ -252,7 +252,8 @@ export class MemStorage implements IStorage {
   }
 
   async getGroupByCode(code: string): Promise<Group | undefined> {
-    for (const group of this.groups.values()) {
+    const groups = Array.from(this.groups.values());
+    for (const group of groups) {
       if (group.code === code.toUpperCase()) {
         return group;
       }
