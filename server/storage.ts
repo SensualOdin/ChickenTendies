@@ -8,7 +8,7 @@ import type {
   InsertGroup,
   JoinGroup 
 } from "@shared/schema";
-import { fetchRestaurantsFromGoogle } from "./google-places";
+import { fetchRestaurantsFromYelp } from "./yelp";
 
 function generateCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -315,14 +315,14 @@ export class MemStorage implements IStorage {
     }
 
     try {
-      const googleRestaurants = await fetchRestaurantsFromGoogle(group.preferences);
+      const yelpRestaurants = await fetchRestaurantsFromYelp(group.preferences);
       
-      if (googleRestaurants.length > 0) {
-        this.restaurantCache.set(groupId, googleRestaurants);
-        return googleRestaurants;
+      if (yelpRestaurants.length > 0) {
+        this.restaurantCache.set(groupId, yelpRestaurants);
+        return yelpRestaurants;
       }
     } catch (error) {
-      console.error("Error fetching from Google Places:", error);
+      console.error("Error fetching from Yelp:", error);
     }
 
     let filtered = [...mockRestaurants];

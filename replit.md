@@ -35,7 +35,8 @@ Preferred communication style: Simple, everyday language.
 ### Key Design Patterns
 - **Shared Schema**: TypeScript types and Zod schemas are defined once in `shared/` and imported by both client and server
 - **Path Aliases**: `@/*` maps to client source, `@shared/*` maps to shared code
-- **In-Memory Storage**: Current implementation uses in-memory storage (see `server/storage.ts`) with mock restaurant data, designed to be replaced with database queries
+- **In-Memory Storage**: Current implementation uses in-memory storage (see `server/storage.ts`) with restaurant caching
+- **Yelp Integration**: Real restaurant data fetched from Yelp Fusion API (see `server/yelp.ts`), with fallback to mock data
 - **WebSocket Sync**: Real-time updates broadcast group state changes to all connected members
 
 ### Build Process
