@@ -129,11 +129,31 @@ export default function MatchesPage() {
                       </p>
 
                       <div className="flex items-center gap-2">
-                        <Button size="sm" className="bg-gradient-to-r from-primary to-orange-500 text-xs" data-testid={`button-directions-${restaurant.id}`}>
+                        <Button 
+                          size="sm" 
+                          className="bg-gradient-to-r from-primary to-orange-500 text-xs" 
+                          data-testid={`button-directions-${restaurant.id}`}
+                          onClick={() => {
+                            const destination = restaurant.latitude && restaurant.longitude
+                              ? `${restaurant.latitude},${restaurant.longitude}`
+                              : encodeURIComponent(restaurant.address);
+                            window.open(`https://www.google.com/maps/dir/?api=1&destination=${destination}`, '_blank');
+                          }}
+                        >
                           <MapPin className="w-3 h-3 mr-1" />
                           Let's Go!
                         </Button>
-                        <Button size="sm" variant="outline" className="text-xs" data-testid={`button-website-${restaurant.id}`}>
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          className="text-xs" 
+                          data-testid={`button-website-${restaurant.id}`}
+                          onClick={() => {
+                            if (restaurant.yelpUrl) {
+                              window.open(restaurant.yelpUrl, '_blank');
+                            }
+                          }}
+                        >
                           <ExternalLink className="w-3 h-3 mr-1" />
                           Menu
                         </Button>

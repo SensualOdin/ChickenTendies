@@ -105,6 +105,50 @@ function metersToMiles(meters: number): number {
   return Math.round((meters / 1609.34) * 10) / 10;
 }
 
+const excludedCategories = new Set([
+  "coffee", "coffeeshops", "cafes", "bakeries", "desserts", "icecream",
+  "donuts", "juicebars", "bubbletea", "acaibowls", "cakeshop", "cupcakes",
+  "cookies", "candy", "chocolatiers", "gelato", "froyo", "waffles",
+  "creperies", "pretzels", "popcorn", "shavedice", "tea", "breweries",
+  "winebars", "cocktailbars", "divebars", "sportsbars", "pubs", "lounges",
+  "hookah", "karaoke", "danceclubs", "jazzandblues", "musicvenues",
+  "foodtrucks", "foodstands", "hotdog", "catering", "personalchefs"
+]);
+
+function isActualRestaurant(categories: Array<{ alias: string; title: string }>): boolean {
+  const validRestaurantCategories = [
+    "restaurants", "italian", "mexican", "chinese", "japanese", "indian",
+    "thai", "american", "mediterranean", "french", "korean", "vietnamese",
+    "greek", "mideastern", "spanish", "seafood", "steak", "pizza", "burgers",
+    "sushi", "bbq", "newamerican", "tradamerican", "asianfusion", "latin",
+    "caribbean", "southern", "soulfood", "cajun", "brazilian", "peruvian",
+    "turkish", "lebanese", "ethiopian", "african", "german", "british",
+    "irish", "polish", "russian", "hawaiian", "filipino", "malaysian",
+    "indonesian", "singaporean", "taiwanese", "dimsum", "ramen", "poke",
+    "tacos", "burritos", "sandwiches", "delis", "diners", "breakfast_brunch",
+    "brunch", "gastropubs", "bistros", "brasseries"
+  ];
+
+  for (const cat of categories) {
+    const alias = cat.alias.toLowerCase();
+    if (excludedCategories.has(alias)) {
+      return false;
+    }
+  }
+
+  for (const cat of categories) {
+    const alias = cat.alias.toLowerCase();
+    if (validRestaurantCategories.some(valid => alias.includes(valid))) {
+      return true;
+    }
+  }
+
+  return categories.some(cat => 
+    cat.alias.toLowerCase().includes("restaurant") || 
+    cat.title.toLowerCase().includes("restaurant")
+  );
+}
+
 export async function fetchRestaurantsFromYelp(preferences: GroupPreferences): Promise<Restaurant[]> {
   if (!YELP_API_KEY) {
     console.log("No Yelp API key found, using mock data");
@@ -152,6 +196,11 @@ export async function fetchRestaurantsFromYelp(preferences: GroupPreferences): P
 
     for (const business of data.businesses) {
       if (seenIds.has(business.id)) continue;
+      
+      if (!isActualRestaurant(business.categories)) {
+        continue;
+      }
+      
       seenIds.add(business.id);
 
       const priceRange = yelpPriceToRange(business.price);
@@ -168,7 +217,10 @@ export async function fetchRestaurantsFromYelp(preferences: GroupPreferences): P
         address: `${business.location.address1}, ${business.location.city}`,
         distance,
         dietaryOptions: [],
-        description: `${business.rating} star rated with ${business.review_count} reviews. ${business.categories.map(c => c.title).join(", ")}.`
+        description: `${business.rating} star rated with ${business.review_count} reviews. ${business.categories.map(c => c.title).join(", ")}.`,
+        yelpUrl: business.url,
+        latitude: business.coordinates?.latitude,
+        longitude: business.coordinates?.longitude
       };
 
       restaurants.push(restaurant);
