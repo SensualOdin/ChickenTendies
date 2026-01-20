@@ -16,6 +16,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/use-auth";
+import { useNotifications } from "@/hooks/use-notifications";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Users, Plus, Flame, LogOut, ArrowRight, UserPlus, Check, X, UserMinus, Bell, Play } from "lucide-react";
@@ -51,6 +52,7 @@ interface Notification {
 
 export default function Dashboard() {
   const { user, logout, isAuthenticated, isLoading: authLoading } = useAuth();
+  useNotifications();
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -91,7 +93,7 @@ export default function Dashboard() {
 
   const sendFriendRequestMutation = useMutation({
     mutationFn: async (email: string) => {
-      return apiRequest("POST", "/api/friends/request", { addresseeEmail: email });
+      return apiRequest("POST", "/api/friends/request", { email });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/friends"] });

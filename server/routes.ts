@@ -27,6 +27,12 @@ function broadcast(groupId: string, message: WSMessage, excludeMemberId?: string
   }
 }
 
+export function notifyUser(_userId: string, _notification: { type: string; message: string; data?: any }) {
+}
+
+export function notifyUsers(_userIds: string[], _notification: { type: string; message: string; data?: any }) {
+}
+
 async function sendSync(ws: WebSocket, groupId: string) {
   const group = await storage.getGroup(groupId);
   if (!group) return;

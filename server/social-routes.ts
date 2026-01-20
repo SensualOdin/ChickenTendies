@@ -13,6 +13,7 @@ import {
 import { eq, or, and, inArray, desc, sql } from "drizzle-orm";
 import { fetchRestaurantsFromYelp } from "./yelp";
 import type { GroupPreferences, Restaurant } from "@shared/schema";
+import { notifyUser, notifyUsers } from "./routes";
 
 function getUserId(req: Request): string {
   return (req.user as any)?.claims?.sub || "";
@@ -144,6 +145,12 @@ export function registerSocialRoutes(app: Express): void {
         type: "friend_request",
         title: "New Friend Request",
         message: `${getUserClaims(req).first_name || "Someone"} wants to be your friend!`,
+        data: { friendshipId: friendship.id, requesterId: userId },
+      });
+      
+      notifyUser(targetUser.id, {
+        type: "friend_request",
+        message: `${getUserClaims(req).first_name || "Someone"} sent you a friend request!`,
         data: { friendshipId: friendship.id, requesterId: userId },
       });
       
@@ -452,6 +459,12 @@ export function registerSocialRoutes(app: Express): void {
           data: { sessionId: session.id, groupId: group.id },
         });
       }
+      
+      notifyUsers(memberIds, {
+        type: "session_started",
+        message: `A new dining session started in "${group.name}"!`,
+        data: { sessionId: session.id, groupId: group.id, groupName: group.name },
+      });
       
       res.json(session);
     } catch (error) {
