@@ -9,7 +9,10 @@ import {
   sessionMatches,
   notifications,
   users,
-  pushSubscriptions
+  pushSubscriptions,
+  diningHistory,
+  userAchievements,
+  achievementTypeEnum
 } from "@shared/schema";
 import { eq, or, and, inArray, desc, sql } from "drizzle-orm";
 import { fetchRestaurantsFromYelp } from "./yelp";
@@ -541,7 +544,7 @@ export function registerSocialRoutes(app: Express): void {
     try {
       const userId = getUserId(req);
       const sessionId = req.params.id;
-      const { restaurantId, liked, restaurantData } = req.body;
+      const { restaurantId, liked, superLiked = false, restaurantData } = req.body;
       
       const [swipe] = await db
         .insert(sessionSwipes)
@@ -550,6 +553,7 @@ export function registerSocialRoutes(app: Express): void {
           userId,
           restaurantId,
           liked,
+          superLiked,
         })
         .returning();
       
@@ -580,7 +584,12 @@ export function registerSocialRoutes(app: Express): void {
               );
             
             const likedByUsers = new Set(likesForRestaurant.map(s => s.userId));
-            if (allMemberIds.every(id => likedByUsers.has(id))) {
+            const superLikeCount = likesForRestaurant.filter(s => s.superLiked).length;
+            
+            const allLiked = allMemberIds.every(id => likedByUsers.has(id));
+            const hasSuperLikeBoost = superLikeCount >= 1 && likedByUsers.size >= Math.ceil(allMemberIds.length * 0.6);
+            
+            if (allLiked || hasSuperLikeBoost) {
               const existingMatch = await db
                 .select()
                 .from(sessionMatches)
@@ -596,6 +605,15 @@ export function registerSocialRoutes(app: Express): void {
                   sessionId,
                   restaurantId,
                   restaurantData: restaurantData || null,
+                });
+                
+                const restaurantInfo = restaurantData as { name?: string } | null;
+                await db.insert(diningHistory).values({
+                  groupId: group.id,
+                  sessionId,
+                  restaurantId,
+                  restaurantName: restaurantInfo?.name || "Restaurant",
+                  restaurantData,
                 });
               }
             }
@@ -757,6 +775,156 @@ export function registerSocialRoutes(app: Express): void {
     } catch (error) {
       console.error("Error removing push subscription:", error);
       res.status(500).json({ message: "Failed to remove subscription" });
+    }
+  });
+
+  app.get("/api/crews/:id/history", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const groupId = req.params.id;
+      
+      const history = await db
+        .select()
+        .from(diningHistory)
+        .where(eq(diningHistory.groupId, groupId))
+        .orderBy(desc(diningHistory.visitedAt));
+      
+      res.json(history);
+    } catch (error) {
+      console.error("Error fetching dining history:", error);
+      res.status(500).json({ message: "Failed to fetch dining history" });
+    }
+  });
+
+  app.post("/api/crews/:id/history", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const groupId = req.params.id;
+      const { sessionId, restaurantId, restaurantName, restaurantData, rating, notes } = req.body;
+      
+      const [entry] = await db
+        .insert(diningHistory)
+        .values({
+          groupId,
+          sessionId,
+          restaurantId,
+          restaurantName,
+          restaurantData,
+          rating,
+          notes,
+        })
+        .returning();
+      
+      res.json(entry);
+    } catch (error) {
+      console.error("Error adding dining history:", error);
+      res.status(500).json({ message: "Failed to add dining history" });
+    }
+  });
+
+  app.get("/api/achievements", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      
+      const achievements = await db
+        .select()
+        .from(userAchievements)
+        .where(eq(userAchievements.userId, userId))
+        .orderBy(desc(userAchievements.unlockedAt));
+      
+      res.json(achievements);
+    } catch (error) {
+      console.error("Error fetching achievements:", error);
+      res.status(500).json({ message: "Failed to fetch achievements" });
+    }
+  });
+
+  app.get("/api/achievements/available", isAuthenticated, async (_req: Request, res: Response) => {
+    try {
+      const achievementDefinitions = [
+        { type: "first_match", name: "First Match", description: "Find your first restaurant match with a crew", icon: "trophy" },
+        { type: "super_liker", name: "Super Liker", description: "Use super like 10 times", icon: "sparkles" },
+        { type: "adventurous_eater", name: "Adventurous Eater", description: "Match on 5 different cuisine types", icon: "utensils" },
+        { type: "crew_leader", name: "Crew Leader", description: "Create 3 or more crews", icon: "users" },
+        { type: "social_butterfly", name: "Social Butterfly", description: "Have 5 or more friends", icon: "heart" },
+        { type: "foodie_veteran", name: "Foodie Veteran", description: "Complete 25 dining sessions", icon: "award" },
+        { type: "match_maker", name: "Match Maker", description: "Find 10 total matches across all sessions", icon: "flame" },
+        { type: "explorer", name: "Explorer", description: "Swipe through 100 restaurants", icon: "map" },
+      ];
+      
+      res.json(achievementDefinitions);
+    } catch (error) {
+      console.error("Error fetching achievement definitions:", error);
+      res.status(500).json({ message: "Failed to fetch achievements" });
+    }
+  });
+
+  app.get("/api/stats", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      
+      const [swipeCount] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(sessionSwipes)
+        .where(eq(sessionSwipes.userId, userId));
+      
+      const [superLikeCount] = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(sessionSwipes)
+        .where(and(eq(sessionSwipes.userId, userId), eq(sessionSwipes.superLiked, true)));
+      
+      const userGroups = await db
+        .select()
+        .from(persistentGroups)
+        .where(
+          or(
+            eq(persistentGroups.ownerId, userId),
+            sql`${userId} = ANY(${persistentGroups.memberIds})`
+          )
+        );
+      
+      const groupIds = userGroups.map(g => g.id);
+      
+      let matchCount = 0;
+      let historyCount = 0;
+      
+      if (groupIds.length > 0) {
+        const sessions = await db
+          .select()
+          .from(diningSessions)
+          .where(inArray(diningSessions.groupId, groupIds));
+        
+        const sessionIds = sessions.map(s => s.id);
+        
+        if (sessionIds.length > 0) {
+          const [matches] = await db
+            .select({ count: sql<number>`count(*)` })
+            .from(sessionMatches)
+            .where(inArray(sessionMatches.sessionId, sessionIds));
+          matchCount = Number(matches?.count || 0);
+        }
+        
+        const [history] = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(diningHistory)
+          .where(inArray(diningHistory.groupId, groupIds));
+        historyCount = Number(history?.count || 0);
+      }
+      
+      const achievementCount = await db
+        .select({ count: sql<number>`count(*)` })
+        .from(userAchievements)
+        .where(eq(userAchievements.userId, userId));
+      
+      res.json({
+        totalSwipes: Number(swipeCount?.count || 0),
+        superLikes: Number(superLikeCount?.count || 0),
+        totalMatches: matchCount,
+        placesVisited: historyCount,
+        crewCount: userGroups.length,
+        achievementCount: Number(achievementCount[0]?.count || 0),
+      });
+    } catch (error) {
+      console.error("Error fetching stats:", error);
+      res.status(500).json({ message: "Failed to fetch stats" });
     }
   });
 }

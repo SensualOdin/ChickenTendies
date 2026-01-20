@@ -93,7 +93,10 @@ export const restaurantSchema = z.object({
   description: z.string(),
   yelpUrl: z.string().optional(),
   latitude: z.number().optional(),
-  longitude: z.number().optional()
+  longitude: z.number().optional(),
+  phone: z.string().optional(),
+  transactions: z.array(z.string()).default([]),
+  highlights: z.array(z.string()).default([]),
 });
 
 export type Restaurant = z.infer<typeof restaurantSchema>;

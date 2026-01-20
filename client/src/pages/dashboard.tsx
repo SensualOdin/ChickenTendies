@@ -20,7 +20,7 @@ import { useNotifications } from "@/hooks/use-notifications";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Users, Plus, Flame, LogOut, ArrowRight, UserPlus, Check, X, UserMinus, Bell, BellRing, Play } from "lucide-react";
+import { Users, Plus, Flame, LogOut, ArrowRight, UserPlus, Check, X, UserMinus, Bell, BellRing, Play, User } from "lucide-react";
 import { motion } from "framer-motion";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -208,13 +208,20 @@ export default function Dashboard() {
               )}
             </Button>
           </div>
-          <Avatar className="w-8 h-8">
-            <AvatarImage src={user.profileImageUrl || undefined} />
-            <AvatarFallback>
-              {user.firstName?.[0] || user.email?.[0]?.toUpperCase() || "U"}
-            </AvatarFallback>
-          </Avatar>
+          <Link href="/profile">
+            <Avatar className="w-8 h-8 cursor-pointer hover:ring-2 ring-primary transition-all">
+              <AvatarImage src={user.profileImageUrl || undefined} />
+              <AvatarFallback>
+                {user.firstName?.[0] || user.email?.[0]?.toUpperCase() || "U"}
+              </AvatarFallback>
+            </Avatar>
+          </Link>
           <span className="hidden sm:inline font-medium">{user.firstName || user.email}</span>
+          <Link href="/profile">
+            <Button variant="ghost" size="icon" data-testid="button-profile">
+              <User className="w-5 h-5" />
+            </Button>
+          </Link>
           <Button variant="ghost" size="icon" onClick={() => logout()} data-testid="button-logout">
             <LogOut className="w-5 h-5" />
           </Button>

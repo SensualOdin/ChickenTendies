@@ -4,11 +4,11 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { SwipeCard, SwipeButtons } from "@/components/swipe-card";
+import { SwipeCard, SwipeButtons, type SwipeAction } from "@/components/swipe-card";
 import { MemberAvatars } from "@/components/member-avatars";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Flame, Loader2, Trophy, ChevronRight, Sparkles, PartyPopper } from "lucide-react";
+import { Flame, ChevronRight, PartyPopper } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Group, Restaurant, WSMessage } from "@shared/schema";
 
@@ -74,28 +74,31 @@ export default function SwipePage() {
   }, [params.id, memberId]);
 
   const swipeMutation = useMutation({
-    mutationFn: async ({ restaurantId, liked }: { restaurantId: string; liked: boolean }) => {
+    mutationFn: async ({ restaurantId, liked, superLiked }: { restaurantId: string; liked: boolean; superLiked: boolean }) => {
       const response = await apiRequest("POST", `/api/groups/${params.id}/swipe`, {
         restaurantId,
         liked,
+        superLiked,
         memberId,
       });
       return response.json();
     },
     onError: () => {
       toast({
-        title: "Oops! 😅",
+        title: "Oops!",
         description: "That didn't work. Try again!",
         variant: "destructive",
       });
     },
   });
 
-  const handleSwipe = useCallback((liked: boolean) => {
+  const handleSwipe = useCallback((action: SwipeAction) => {
     if (currentIndex >= restaurants.length) return;
     
     const restaurant = restaurants[currentIndex];
-    swipeMutation.mutate({ restaurantId: restaurant.id, liked });
+    const liked = action === "like" || action === "superlike";
+    const superLiked = action === "superlike";
+    swipeMutation.mutate({ restaurantId: restaurant.id, liked, superLiked });
     setCurrentIndex((prev) => prev + 1);
   }, [currentIndex, restaurants, swipeMutation]);
 

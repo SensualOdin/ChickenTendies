@@ -1,6 +1,8 @@
 import { sql } from "drizzle-orm";
 import { pgTable, varchar, timestamp, text, integer, boolean, jsonb } from "drizzle-orm/pg-core";
 import { users } from "./auth";
+import { createInsertSchema } from "drizzle-zod";
+import { z } from "zod";
 
 export const friendshipStatusEnum = ["pending", "accepted", "declined", "blocked"] as const;
 export type FriendshipStatus = typeof friendshipStatusEnum[number];
@@ -51,6 +53,7 @@ export const sessionSwipes = pgTable("session_swipes", {
   userId: varchar("user_id").notNull().references(() => users.id),
   restaurantId: varchar("restaurant_id").notNull(),
   liked: boolean("liked").notNull(),
+  superLiked: boolean("super_liked").notNull().default(false),
   swipedAt: timestamp("swiped_at").defaultNow(),
 });
 
@@ -93,3 +96,41 @@ export const pushSubscriptions = pgTable("push_subscriptions", {
 
 export type PushSubscription = typeof pushSubscriptions.$inferSelect;
 export type InsertPushSubscription = typeof pushSubscriptions.$inferInsert;
+
+export const diningHistory = pgTable("dining_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  groupId: varchar("group_id").notNull().references(() => persistentGroups.id),
+  sessionId: varchar("session_id").references(() => diningSessions.id),
+  restaurantId: varchar("restaurant_id").notNull(),
+  restaurantName: varchar("restaurant_name", { length: 200 }).notNull(),
+  restaurantData: jsonb("restaurant_data"),
+  visitedAt: timestamp("visited_at").defaultNow(),
+  rating: integer("rating"),
+  notes: text("notes"),
+});
+
+export type DiningHistory = typeof diningHistory.$inferSelect;
+export type InsertDiningHistory = typeof diningHistory.$inferInsert;
+
+export const achievementTypeEnum = [
+  "first_match",
+  "super_liker",
+  "adventurous_eater",
+  "crew_leader",
+  "social_butterfly",
+  "foodie_veteran",
+  "match_maker",
+  "explorer"
+] as const;
+export type AchievementType = typeof achievementTypeEnum[number];
+
+export const userAchievements = pgTable("user_achievements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  achievementType: varchar("achievement_type", { length: 50 }).notNull(),
+  unlockedAt: timestamp("unlocked_at").defaultNow(),
+  data: jsonb("data"),
+});
+
+export type UserAchievement = typeof userAchievements.$inferSelect;
+export type InsertUserAchievement = typeof userAchievements.$inferInsert;

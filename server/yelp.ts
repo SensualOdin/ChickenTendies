@@ -23,6 +23,9 @@ interface YelpBusiness {
     longitude: number;
   };
   distance?: number;
+  phone?: string;
+  display_phone?: string;
+  transactions?: string[];
 }
 
 interface YelpSearchResponse {
@@ -220,6 +223,15 @@ export async function fetchRestaurantsFromYelp(preferences: GroupPreferences): P
       const priceRange = yelpPriceToRange(business.price);
       const distance = business.distance ? metersToMiles(business.distance) : 0;
 
+      const transactions = business.transactions || [];
+      const highlights: string[] = [];
+      
+      if (business.rating >= 4.5) highlights.push("Highly Rated");
+      if (business.review_count > 500) highlights.push("Popular Spot");
+      if (transactions.includes("reservation")) highlights.push("Reservations");
+      if (transactions.includes("delivery")) highlights.push("Delivery");
+      if (transactions.includes("pickup")) highlights.push("Pickup");
+
       const restaurant: Restaurant = {
         id: business.id,
         name: business.name,
@@ -234,7 +246,10 @@ export async function fetchRestaurantsFromYelp(preferences: GroupPreferences): P
         description: `${business.rating} star rated with ${business.review_count} reviews. ${business.categories.map(c => c.title).join(", ")}.`,
         yelpUrl: business.url,
         latitude: business.coordinates?.latitude,
-        longitude: business.coordinates?.longitude
+        longitude: business.coordinates?.longitude,
+        phone: business.display_phone,
+        transactions,
+        highlights,
       };
 
       restaurants.push(restaurant);
