@@ -126,6 +126,24 @@ export default function Dashboard() {
     },
   });
 
+  const startSessionMutation = useMutation({
+    mutationFn: async (crew: Crew) => {
+      const response = await apiRequest("POST", "/api/groups", {
+        name: `${crew.name} Session`,
+        hostName: user?.firstName || user?.email?.split("@")[0] || "Host",
+      });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      localStorage.setItem("grubmatch-member-id", data.memberId);
+      localStorage.setItem("grubmatch-group-id", data.group.id);
+      navigate(`/group/${data.group.id}/preferences`);
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to start session", variant: "destructive" });
+    },
+  });
+
   const removeFriendMutation = useMutation({
     mutationFn: async (friendshipId: string) => {
       return apiRequest("DELETE", `/api/friends/${friendshipId}`);
@@ -318,10 +336,11 @@ export default function Dashboard() {
                         size="sm" 
                         className="flex-1" 
                         data-testid={`button-start-session-${crew.id}`}
-                        onClick={() => navigate(`/?crew=${crew.id}`)}
+                        onClick={() => startSessionMutation.mutate(crew)}
+                        disabled={startSessionMutation.isPending}
                       >
                         <Play className="w-4 h-4 mr-1" />
-                        Start Session
+                        {startSessionMutation.isPending ? "Starting..." : "Start Session"}
                       </Button>
                       <Button 
                         size="sm" 
