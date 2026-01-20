@@ -17,9 +17,10 @@ import {
 } from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/use-auth";
 import { useNotifications } from "@/hooks/use-notifications";
+import { usePushNotifications } from "@/hooks/use-push-notifications";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Users, Plus, Flame, LogOut, ArrowRight, UserPlus, Check, X, UserMinus, Bell, Play } from "lucide-react";
+import { Users, Plus, Flame, LogOut, ArrowRight, UserPlus, Check, X, UserMinus, Bell, BellRing, Play } from "lucide-react";
 import { motion } from "framer-motion";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -53,6 +54,7 @@ interface Notification {
 export default function Dashboard() {
   const { user, logout, isAuthenticated, isLoading: authLoading } = useAuth();
   useNotifications();
+  const { isPushSupported, permission, isSubscribed, isLoading: pushLoading, subscribe } = usePushNotifications();
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -297,6 +299,41 @@ export default function Dashboard() {
             </DialogContent>
           </Dialog>
         </div>
+
+        {isPushSupported && !isSubscribed && permission !== "denied" && (
+          <motion.div
+            initial={{ y: 10, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            className="mb-6"
+          >
+            <Card className="border-primary/20 bg-primary/5">
+              <CardContent className="p-4 flex items-center gap-4">
+                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                  <BellRing className="w-5 h-5 text-primary" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-medium">Enable Notifications</h3>
+                  <p className="text-sm text-muted-foreground">Get notified when your crew starts a dining session</p>
+                </div>
+                <Button
+                  size="sm"
+                  onClick={async () => {
+                    const success = await subscribe();
+                    if (success) {
+                      toast({ title: "Notifications enabled!", description: "You'll be notified when sessions start." });
+                    } else if (permission === "denied") {
+                      toast({ title: "Notifications blocked", description: "Please enable notifications in your browser settings.", variant: "destructive" });
+                    }
+                  }}
+                  disabled={pushLoading}
+                  data-testid="button-enable-notifications"
+                >
+                  {pushLoading ? "Enabling..." : "Enable"}
+                </Button>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
 
         <Tabs defaultValue="crews" className="space-y-4">
           <TabsList>

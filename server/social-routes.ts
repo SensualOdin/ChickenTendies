@@ -8,12 +8,14 @@ import {
   sessionSwipes,
   sessionMatches,
   notifications,
-  users
+  users,
+  pushSubscriptions
 } from "@shared/schema";
 import { eq, or, and, inArray, desc, sql } from "drizzle-orm";
 import { fetchRestaurantsFromYelp } from "./yelp";
 import type { GroupPreferences, Restaurant } from "@shared/schema";
 import { notifyUser, notifyUsers } from "./routes";
+import { sendPushToUsers, getVapidPublicKey } from "./push";
 
 function getUserId(req: Request): string {
   return (req.user as any)?.claims?.sub || "";
@@ -465,6 +467,13 @@ export function registerSocialRoutes(app: Express): void {
         message: `A new dining session started in "${group.name}"!`,
         data: { sessionId: session.id, groupId: group.id, groupName: group.name },
       });
+
+      sendPushToUsers(memberIds, {
+        title: "New dining session!",
+        body: `Someone started a new session in "${group.name}" - join the hunt!`,
+        url: "/dashboard",
+        data: { sessionId: session.id, groupId: group.id },
+      });
       
       res.json(session);
     } catch (error) {
@@ -687,6 +696,67 @@ export function registerSocialRoutes(app: Express): void {
     } catch (error) {
       console.error("Error marking all notifications as read:", error);
       res.status(500).json({ message: "Failed to update notifications" });
+    }
+  });
+
+  app.get("/api/push/vapid-key", (req: Request, res: Response) => {
+    const publicKey = getVapidPublicKey();
+    if (!publicKey) {
+      return res.status(503).json({ message: "Push notifications not configured" });
+    }
+    res.json({ publicKey });
+  });
+
+  app.post("/api/push/subscribe", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      const { endpoint, keys } = req.body;
+
+      if (!endpoint || !keys?.p256dh || !keys?.auth) {
+        return res.status(400).json({ message: "Invalid subscription data" });
+      }
+
+      await db.delete(pushSubscriptions).where(
+        and(
+          eq(pushSubscriptions.userId, userId),
+          eq(pushSubscriptions.endpoint, endpoint)
+        )
+      );
+
+      await db.insert(pushSubscriptions).values({
+        userId,
+        endpoint,
+        p256dh: keys.p256dh,
+        auth: keys.auth,
+      });
+
+      res.json({ message: "Subscription saved" });
+    } catch (error) {
+      console.error("Error saving push subscription:", error);
+      res.status(500).json({ message: "Failed to save subscription" });
+    }
+  });
+
+  app.delete("/api/push/subscribe", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      const { endpoint } = req.body;
+
+      if (endpoint) {
+        await db.delete(pushSubscriptions).where(
+          and(
+            eq(pushSubscriptions.userId, userId),
+            eq(pushSubscriptions.endpoint, endpoint)
+          )
+        );
+      } else {
+        await db.delete(pushSubscriptions).where(eq(pushSubscriptions.userId, userId));
+      }
+
+      res.json({ message: "Subscription removed" });
+    } catch (error) {
+      console.error("Error removing push subscription:", error);
+      res.status(500).json({ message: "Failed to remove subscription" });
     }
   });
 }
