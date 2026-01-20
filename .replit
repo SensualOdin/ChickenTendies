@@ -40,3 +40,8 @@ waitForPort = 5000
 
 [agent]
 integrations = ["javascript_mem_db:1.0.0", "javascript_websocket:1.0.0", "javascript_log_in_with_replit:2.0.0"]
+
+[userenv]
+
+[userenv.shared]
+VAPID_PUBLIC_KEY = "BLD4pqWhGLFDsaHBA1YrDZ5gn8otXKTk50aHfyI6U_jj_Um1xY9Vp2G0ryQAhe3Gc3ECdFn3QzwrwbmSdQyHDtk"
