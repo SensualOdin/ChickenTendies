@@ -149,6 +149,15 @@ function isActualRestaurant(categories: Array<{ alias: string; title: string }>)
   );
 }
 
+function shuffleArray<T>(array: T[]): T[] {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
 export async function fetchRestaurantsFromYelp(preferences: GroupPreferences): Promise<Restaurant[]> {
   if (!YELP_API_KEY) {
     console.log("No Yelp API key found, using mock data");
@@ -164,12 +173,17 @@ export async function fetchRestaurantsFromYelp(preferences: GroupPreferences): P
     ? preferences.cuisineTypes.map(c => cuisineToYelpCategory[c]).join(",")
     : "restaurants";
 
+  const sortOptions = ["rating", "review_count", "distance"];
+  const randomSort = sortOptions[Math.floor(Math.random() * sortOptions.length)];
+  const randomOffset = Math.floor(Math.random() * 30);
+
   const params = new URLSearchParams({
     location: preferences.zipCode,
     categories: categories,
     radius: radiusMeters.toString(),
     limit: "50",
-    sort_by: "rating"
+    sort_by: randomSort,
+    offset: randomOffset.toString()
   });
 
   if (preferences.priceRange.length > 0) {
@@ -230,7 +244,7 @@ export async function fetchRestaurantsFromYelp(preferences: GroupPreferences): P
     return [];
   }
 
-  restaurants.sort((a, b) => b.rating - a.rating);
+  const shuffled = shuffleArray(restaurants);
   
-  return restaurants.slice(0, 20);
+  return shuffled.slice(0, 20);
 }
