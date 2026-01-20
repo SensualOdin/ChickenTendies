@@ -128,6 +128,10 @@ export default function Dashboard() {
 
   const startSessionMutation = useMutation({
     mutationFn: async (crew: Crew) => {
+      // First create a dining session (this sends notifications to crew members)
+      await apiRequest("POST", `/api/crews/${crew.id}/sessions`, {});
+      
+      // Then create the swiping group
       const response = await apiRequest("POST", "/api/groups", {
         name: `${crew.name} Session`,
         hostName: user?.firstName || user?.email?.split("@")[0] || "Host",
