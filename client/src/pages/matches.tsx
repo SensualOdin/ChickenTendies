@@ -39,11 +39,13 @@ export default function MatchesPage() {
   return (
     <div className="min-h-screen bg-background">
       <header className="flex items-center justify-between p-4 md:p-6">
-        <Link href={`/group/${params.id}/swipe`}>
-          <Button variant="ghost" size="icon" data-testid="button-back">
-            <ArrowLeft className="w-5 h-5" />
-          </Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link href="/">
+            <Button variant="ghost" size="icon" data-testid="button-home">
+              <ArrowLeft className="w-5 h-5" />
+            </Button>
+          </Link>
+        </div>
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-orange-500 flex items-center justify-center">
             <Flame className="w-4 h-4 text-primary-foreground" />

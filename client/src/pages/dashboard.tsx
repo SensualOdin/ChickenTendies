@@ -314,11 +314,21 @@ export default function Dashboard() {
                       {crew.isOwner && <Badge variant="secondary">Owner</Badge>}
                     </CardHeader>
                     <CardContent className="flex gap-2">
-                      <Button size="sm" className="flex-1" data-testid={`button-start-session-${crew.id}`}>
+                      <Button 
+                        size="sm" 
+                        className="flex-1" 
+                        data-testid={`button-start-session-${crew.id}`}
+                        onClick={() => navigate(`/?crew=${crew.id}`)}
+                      >
                         <Play className="w-4 h-4 mr-1" />
                         Start Session
                       </Button>
-                      <Button size="sm" variant="outline" data-testid={`button-manage-crew-${crew.id}`}>
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        data-testid={`button-manage-crew-${crew.id}`}
+                        onClick={() => toast({ title: crew.name, description: `${crew.memberCount || 1} member${(crew.memberCount || 1) !== 1 ? 's' : ''}. Crew management coming soon!` })}
+                      >
                         Manage
                       </Button>
                     </CardContent>
