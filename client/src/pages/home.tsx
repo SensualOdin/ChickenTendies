@@ -1,11 +1,23 @@
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { Users, Utensils, Heart, ArrowRight, Sparkles, Flame, Pizza, PartyPopper } from "lucide-react";
+import { Users, Utensils, Heart, ArrowRight, Sparkles, Flame, Pizza, PartyPopper, LogIn, LogOut, User, LayoutDashboard } from "lucide-react";
 import { motion } from "framer-motion";
+import { useAuth } from "@/hooks/use-auth";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export default function Home() {
+  const { user, isLoading, isAuthenticated, logout } = useAuth();
+  const [, navigate] = useLocation();
+
   return (
     <div className="min-h-screen bg-background overflow-hidden">
       <header className="flex items-center justify-between p-4 md:p-6">
@@ -22,7 +34,46 @@ export default function Home() {
             ChickenTinders
           </span>
         </motion.div>
-        <ThemeToggle />
+        <div className="flex items-center gap-3">
+          {isLoading ? null : isAuthenticated ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="flex items-center gap-2" data-testid="button-user-menu">
+                  <Avatar className="w-8 h-8">
+                    <AvatarImage src={user?.profileImageUrl || undefined} />
+                    <AvatarFallback>
+                      {user?.firstName?.[0] || user?.email?.[0]?.toUpperCase() || "U"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="hidden sm:inline">{user?.firstName || "User"}</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem 
+                  onSelect={() => navigate("/dashboard")} 
+                  className="cursor-pointer flex items-center gap-2" 
+                  data-testid="link-dashboard"
+                >
+                  <LayoutDashboard className="w-4 h-4" />
+                  Dashboard
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => logout()} className="cursor-pointer" data-testid="button-logout">
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Sign Out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <a href="/api/login">
+              <Button variant="outline" className="flex items-center gap-2" data-testid="button-login">
+                <LogIn className="w-4 h-4" />
+                Sign In
+              </Button>
+            </a>
+          )}
+          <ThemeToggle />
+        </div>
       </header>
 
       <main className="px-4 md:px-6 pb-12">

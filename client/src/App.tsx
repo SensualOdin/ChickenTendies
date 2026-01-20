@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/lib/theme-provider";
 import Home from "@/pages/home";
+import Dashboard from "@/pages/dashboard";
 import CreateGroup from "@/pages/create-group";
 import JoinGroup from "@/pages/join-group";
 import GroupLobby from "@/pages/group-lobby";
@@ -17,6 +18,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
+      <Route path="/dashboard" component={Dashboard} />
       <Route path="/create" component={CreateGroup} />
       <Route path="/join" component={JoinGroup} />
       <Route path="/group/:id" component={GroupLobby} />
