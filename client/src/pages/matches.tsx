@@ -1,15 +1,17 @@
-import { useParams, Link } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useParams, Link, useLocation } from "wouter";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { ArrowLeft, Flame, Loader2, Star, MapPin, ExternalLink, Heart, PartyPopper, Trophy, Sparkles } from "lucide-react";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { Home, Flame, Loader2, Star, MapPin, ExternalLink, Heart, PartyPopper, Trophy, Sparkles, RefreshCw } from "lucide-react";
 import { motion } from "framer-motion";
 import type { Group, Restaurant } from "@shared/schema";
 
 export default function MatchesPage() {
   const params = useParams<{ id: string }>();
+  const [, setLocation] = useLocation();
 
   const { data: group, isLoading: groupLoading } = useQuery<Group>({
     queryKey: ["/api/groups", params.id],
@@ -19,6 +21,17 @@ export default function MatchesPage() {
   const { data: matches, isLoading: matchesLoading } = useQuery<Restaurant[]>({
     queryKey: ["/api/groups", params.id, "matches"],
     enabled: !!params.id,
+  });
+
+  const loadMoreMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", `/api/groups/${params.id}/restaurants/load-more`);
+      return response.json();
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/groups", params.id, "restaurants"] });
+      setLocation(`/group/${params.id}/swipe`);
+    },
   });
 
   const isLoading = groupLoading || matchesLoading;
@@ -41,8 +54,9 @@ export default function MatchesPage() {
       <header className="flex items-center justify-between p-4 md:p-6">
         <div className="flex items-center gap-2">
           <Link href="/">
-            <Button variant="ghost" size="icon" data-testid="button-home">
-              <ArrowLeft className="w-5 h-5" />
+            <Button variant="ghost" data-testid="button-home">
+              <Home className="w-4 h-4 mr-2" />
+              Home
             </Button>
           </Link>
         </div>
@@ -184,12 +198,24 @@ export default function MatchesPage() {
                 <p className="text-sm text-muted-foreground mb-6">
                   Keep swiping — your perfect spot is waiting!
                 </p>
-                <Link href={`/group/${params.id}/swipe`}>
-                  <Button className="bg-gradient-to-r from-primary to-orange-500" data-testid="button-back-to-swiping">
-                    <Sparkles className="w-4 h-4 mr-2" />
-                    Back to Swiping
-                  </Button>
-                </Link>
+                <Button 
+                  className="bg-gradient-to-r from-primary to-orange-500" 
+                  data-testid="button-back-to-swiping"
+                  onClick={() => loadMoreMutation.mutate()}
+                  disabled={loadMoreMutation.isPending}
+                >
+                  {loadMoreMutation.isPending ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                      Loading...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4 mr-2" />
+                      Load More Restaurants
+                    </>
+                  )}
+                </Button>
               </CardContent>
             </Card>
           </motion.div>
@@ -205,11 +231,25 @@ export default function MatchesPage() {
             <p className="text-sm text-muted-foreground mb-4">
               Want more options? 👀
             </p>
-            <Link href={`/group/${params.id}/swipe`}>
-              <Button variant="outline" className="border-2" data-testid="button-continue-swiping">
-                Keep Swiping
-              </Button>
-            </Link>
+            <Button 
+              variant="outline" 
+              className="border-2" 
+              data-testid="button-continue-swiping"
+              onClick={() => loadMoreMutation.mutate()}
+              disabled={loadMoreMutation.isPending}
+            >
+              {loadMoreMutation.isPending ? (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  Loading More...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Load 20 More Restaurants
+                </>
+              )}
+            </Button>
           </motion.div>
         )}
       </main>

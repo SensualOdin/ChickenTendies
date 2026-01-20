@@ -155,6 +155,23 @@ export async function registerRoutes(
     res.json(restaurants);
   });
 
+  app.post("/api/groups/:id/restaurants/load-more", async (req, res) => {
+    const restaurants = await storage.loadMoreRestaurants(req.params.id);
+    const group = await storage.getGroup(req.params.id);
+    const matches = await storage.getMatchesForGroup(req.params.id);
+    
+    if (group) {
+      broadcast(req.params.id, {
+        type: "sync",
+        group,
+        restaurants,
+        matches,
+      });
+    }
+    
+    res.json(restaurants);
+  });
+
   app.post("/api/groups/:id/swipe", async (req, res) => {
     try {
       const { restaurantId, liked, memberId } = req.body;

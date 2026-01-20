@@ -26,6 +26,17 @@ export default function SwipePage() {
 
   const memberId = localStorage.getItem("grubmatch-member-id");
 
+  const getSwipedIds = (): Set<string> => {
+    const stored = localStorage.getItem(`swiped-${params.id}`);
+    return stored ? new Set(JSON.parse(stored)) : new Set();
+  };
+
+  const saveSwipedId = (restaurantId: string) => {
+    const swiped = getSwipedIds();
+    swiped.add(restaurantId);
+    localStorage.setItem(`swiped-${params.id}`, JSON.stringify([...swiped]));
+  };
+
   const { data: initialGroup, isLoading: groupLoading } = useQuery<Group>({
     queryKey: ["/api/groups", params.id],
     enabled: !!params.id,
@@ -41,7 +52,12 @@ export default function SwipePage() {
   }, [initialGroup]);
 
   useEffect(() => {
-    if (initialRestaurants) setRestaurants(initialRestaurants);
+    if (initialRestaurants) {
+      const swipedIds = getSwipedIds();
+      const unswipedRestaurants = initialRestaurants.filter(r => !swipedIds.has(r.id));
+      setRestaurants(unswipedRestaurants);
+      setCurrentIndex(0);
+    }
   }, [initialRestaurants]);
 
   useEffect(() => {
@@ -56,7 +72,9 @@ export default function SwipePage() {
       
       if (message.type === "sync") {
         setGroup(message.group);
-        setRestaurants(message.restaurants);
+        const swipedIds = getSwipedIds();
+        const unswipedRestaurants = message.restaurants.filter((r: Restaurant) => !swipedIds.has(r.id));
+        setRestaurants(unswipedRestaurants);
         setMatches(message.matches);
       } else if (message.type === "match_found") {
         setMatches((prev) => [...prev, message.restaurant]);
@@ -99,8 +117,9 @@ export default function SwipePage() {
     const liked = action === "like" || action === "superlike";
     const superLiked = action === "superlike";
     swipeMutation.mutate({ restaurantId: restaurant.id, liked, superLiked });
+    saveSwipedId(restaurant.id);
     setCurrentIndex((prev) => prev + 1);
-  }, [currentIndex, restaurants, swipeMutation]);
+  }, [currentIndex, restaurants, swipeMutation, params.id]);
 
   const isLoading = groupLoading || restaurantsLoading;
   const currentRestaurant = restaurants[currentIndex];

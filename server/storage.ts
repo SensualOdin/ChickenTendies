@@ -29,6 +29,7 @@ export interface IStorage {
   addMember(groupId: string, member: GroupMember): Promise<Group | undefined>;
   removeMember(groupId: string, memberId: string): Promise<Group | undefined>;
   getRestaurantsForGroup(groupId: string): Promise<Restaurant[]>;
+  loadMoreRestaurants(groupId: string): Promise<Restaurant[]>;
   recordSwipe(groupId: string, memberId: string, restaurantId: string, liked: boolean): Promise<Swipe>;
   getSwipesForGroup(groupId: string): Promise<Swipe[]>;
   getMatchesForGroup(groupId: string): Promise<Restaurant[]>;
@@ -340,6 +341,32 @@ export class MemStorage implements IStorage {
     const result = filtered.length > 0 ? filtered : mockRestaurants;
     this.restaurantCache.set(groupId, result);
     return result;
+  }
+
+  async loadMoreRestaurants(groupId: string): Promise<Restaurant[]> {
+    const group = this.groups.get(groupId);
+    if (!group || !group.preferences) return [];
+
+    const existingRestaurants = this.restaurantCache.get(groupId) || [];
+    const existingIds = new Set(existingRestaurants.map(r => r.id));
+    
+    const newOffset = existingRestaurants.length + Math.floor(Math.random() * 20);
+    
+    try {
+      const yelpRestaurants = await fetchRestaurantsFromYelp(group.preferences, newOffset);
+      
+      const newRestaurants = yelpRestaurants.filter(r => !existingIds.has(r.id));
+      
+      if (newRestaurants.length > 0) {
+        const combined = [...existingRestaurants, ...newRestaurants];
+        this.restaurantCache.set(groupId, combined);
+        return combined;
+      }
+    } catch (error) {
+      console.error("Error loading more restaurants from Yelp:", error);
+    }
+
+    return existingRestaurants;
   }
 
   async recordSwipe(groupId: string, memberId: string, restaurantId: string, liked: boolean): Promise<Swipe> {

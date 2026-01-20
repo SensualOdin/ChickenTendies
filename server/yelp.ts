@@ -161,7 +161,7 @@ function shuffleArray<T>(array: T[]): T[] {
   return shuffled;
 }
 
-export async function fetchRestaurantsFromYelp(preferences: GroupPreferences): Promise<Restaurant[]> {
+export async function fetchRestaurantsFromYelp(preferences: GroupPreferences, offset: number = 0): Promise<Restaurant[]> {
   if (!YELP_API_KEY) {
     console.log("No Yelp API key found, using mock data");
     return [];
@@ -178,7 +178,7 @@ export async function fetchRestaurantsFromYelp(preferences: GroupPreferences): P
 
   const sortOptions = ["rating", "review_count", "distance"];
   const randomSort = sortOptions[Math.floor(Math.random() * sortOptions.length)];
-  const randomOffset = Math.floor(Math.random() * 30);
+  const yelpOffset = offset > 0 ? offset : Math.floor(Math.random() * 30);
 
   const params = new URLSearchParams({
     location: preferences.zipCode,
@@ -186,7 +186,7 @@ export async function fetchRestaurantsFromYelp(preferences: GroupPreferences): P
     radius: radiusMeters.toString(),
     limit: "50",
     sort_by: randomSort,
-    offset: randomOffset.toString()
+    offset: yelpOffset.toString()
   });
 
   if (preferences.priceRange.length > 0) {
