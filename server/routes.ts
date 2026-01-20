@@ -4,6 +4,8 @@ import { WebSocketServer, WebSocket } from "ws";
 import { storage } from "./storage";
 import { insertGroupSchema, joinGroupSchema, groupPreferencesSchema } from "@shared/schema";
 import type { WSMessage, Group, Restaurant } from "@shared/schema";
+import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
+import { registerSocialRoutes } from "./social-routes";
 
 interface WSClient {
   ws: WebSocket;
@@ -48,6 +50,11 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  // Setup authentication before other routes
+  await setupAuth(app);
+  registerAuthRoutes(app);
+  registerSocialRoutes(app);
+
   const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
 
   wss.on("connection", async (ws, req) => {

@@ -145,17 +145,8 @@ export type WSMessage =
   | { type: "match_found"; restaurant: Restaurant }
   | { type: "sync"; group: Group; restaurants: Restaurant[]; matches: Restaurant[] };
 
-// Legacy user types for compatibility
-export const users = {
-  id: "id",
-  username: "username",
-  password: "password"
-};
+// Export auth models
+export * from "./models/auth";
 
-export const insertUserSchema = z.object({
-  username: z.string(),
-  password: z.string()
-});
-
-export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = { id: string; username: string; password: string };
+// Export social models (friends, groups, sessions)
+export * from "./models/social";
