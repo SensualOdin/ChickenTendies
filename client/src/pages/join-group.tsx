@@ -61,7 +61,10 @@ export default function JoinGroupPage() {
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-orange-500 flex items-center justify-center">
             <Flame className="w-4 h-4 text-primary-foreground" />
           </div>
-          <span className="font-bold bg-gradient-to-r from-primary to-orange-500 bg-clip-text text-transparent">ChickenTinders</span>
+          <div className="flex flex-col">
+            <span className="font-bold bg-gradient-to-r from-primary to-orange-500 bg-clip-text text-transparent leading-tight">ChickenTinders</span>
+            <span className="text-xs text-muted-foreground hidden sm:block">Swipe Together, Dine Together</span>
+          </div>
         </div>
         <ThemeToggle />
       </header>

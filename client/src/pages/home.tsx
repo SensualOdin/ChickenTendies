@@ -29,9 +29,12 @@ export default function Home() {
           transition={{ duration: 0.5 }}
         >
           <img src={logoImage} alt="ChickenTinders" className="w-10 h-10 rounded-xl object-cover shadow-lg shadow-primary/30" />
-          <span className="text-xl font-bold bg-gradient-to-r from-primary to-orange-500 bg-clip-text text-transparent">
-            ChickenTinders
-          </span>
+          <div className="flex flex-col">
+            <span className="text-xl font-bold bg-gradient-to-r from-primary to-orange-500 bg-clip-text text-transparent leading-tight">
+              ChickenTinders
+            </span>
+            <span className="text-xs text-muted-foreground hidden sm:block">Swipe Together, Dine Together</span>
+          </div>
         </motion.div>
         <div className="flex items-center gap-3">
           {isLoading ? null : isAuthenticated ? (
@@ -107,7 +110,7 @@ export default function Home() {
               transition={{ delay: 0.2 }}
             >
               <Sparkles className="w-4 h-4" />
-              <span>Swipe right on dinner tonight!</span>
+              <span>Swipe Together, Dine Together</span>
               <Sparkles className="w-4 h-4" />
             </motion.div>
 
