@@ -20,8 +20,9 @@ import { useNotifications } from "@/hooks/use-notifications";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Users, Plus, Flame, LogOut, ArrowRight, UserPlus, Check, X, UserMinus, Bell, BellRing, Play, User } from "lucide-react";
+import { Users, Plus, LogOut, ArrowRight, UserPlus, Check, X, UserMinus, Bell, BellRing, Play, User } from "lucide-react";
 import { motion } from "framer-motion";
+import logoImage from "@assets/460272BC-3FCC-4927-8C2E-4C236353E7AB_1768880143398.png";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -190,9 +191,7 @@ export default function Dashboard() {
     <div className="min-h-screen bg-background">
       <header className="flex items-center justify-between p-4 md:p-6 border-b">
         <Link href="/" className="flex items-center gap-2">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-orange-500 flex items-center justify-center shadow-lg shadow-primary/30">
-            <Flame className="w-5 h-5 text-primary-foreground" />
-          </div>
+          <img src={logoImage} alt="ChickenTinders" className="w-10 h-10 rounded-xl object-cover shadow-lg shadow-primary/30" />
           <span className="text-xl font-bold bg-gradient-to-r from-primary to-orange-500 bg-clip-text text-transparent">
             ChickenTinders
           </span>

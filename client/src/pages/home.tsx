@@ -6,6 +6,7 @@ import { Users, Utensils, Heart, ArrowRight, Sparkles, Flame, Pizza, PartyPopper
 import { motion } from "framer-motion";
 import { useAuth } from "@/hooks/use-auth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import logoImage from "@assets/460272BC-3FCC-4927-8C2E-4C236353E7AB_1768880143398.png";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,9 +28,7 @@ export default function Home() {
           animate={{ x: 0, opacity: 1 }}
           transition={{ duration: 0.5 }}
         >
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-orange-500 flex items-center justify-center shadow-lg shadow-primary/30">
-            <Flame className="w-5 h-5 text-primary-foreground" />
-          </div>
+          <img src={logoImage} alt="ChickenTinders" className="w-10 h-10 rounded-xl object-cover shadow-lg shadow-primary/30" />
           <span className="text-xl font-bold bg-gradient-to-r from-primary to-orange-500 bg-clip-text text-transparent">
             ChickenTinders
           </span>
