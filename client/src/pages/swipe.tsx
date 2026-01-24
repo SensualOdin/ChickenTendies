@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { SwipeCard, SwipeButtons, type SwipeAction } from "@/components/swipe-card";
 import { MemberAvatars } from "@/components/member-avatars";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Flame, ChevronRight, PartyPopper, Bell } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -35,7 +35,7 @@ export default function SwipePage() {
   const saveSwipedId = (restaurantId: string) => {
     const swiped = getSwipedIds();
     swiped.add(restaurantId);
-    localStorage.setItem(`swiped-${params.id}`, JSON.stringify([...swiped]));
+    localStorage.setItem(`swiped-${params.id}`, JSON.stringify(Array.from(swiped)));
   };
 
   const { data: initialGroup, isLoading: groupLoading } = useQuery<Group>({
@@ -116,6 +116,24 @@ export default function SwipePage() {
             description: `They're waiting for you to swipe on ${message.restaurantName}`,
           });
         }
+      } else if (message.type === "member_done_swiping") {
+        // Update group state to reflect member completion
+        setGroup((prev) => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            members: prev.members.map(m => 
+              m.id === message.memberId ? { ...m, doneSwiping: true } : m
+            ),
+          };
+        });
+        // Only show toast if it's not the current user
+        if (message.memberId !== memberId) {
+          toast({
+            title: `${message.memberName} finished swiping!`,
+            description: "They're waiting for everyone else",
+          });
+        }
       }
     };
 
@@ -142,6 +160,19 @@ export default function SwipePage() {
         description: "That didn't work. Try again!",
         variant: "destructive",
       });
+    },
+  });
+
+  const doneMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", `/api/groups/${params.id}/done-swiping`, {
+        memberId,
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      // Invalidate group query to ensure UI is up to date
+      queryClient.invalidateQueries({ queryKey: ["/api/groups", params.id] });
     },
   });
 
@@ -182,7 +213,22 @@ export default function SwipePage() {
   const isLoading = groupLoading || restaurantsLoading;
   const currentRestaurant = restaurants[currentIndex];
   const nextRestaurant = restaurants[currentIndex + 1];
-  const isComplete = currentIndex >= restaurants.length;
+  const isComplete = currentIndex >= restaurants.length && restaurants.length > 0;
+
+  // Mark as done swiping when user finishes all restaurants
+  useEffect(() => {
+    if (isComplete && !doneMutation.isPending && memberId) {
+      const currentMember = group?.members.find(m => m.id === memberId);
+      if (currentMember && !currentMember.doneSwiping) {
+        doneMutation.mutate();
+      }
+    }
+  }, [isComplete, memberId, group?.members]);
+
+  // Calculate who's done swiping
+  const doneMembers = group?.members.filter(m => m.doneSwiping) || [];
+  const waitingMembers = group?.members.filter(m => !m.doneSwiping) || [];
+  const allDone = group ? group.members.every(m => m.doneSwiping) : false;
 
   if (isLoading || !group) {
     return (
@@ -310,19 +356,41 @@ export default function SwipePage() {
                   animate={{ rotate: [0, 10, -10, 0] }}
                   transition={{ duration: 2, repeat: Infinity }}
                 >
-                  🏆
+                  <PartyPopper className="w-16 h-16 text-primary mx-auto" />
                 </motion.div>
                 <h2 className="text-2xl font-extrabold mb-2">You're Done!</h2>
-                <p className="text-muted-foreground mb-6">
+                <p className="text-muted-foreground mb-4">
                   {matches.length > 0 
                     ? `Amazing! You've got ${matches.length} match${matches.length !== 1 ? "es" : ""} with your crew!`
-                    : "Waiting for your squad to finish swiping..."
+                    : allDone 
+                      ? "Everyone's finished! Check out your matches below."
+                      : "Waiting for the rest of your crew..."
                   }
                 </p>
+                
+                {!allDone && waitingMembers.length > 0 && (
+                  <div className="mb-6 p-4 bg-muted/50 rounded-lg">
+                    <p className="text-sm text-muted-foreground mb-2">Still swiping:</p>
+                    <div className="flex flex-wrap justify-center gap-2">
+                      {waitingMembers.map(m => (
+                        <span key={m.id} className="inline-flex items-center gap-1 px-2 py-1 bg-background rounded-md text-sm">
+                          <span className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />
+                          {m.name}
+                        </span>
+                      ))}
+                    </div>
+                    {doneMembers.length > 0 && (
+                      <div className="mt-3 text-xs text-muted-foreground">
+                        Done: {doneMembers.map(m => m.name).join(", ")}
+                      </div>
+                    )}
+                  </div>
+                )}
+                
                 {matches.length > 0 && (
                   <Link href={`/group/${params.id}/matches`}>
                     <Button size="lg" className="bg-gradient-to-r from-primary to-orange-500" data-testid="button-view-matches">
-                      See Your Matches! 🎉
+                      See Your Matches!
                       <ChevronRight className="w-5 h-5 ml-2" />
                     </Button>
                   </Link>

@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ThemeToggle } from "@/components/theme-toggle";
 import { MemberAvatars } from "@/components/member-avatars";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Flame, Copy, Check, Users, ArrowRight, Loader2, PartyPopper, Sparkles } from "lucide-react";
+import { ArrowLeft, Flame, Copy, Check, Users, ArrowRight, Loader2, PartyPopper, Sparkles, Clock } from "lucide-react";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
 import type { Group, WSMessage } from "@shared/schema";
@@ -45,13 +45,21 @@ export default function GroupLobby() {
       
       if (message.type === "sync") {
         setGroup(message.group);
-      } else if (message.type === "member_joined" && group) {
-        setGroup((prev) => prev ? {
-          ...prev,
-          members: [...prev.members, message.member],
-        } : null);
+      } else if (message.type === "member_joined") {
+        // Use functional update to avoid stale closure issues
+        setGroup((prev) => {
+          if (!prev) return null;
+          // Check if member already exists to avoid duplicates
+          if (prev.members.some(m => m.id === message.member.id)) {
+            return prev;
+          }
+          return {
+            ...prev,
+            members: [...prev.members, message.member],
+          };
+        });
         toast({
-          title: "🎉 New party member!",
+          title: "New party member!",
           description: `${message.member.name} just joined the fun!`,
         });
       } else if (message.type === "status_changed") {
@@ -73,7 +81,7 @@ export default function GroupLobby() {
     await navigator.clipboard.writeText(group.code);
     setCopied(true);
     toast({
-      title: "Copied! 📋",
+      title: "Copied!",
       description: "Now share it with your hungry friends!",
     });
     setTimeout(() => setCopied(false), 2000);
@@ -126,11 +134,11 @@ export default function GroupLobby() {
           <Card className="border-2 overflow-hidden">
             <div className="bg-gradient-to-r from-primary/10 to-orange-500/10 p-6 text-center border-b">
               <motion.div 
-                className="text-4xl mb-2"
+                className="mb-2"
                 animate={{ scale: [1, 1.1, 1] }}
                 transition={{ duration: 2, repeat: Infinity }}
               >
-                🎊
+                <PartyPopper className="w-10 h-10 text-primary mx-auto" />
               </motion.div>
               <h2 className="text-xl font-bold">{group.name}</h2>
               <p className="text-sm text-muted-foreground">Your food adventure awaits!</p>
@@ -179,7 +187,7 @@ export default function GroupLobby() {
                   animate={{ opacity: [0.5, 1, 0.5] }}
                   transition={{ duration: 2, repeat: Infinity }}
                 >
-                  Waiting for your friends to join... 👀
+                  Waiting for your friends to join...
                 </motion.p>
               )}
             </CardContent>
@@ -214,7 +222,7 @@ export default function GroupLobby() {
                   <Loader2 className="w-6 h-6 text-primary" />
                 </motion.div>
                 <p className="text-sm text-muted-foreground">
-                  Hang tight! The host is getting things ready... 🎬
+                  Hang tight! The host is getting things ready...
                 </p>
               </CardContent>
             </Card>

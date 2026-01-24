@@ -1,6 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
+import { z } from "zod";
 import { storage } from "./storage";
 import { insertGroupSchema, joinGroupSchema, groupPreferencesSchema } from "@shared/schema";
 import type { WSMessage, Group, Restaurant } from "@shared/schema";
@@ -248,6 +249,33 @@ export async function registerRoutes(
       success: true, 
       nudgedCount: nudgeTargets.length 
     });
+  });
+
+  // Mark member as done swiping
+  const doneSwipingSchema = z.object({
+    memberId: z.string().min(1)
+  });
+
+  app.post("/api/groups/:id/done-swiping", async (req, res) => {
+    try {
+      const { memberId } = doneSwipingSchema.parse(req.body);
+      
+      const result = await storage.markMemberDoneSwiping(req.params.id, memberId);
+      if (!result) {
+        res.status(404).json({ error: "Group or member not found" });
+        return;
+      }
+
+      broadcast(req.params.id, { 
+        type: "member_done_swiping", 
+        memberId: result.member.id,
+        memberName: result.member.name
+      });
+
+      res.json({ success: true, group: result.group });
+    } catch (error) {
+      res.status(400).json({ error: "Invalid request" });
+    }
   });
 
   return httpServer;

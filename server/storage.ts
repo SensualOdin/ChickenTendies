@@ -34,6 +34,7 @@ export interface IStorage {
   getSwipesForGroup(groupId: string): Promise<Swipe[]>;
   getMatchesForGroup(groupId: string): Promise<Restaurant[]>;
   getMembersWhoHaventSwiped(groupId: string, restaurantId: string): Promise<GroupMember[]>;
+  markMemberDoneSwiping(groupId: string, memberId: string): Promise<{ group: Group; member: GroupMember } | undefined>;
 }
 
 const mockRestaurants: Restaurant[] = [
@@ -48,7 +49,9 @@ const mockRestaurants: Restaurant[] = [
     address: "123 Main St",
     distance: 0.8,
     dietaryOptions: ["vegetarian"],
-    description: "Authentic Italian cuisine with homemade pasta, wood-fired pizzas, and an extensive wine selection in a cozy atmosphere."
+    description: "Authentic Italian cuisine with homemade pasta, wood-fired pizzas, and an extensive wine selection in a cozy atmosphere.",
+    transactions: ["delivery", "pickup"],
+    highlights: ["Date Night", "Italian Cuisine"]
   },
   {
     id: "r2",
@@ -61,7 +64,9 @@ const mockRestaurants: Restaurant[] = [
     address: "456 Oak Ave",
     distance: 1.2,
     dietaryOptions: ["gluten-free", "pescatarian"],
-    description: "Premium sushi and traditional Japanese dishes crafted by master chefs using the freshest ingredients flown in daily."
+    description: "Premium sushi and traditional Japanese dishes crafted by master chefs using the freshest ingredients flown in daily.",
+    transactions: ["delivery", "pickup"],
+    highlights: ["Date Night", "Japanese Cuisine"]
   },
   {
     id: "r3",
@@ -74,7 +79,9 @@ const mockRestaurants: Restaurant[] = [
     address: "789 Elm St",
     distance: 0.5,
     dietaryOptions: ["vegetarian", "vegan"],
-    description: "Vibrant Mexican cantina serving authentic street tacos, fresh guacamole, and the best margaritas in town."
+    description: "Vibrant Mexican cantina serving authentic street tacos, fresh guacamole, and the best margaritas in town.",
+    transactions: ["delivery", "pickup"],
+    highlights: ["Casual Eats", "Mexican Cuisine"]
   },
   {
     id: "r4",
@@ -87,7 +94,9 @@ const mockRestaurants: Restaurant[] = [
     address: "321 Pine Rd",
     distance: 2.1,
     dietaryOptions: [],
-    description: "Prime cuts of aged beef, classic steakhouse sides, and an award-winning wine cellar in an upscale setting."
+    description: "Prime cuts of aged beef, classic steakhouse sides, and an award-winning wine cellar in an upscale setting.",
+    transactions: ["pickup"],
+    highlights: ["Date Night", "Highly Rated"]
   },
   {
     id: "r5",
@@ -100,7 +109,9 @@ const mockRestaurants: Restaurant[] = [
     address: "555 Spice Ln",
     distance: 1.5,
     dietaryOptions: ["vegetarian", "vegan", "gluten-free"],
-    description: "A culinary journey through India with aromatic curries, fresh naan bread, and authentic regional specialties."
+    description: "A culinary journey through India with aromatic curries, fresh naan bread, and authentic regional specialties.",
+    transactions: ["delivery", "pickup"],
+    highlights: ["Indian Cuisine", "Casual Eats"]
   },
   {
     id: "r6",
@@ -113,7 +124,9 @@ const mockRestaurants: Restaurant[] = [
     address: "888 Dragon Way",
     distance: 0.9,
     dietaryOptions: ["vegetarian"],
-    description: "Traditional Cantonese and Szechuan dishes featuring dim sum, hand-pulled noodles, and Peking duck."
+    description: "Traditional Cantonese and Szechuan dishes featuring dim sum, hand-pulled noodles, and Peking duck.",
+    transactions: ["delivery", "pickup"],
+    highlights: ["Chinese Cuisine", "Casual Eats"]
   },
   {
     id: "r7",
@@ -126,7 +139,9 @@ const mockRestaurants: Restaurant[] = [
     address: "222 Olive St",
     distance: 1.8,
     dietaryOptions: ["vegetarian", "gluten-free"],
-    description: "Fresh Mediterranean flavors with grilled meats, falafel, hummus, and vibrant salads in a casual setting."
+    description: "Fresh Mediterranean flavors with grilled meats, falafel, hummus, and vibrant salads in a casual setting.",
+    transactions: ["delivery", "pickup"],
+    highlights: ["Mediterranean Cuisine", "Brunch Spot"]
   },
   {
     id: "r8",
@@ -139,7 +154,9 @@ const mockRestaurants: Restaurant[] = [
     address: "444 Thai Ave",
     distance: 1.1,
     dietaryOptions: ["vegetarian", "vegan"],
-    description: "Authentic Thai street food experience with pad thai, green curry, and refreshing Thai iced tea."
+    description: "Authentic Thai street food experience with pad thai, green curry, and refreshing Thai iced tea.",
+    transactions: ["delivery", "pickup"],
+    highlights: ["Thai Cuisine", "Casual Eats"]
   },
   {
     id: "r9",
@@ -152,7 +169,9 @@ const mockRestaurants: Restaurant[] = [
     address: "777 Seoul Blvd",
     distance: 2.3,
     dietaryOptions: ["gluten-free"],
-    description: "Korean BBQ at your table with premium marinated meats, banchan, and traditional Korean dishes."
+    description: "Korean BBQ at your table with premium marinated meats, banchan, and traditional Korean dishes.",
+    transactions: ["pickup"],
+    highlights: ["Korean Cuisine", "Date Night"]
   },
   {
     id: "r10",
@@ -165,7 +184,9 @@ const mockRestaurants: Restaurant[] = [
     address: "111 Burger Ln",
     distance: 0.4,
     dietaryOptions: ["vegetarian"],
-    description: "Gourmet burgers with locally sourced beef, creative toppings, hand-cut fries, and craft milkshakes."
+    description: "Gourmet burgers with locally sourced beef, creative toppings, hand-cut fries, and craft milkshakes.",
+    transactions: ["delivery", "pickup"],
+    highlights: ["Casual Eats", "Quick Bites"]
   },
   {
     id: "r11",
@@ -178,7 +199,9 @@ const mockRestaurants: Restaurant[] = [
     address: "333 Pizza Way",
     distance: 0.7,
     dietaryOptions: ["vegetarian"],
-    description: "Neapolitan-style pizzas baked in a wood-fired oven with imported Italian ingredients and fresh toppings."
+    description: "Neapolitan-style pizzas baked in a wood-fired oven with imported Italian ingredients and fresh toppings.",
+    transactions: ["delivery", "pickup"],
+    highlights: ["Italian Cuisine", "Casual Eats"]
   },
   {
     id: "r12",
@@ -191,7 +214,9 @@ const mockRestaurants: Restaurant[] = [
     address: "999 Harbor Dr",
     distance: 3.2,
     dietaryOptions: ["gluten-free", "pescatarian"],
-    description: "Fresh catches of the day, raw bar, lobster rolls, and seafood platters with stunning waterfront views."
+    description: "Fresh catches of the day, raw bar, lobster rolls, and seafood platters with stunning waterfront views.",
+    transactions: ["pickup"],
+    highlights: ["Seafood", "Date Night", "Highly Rated"]
   }
 ];
 
@@ -215,7 +240,8 @@ export class MemStorage implements IStorage {
       id: memberId,
       name: data.hostName,
       isHost: true,
-      joinedAt: Date.now()
+      joinedAt: Date.now(),
+      doneSwiping: false
     };
 
     const group: Group = {
@@ -243,7 +269,8 @@ export class MemStorage implements IStorage {
       id: memberId,
       name: data.memberName,
       isHost: false,
-      joinedAt: Date.now()
+      joinedAt: Date.now(),
+      doneSwiping: false
     };
 
     group.members.push(member);
@@ -282,6 +309,12 @@ export class MemStorage implements IStorage {
     if (!group) return undefined;
 
     group.status = status;
+    
+    // Reset doneSwiping for all members when a new swiping session starts
+    if (status === "swiping") {
+      group.members = group.members.map(m => ({ ...m, doneSwiping: false }));
+    }
+    
     this.groups.set(groupId, group);
 
     return group;
@@ -423,6 +456,22 @@ export class MemStorage implements IStorage {
     );
 
     return group.members.filter(m => !swipedMemberIds.has(m.id));
+  }
+
+  async markMemberDoneSwiping(groupId: string, memberId: string): Promise<{ group: Group; member: GroupMember } | undefined> {
+    const group = this.groups.get(groupId);
+    if (!group) return undefined;
+
+    const memberIndex = group.members.findIndex(m => m.id === memberId);
+    if (memberIndex === -1) return undefined;
+
+    group.members[memberIndex] = {
+      ...group.members[memberIndex],
+      doneSwiping: true
+    };
+
+    this.groups.set(groupId, group);
+    return { group, member: group.members[memberIndex] };
   }
 }
 

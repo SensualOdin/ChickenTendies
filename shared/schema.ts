@@ -49,7 +49,8 @@ export const groupMemberSchema = z.object({
   id: z.string(),
   name: z.string().min(1),
   isHost: z.boolean().default(false),
-  joinedAt: z.number()
+  joinedAt: z.number(),
+  doneSwiping: z.boolean().default(false)
 });
 
 export type GroupMember = z.infer<typeof groupMemberSchema>;
@@ -151,7 +152,8 @@ export type WSMessage =
   | { type: "swipe_made"; memberId: string; restaurantId: string }
   | { type: "match_found"; restaurant: Restaurant }
   | { type: "sync"; group: Group; restaurants: Restaurant[]; matches: Restaurant[] }
-  | { type: "nudge"; fromMemberName: string; restaurantName: string; targetMemberIds?: string[] };
+  | { type: "nudge"; fromMemberName: string; restaurantName: string; targetMemberIds?: string[] }
+  | { type: "member_done_swiping"; memberId: string; memberName: string };
 
 // Export auth models
 export * from "./models/auth";
