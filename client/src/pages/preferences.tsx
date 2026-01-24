@@ -12,14 +12,17 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { groupPreferencesSchema, type GroupPreferences, type Group, dietaryRestrictions, cuisineTypes, priceRanges } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Flame, Loader2, MapPin, Ruler, UtensilsCrossed, DollarSign, Leaf, Sparkles } from "lucide-react";
+import { ArrowLeft, Flame, Loader2, MapPin, Ruler, UtensilsCrossed, DollarSign, Leaf, Sparkles, Navigation } from "lucide-react";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
+import { useState, useEffect } from "react";
 
 export default function Preferences() {
   const params = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const [isLocating, setIsLocating] = useState(false);
+  const [usingGPS, setUsingGPS] = useState(false);
 
   const { data: group, isLoading } = useQuery<Group>({
     queryKey: ["/api/groups", params.id],
@@ -34,8 +37,86 @@ export default function Preferences() {
       dietaryRestrictions: [],
       cuisineTypes: [],
       priceRange: ["$", "$$", "$$$"],
+      latitude: undefined,
+      longitude: undefined,
     },
   });
+
+  // Populate form with existing preferences if available
+  useEffect(() => {
+    if (group?.preferences) {
+      const prefs = group.preferences;
+      form.reset({
+        zipCode: prefs.zipCode || "",
+        radius: prefs.radius || 10,
+        dietaryRestrictions: prefs.dietaryRestrictions || [],
+        cuisineTypes: prefs.cuisineTypes || [],
+        priceRange: prefs.priceRange || ["$", "$$", "$$$"],
+        latitude: prefs.latitude,
+        longitude: prefs.longitude,
+      });
+      // Set GPS state if coords were saved
+      if (prefs.latitude !== undefined && prefs.longitude !== undefined) {
+        setUsingGPS(true);
+      }
+    }
+  }, [group?.preferences, form]);
+
+  const handleFindMe = () => {
+    if (!navigator.geolocation) {
+      toast({
+        title: "GPS not available",
+        description: "Your browser doesn't support location services.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        form.setValue("latitude", latitude);
+        form.setValue("longitude", longitude);
+        
+        // Try to get a readable address using reverse geocoding
+        try {
+          const response = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`
+          );
+          const data = await response.json();
+          const address = data.address;
+          const locationName = address.neighbourhood || address.suburb || address.city || address.town || "Current Location";
+          form.setValue("zipCode", `${locationName}, ${address.postcode || ""}`);
+        } catch {
+          form.setValue("zipCode", `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+        }
+        
+        setUsingGPS(true);
+        setIsLocating(false);
+        toast({
+          title: "Location found!",
+          description: "We'll search for restaurants near you.",
+        });
+      },
+      (error) => {
+        setIsLocating(false);
+        toast({
+          title: "Couldn't get location",
+          description: error.code === 1 ? "Please allow location access in your browser." : "Try entering your address manually.",
+          variant: "destructive",
+        });
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
+  const clearGPS = () => {
+    form.setValue("latitude", undefined);
+    form.setValue("longitude", undefined);
+    form.setValue("zipCode", "");
+    setUsingGPS(false);
+  };
 
   const saveMutation = useMutation({
     mutationFn: async (data: GroupPreferences) => {
@@ -119,21 +200,68 @@ export default function Preferences() {
                       Where are you? 📍
                     </div>
                     
+                    <Button
+                      type="button"
+                      variant={usingGPS ? "default" : "outline"}
+                      className={`w-full ${usingGPS ? "bg-gradient-to-r from-primary to-orange-500" : ""}`}
+                      onClick={usingGPS ? clearGPS : handleFindMe}
+                      disabled={isLocating}
+                      data-testid="button-find-me"
+                    >
+                      {isLocating ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Finding you...
+                        </>
+                      ) : usingGPS ? (
+                        <>
+                          <Navigation className="w-4 h-4 mr-2" />
+                          Using GPS - Tap to clear
+                        </>
+                      ) : (
+                        <>
+                          <Navigation className="w-4 h-4 mr-2" />
+                          Find Me
+                        </>
+                      )}
+                    </Button>
+
+                    <div className="relative">
+                      <div className="absolute inset-0 flex items-center">
+                        <span className="w-full border-t" />
+                      </div>
+                      <div className="relative flex justify-center text-xs uppercase">
+                        <span className="bg-card px-2 text-muted-foreground">or enter location</span>
+                      </div>
+                    </div>
+                    
                     <FormField
                       control={form.control}
                       name="zipCode"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Zip Code</FormLabel>
+                          <FormLabel>Address, City, or Zip Code</FormLabel>
                           <FormControl>
                             <Input 
-                              placeholder="10001" 
-                              maxLength={10}
+                              placeholder="123 Main St, Brooklyn NY or 10001" 
+                              maxLength={100}
                               className="border-2"
                               {...field}
-                              data-testid="input-zipcode"
+                              onChange={(e) => {
+                                field.onChange(e);
+                                // Clear GPS coords when manually typing
+                                if (usingGPS) {
+                                  form.setValue("latitude", undefined);
+                                  form.setValue("longitude", undefined);
+                                  setUsingGPS(false);
+                                }
+                              }}
+                              data-testid="input-location"
                             />
                           </FormControl>
+                          <FormDescription>
+                            Be specific! Use a full address for best results.
+                          </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}

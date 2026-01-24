@@ -181,13 +181,20 @@ export async function fetchRestaurantsFromYelp(preferences: GroupPreferences, of
   const yelpOffset = offset > 0 ? offset : Math.floor(Math.random() * 30);
 
   const params = new URLSearchParams({
-    location: preferences.zipCode,
     categories: categories,
     radius: radiusMeters.toString(),
     limit: "50",
     sort_by: randomSort,
     offset: yelpOffset.toString()
   });
+
+  // Use GPS coordinates if available, otherwise use location string (zip/address)
+  if (preferences.latitude !== undefined && preferences.longitude !== undefined) {
+    params.append("latitude", preferences.latitude.toString());
+    params.append("longitude", preferences.longitude.toString());
+  } else {
+    params.append("location", preferences.zipCode);
+  }
 
   if (preferences.priceRange.length > 0) {
     params.append("price", priceRangeToYelpPrice(preferences.priceRange));

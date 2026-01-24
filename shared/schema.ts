@@ -56,11 +56,13 @@ export type GroupMember = z.infer<typeof groupMemberSchema>;
 
 // Group preferences
 export const groupPreferencesSchema = z.object({
-  zipCode: z.string().min(5).max(10),
+  zipCode: z.string().min(1).max(100), // Can be zip code or full address
   radius: z.number().min(1).max(50).default(10),
   dietaryRestrictions: z.array(z.enum(dietaryRestrictions)).default([]),
   cuisineTypes: z.array(z.enum(cuisineTypes)).default([]),
-  priceRange: z.array(z.enum(priceRanges)).default(["$", "$$", "$$$"])
+  priceRange: z.array(z.enum(priceRanges)).default(["$", "$$", "$$$"]),
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
 });
 
 export type GroupPreferences = z.infer<typeof groupPreferencesSchema>;
