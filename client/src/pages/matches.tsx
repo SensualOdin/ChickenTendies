@@ -5,9 +5,33 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Home, Flame, Loader2, Star, MapPin, ExternalLink, Heart, PartyPopper, Trophy, Sparkles, RefreshCw } from "lucide-react";
+import { Home, Flame, Loader2, Star, MapPin, ExternalLink, Heart, PartyPopper, Trophy, Sparkles, RefreshCw, CalendarPlus } from "lucide-react";
 import { motion } from "framer-motion";
 import type { Group, Restaurant } from "@shared/schema";
+
+function generateCalendarUrl(restaurant: Restaurant, groupName: string) {
+  const today = new Date();
+  const dinnerDate = new Date(today);
+  dinnerDate.setDate(today.getDate() + 1);
+  dinnerDate.setHours(19, 0, 0, 0);
+  
+  const endDate = new Date(dinnerDate);
+  endDate.setHours(21, 0, 0, 0);
+  
+  const formatDate = (d: Date) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  
+  const title = encodeURIComponent(`Dinner at ${restaurant.name} - ${groupName}`);
+  const details = encodeURIComponent(
+    `Restaurant: ${restaurant.name}\n` +
+    `Cuisine: ${restaurant.cuisine}\n` +
+    `Rating: ${restaurant.rating.toFixed(1)} stars\n` +
+    `Price: ${restaurant.priceRange}\n\n` +
+    `Matched on ChickenTinders!`
+  );
+  const location = encodeURIComponent(restaurant.address);
+  
+  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${formatDate(dinnerDate)}/${formatDate(endDate)}&details=${details}&location=${location}`;
+}
 
 export default function MatchesPage() {
   const params = useParams<{ id: string }>();
@@ -144,7 +168,7 @@ export default function MatchesPage() {
                         {restaurant.description}
                       </p>
 
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <Button 
                           size="sm" 
                           className="bg-gradient-to-r from-primary to-orange-500 text-xs" 
@@ -172,6 +196,18 @@ export default function MatchesPage() {
                         >
                           <ExternalLink className="w-3 h-3 mr-1" />
                           Menu
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="outline" 
+                          className="text-xs" 
+                          data-testid={`button-calendar-${restaurant.id}`}
+                          onClick={() => {
+                            window.open(generateCalendarUrl(restaurant, group.name), '_blank');
+                          }}
+                        >
+                          <CalendarPlus className="w-3 h-3 mr-1" />
+                          Add to Calendar
                         </Button>
                       </div>
                     </CardContent>

@@ -848,6 +848,11 @@ export function registerSocialRoutes(app: Express): void {
         { type: "foodie_veteran", name: "Foodie Veteran", description: "Complete 25 dining sessions", icon: "award" },
         { type: "match_maker", name: "Match Maker", description: "Find 10 total matches across all sessions", icon: "flame" },
         { type: "explorer", name: "Explorer", description: "Swipe through 100 restaurants", icon: "map" },
+        { type: "sushi_squad", name: "Sushi Squad", description: "Match on 3 sushi or Japanese restaurants", icon: "utensils" },
+        { type: "five_star_only", name: "5 Star Only", description: "Match on 5 restaurants rated 4.5 stars or higher", icon: "sparkles" },
+        { type: "budget_boss", name: "Budget Boss", description: "Match on 5 budget-friendly ($ price) restaurants", icon: "award" },
+        { type: "pizza_pal", name: "Pizza Pal", description: "Match on 3 pizza restaurants", icon: "flame" },
+        { type: "taco_tuesday", name: "Taco Tuesday", description: "Match on 3 Mexican restaurants", icon: "utensils" },
       ];
       
       res.json(achievementDefinitions);

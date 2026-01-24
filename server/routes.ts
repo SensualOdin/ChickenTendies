@@ -212,5 +212,43 @@ export async function registerRoutes(
     res.json(matches);
   });
 
+  // Nudge members who haven't swiped yet
+  app.post("/api/groups/:id/nudge", async (req, res) => {
+    const { restaurantId, fromMemberId } = req.body;
+    
+    const group = await storage.getGroup(req.params.id);
+    if (!group) {
+      res.status(404).json({ error: "Group not found" });
+      return;
+    }
+
+    const fromMember = group.members.find(m => m.id === fromMemberId);
+    const restaurants = await storage.getRestaurantsForGroup(req.params.id);
+    const restaurant = restaurants.find(r => r.id === restaurantId);
+
+    if (!fromMember || !restaurant) {
+      res.status(400).json({ error: "Invalid member or restaurant" });
+      return;
+    }
+
+    const membersToNudge = await storage.getMembersWhoHaventSwiped(req.params.id, restaurantId);
+    const nudgeTargets = membersToNudge.filter(m => m.id !== fromMemberId);
+    
+    // Send nudge to all members who haven't swiped (except the sender)
+    const nudgeMessage = {
+      type: "nudge" as const,
+      fromMemberName: fromMember.name,
+      restaurantName: restaurant.name,
+      targetMemberIds: nudgeTargets.map(m => m.id),
+    };
+
+    broadcast(req.params.id, nudgeMessage, fromMemberId);
+
+    res.json({ 
+      success: true, 
+      nudgedCount: nudgeTargets.length 
+    });
+  });
+
   return httpServer;
 }

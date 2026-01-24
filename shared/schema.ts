@@ -63,6 +63,8 @@ export const groupPreferencesSchema = z.object({
   priceRange: z.array(z.enum(priceRanges)).default(["$", "$$", "$$$"]),
   latitude: z.number().optional(),
   longitude: z.number().optional(),
+  trySomethingNew: z.boolean().optional().default(false), // Hide cuisines already matched on
+  excludeCuisines: z.array(z.string()).optional().default([]), // Cuisines to exclude
 });
 
 export type GroupPreferences = z.infer<typeof groupPreferencesSchema>;
@@ -148,7 +150,8 @@ export type WSMessage =
   | { type: "status_changed"; status: Group["status"] }
   | { type: "swipe_made"; memberId: string; restaurantId: string }
   | { type: "match_found"; restaurant: Restaurant }
-  | { type: "sync"; group: Group; restaurants: Restaurant[]; matches: Restaurant[] };
+  | { type: "sync"; group: Group; restaurants: Restaurant[]; matches: Restaurant[] }
+  | { type: "nudge"; fromMemberName: string; restaurantName: string; targetMemberIds?: string[] };
 
 // Export auth models
 export * from "./models/auth";

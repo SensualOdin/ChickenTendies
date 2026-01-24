@@ -232,9 +232,27 @@ export async function fetchRestaurantsFromYelp(preferences: GroupPreferences, of
 
       const transactions = business.transactions || [];
       const highlights: string[] = [];
+      const categoryAliases = business.categories.map(c => c.alias.toLowerCase());
+      const categoryTitles = business.categories.map(c => c.title.toLowerCase()).join(" ");
       
+      // Quality indicators
       if (business.rating >= 4.5) highlights.push("Highly Rated");
       if (business.review_count > 500) highlights.push("Popular Spot");
+      
+      // Vibe/occasion tags
+      const isUpscale = priceRange === "$$$" || priceRange === "$$$$";
+      const isRomantic = categoryTitles.includes("wine") || categoryTitles.includes("french") || 
+                        categoryTitles.includes("italian") || categoryAliases.includes("cocktailbars");
+      if (isUpscale && business.rating >= 4.0) highlights.push("Date Night");
+      if (categoryTitles.includes("brunch") || categoryTitles.includes("breakfast")) highlights.push("Brunch Spot");
+      if (categoryAliases.some(a => a.includes("burger") || a.includes("pizza") || a.includes("wings"))) {
+        highlights.push("Casual Eats");
+      }
+      if (categoryAliases.some(a => a.includes("sushi") || a.includes("ramen"))) {
+        highlights.push("Japanese Cuisine");
+      }
+      
+      // Service options
       if (transactions.includes("reservation")) highlights.push("Reservations");
       if (transactions.includes("delivery")) highlights.push("Delivery");
       if (transactions.includes("pickup")) highlights.push("Pickup");
@@ -266,7 +284,15 @@ export async function fetchRestaurantsFromYelp(preferences: GroupPreferences, of
     return [];
   }
 
-  const shuffled = shuffleArray(restaurants);
+  // Filter out excluded cuisines if "try something new" is enabled
+  let filteredRestaurants = restaurants;
+  if (preferences.excludeCuisines && preferences.excludeCuisines.length > 0) {
+    filteredRestaurants = restaurants.filter(r => 
+      !preferences.excludeCuisines!.includes(r.cuisine)
+    );
+  }
+
+  const shuffled = shuffleArray(filteredRestaurants);
   
   return shuffled.slice(0, 20);
 }

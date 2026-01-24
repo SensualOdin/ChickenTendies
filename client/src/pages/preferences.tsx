@@ -39,6 +39,8 @@ export default function Preferences() {
       priceRange: ["$", "$$", "$$$"],
       latitude: undefined,
       longitude: undefined,
+      trySomethingNew: false,
+      excludeCuisines: [],
     },
   });
 
@@ -54,6 +56,8 @@ export default function Preferences() {
         priceRange: prefs.priceRange || ["$", "$$", "$$$"],
         latitude: prefs.latitude,
         longitude: prefs.longitude,
+        trySomethingNew: prefs.trySomethingNew || false,
+        excludeCuisines: prefs.excludeCuisines || [],
       });
       // Set GPS state if coords were saved
       if (prefs.latitude !== undefined && prefs.longitude !== undefined) {
@@ -129,7 +133,7 @@ export default function Preferences() {
     },
     onError: () => {
       toast({
-        title: "Oops! 😅",
+        title: "Something went wrong",
         description: "Something went wrong. Let's try that again!",
         variant: "destructive",
       });
@@ -197,7 +201,7 @@ export default function Preferences() {
                   <div className="space-y-4">
                     <div className="flex items-center gap-2 text-sm font-semibold">
                       <MapPin className="w-4 h-4 text-primary" />
-                      Where are you? 📍
+                      Where are you?
                     </div>
                     
                     <Button
@@ -393,11 +397,38 @@ export default function Preferences() {
                   </div>
 
                   <div className="space-y-4">
-                    <div className="flex items-center gap-2 text-sm font-semibold">
-                      <UtensilsCrossed className="w-4 h-4 text-primary" />
-                      Cravings 😋
-                      <span className="text-muted-foreground font-normal text-xs">(or leave blank for all)</span>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-sm font-semibold">
+                        <UtensilsCrossed className="w-4 h-4 text-primary" />
+                        Cravings
+                        <span className="text-muted-foreground font-normal text-xs">(or leave blank for all)</span>
+                      </div>
                     </div>
+                    
+                    <FormField
+                      control={form.control}
+                      name="trySomethingNew"
+                      render={({ field }) => (
+                        <FormItem className="flex items-center gap-3 p-3 rounded-lg border-2 border-dashed bg-gradient-to-r from-accent/10 to-primary/5">
+                          <FormControl>
+                            <Checkbox
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                              data-testid="checkbox-try-new"
+                            />
+                          </FormControl>
+                          <div className="flex-1">
+                            <FormLabel className="text-sm font-medium cursor-pointer">
+                              Try something new!
+                            </FormLabel>
+                            <FormDescription className="text-xs">
+                              Hide cuisines you've already matched on before
+                            </FormDescription>
+                          </div>
+                          <Sparkles className="w-5 h-5 text-yellow-500" />
+                        </FormItem>
+                      )}
+                    />
                     
                     <FormField
                       control={form.control}

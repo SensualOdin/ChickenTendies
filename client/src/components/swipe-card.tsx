@@ -2,7 +2,7 @@ import { motion, useMotionValue, useTransform, PanInfo } from "framer-motion";
 import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Star, MapPin, X, Leaf, Flame, Sparkles, Phone, Calendar, Truck, ShoppingBag } from "lucide-react";
+import { Star, MapPin, X, Leaf, Flame, Sparkles, Phone, Calendar, Truck, ShoppingBag, Heart, Coffee, Pizza, Utensils } from "lucide-react";
 import type { Restaurant } from "@shared/schema";
 
 export type SwipeAction = "like" | "dislike" | "superlike";
@@ -117,15 +117,24 @@ export function SwipeCard({ restaurant, onSwipe, isTop }: SwipeCardProps) {
 
           {restaurant.highlights && restaurant.highlights.length > 0 && (
             <div className="flex flex-wrap items-center gap-1.5 mb-2">
-              {restaurant.highlights.slice(0, 3).map((highlight) => (
+              {restaurant.highlights.slice(0, 4).map((highlight) => (
                 <Badge 
                   key={highlight} 
-                  className="bg-yellow-500/80 text-white border-0 text-xs py-0.5"
+                  className={`text-white border-0 text-xs py-0.5 ${
+                    highlight === "Date Night" ? "bg-pink-500/80 dark:bg-pink-600/80" :
+                    highlight === "Brunch Spot" ? "bg-orange-400/80 dark:bg-orange-500/80" :
+                    highlight === "Casual Eats" ? "bg-blue-500/80 dark:bg-blue-600/80" :
+                    "bg-yellow-500/80 dark:bg-yellow-600/80"
+                  }`}
                 >
                   {highlight === "Reservations" && <Calendar className="w-3 h-3 mr-1" />}
                   {highlight === "Delivery" && <Truck className="w-3 h-3 mr-1" />}
                   {highlight === "Pickup" && <ShoppingBag className="w-3 h-3 mr-1" />}
                   {highlight === "Highly Rated" && <Star className="w-3 h-3 mr-1 fill-white" />}
+                  {highlight === "Date Night" && <Heart className="w-3 h-3 mr-1 fill-white" />}
+                  {highlight === "Brunch Spot" && <Coffee className="w-3 h-3 mr-1" />}
+                  {highlight === "Casual Eats" && <Pizza className="w-3 h-3 mr-1" />}
+                  {highlight === "Popular Spot" && <Flame className="w-3 h-3 mr-1" />}
                   {highlight}
                 </Badge>
               ))}

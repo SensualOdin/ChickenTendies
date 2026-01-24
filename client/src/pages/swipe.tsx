@@ -8,9 +8,10 @@ import { SwipeCard, SwipeButtons, type SwipeAction } from "@/components/swipe-ca
 import { MemberAvatars } from "@/components/member-avatars";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Flame, ChevronRight, PartyPopper } from "lucide-react";
+import { Flame, ChevronRight, PartyPopper, Bell } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Group, Restaurant, WSMessage } from "@shared/schema";
+import confetti from "canvas-confetti";
 
 export default function SwipePage() {
   const params = useParams<{ id: string }>();
@@ -80,7 +81,41 @@ export default function SwipePage() {
         setMatches((prev) => [...prev, message.restaurant]);
         setLatestMatch(message.restaurant);
         setShowMatchCelebration(true);
+        // Fire confetti celebration!
+        const duration = 3000;
+        const end = Date.now() + duration;
+        const colors = ['#ff6b6b', '#feca57', '#48dbfb', '#ff9ff3', '#54a0ff'];
+        
+        const frame = () => {
+          confetti({
+            particleCount: 3,
+            angle: 60,
+            spread: 55,
+            origin: { x: 0, y: 0.7 },
+            colors,
+          });
+          confetti({
+            particleCount: 3,
+            angle: 120,
+            spread: 55,
+            origin: { x: 1, y: 0.7 },
+            colors,
+          });
+          if (Date.now() < end) {
+            requestAnimationFrame(frame);
+          }
+        };
+        frame();
+        
         setTimeout(() => setShowMatchCelebration(false), 3000);
+      } else if (message.type === "nudge") {
+        // Only show nudge if current user is in the target list
+        if (!message.targetMemberIds || message.targetMemberIds.includes(memberId)) {
+          toast({
+            title: `${message.fromMemberName} is hungry!`,
+            description: `They're waiting for you to swipe on ${message.restaurantName}`,
+          });
+        }
       }
     };
 
@@ -107,6 +142,29 @@ export default function SwipePage() {
         description: "That didn't work. Try again!",
         variant: "destructive",
       });
+    },
+  });
+
+  const nudgeMutation = useMutation({
+    mutationFn: async (restaurantId: string) => {
+      const response = await apiRequest("POST", `/api/groups/${params.id}/nudge`, {
+        restaurantId,
+        fromMemberId: memberId,
+      });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      if (data.nudgedCount > 0) {
+        toast({
+          title: "Nudge sent!",
+          description: `${data.nudgedCount} crew member${data.nudgedCount > 1 ? 's' : ''} got the message`,
+        });
+      } else {
+        toast({
+          title: "Everyone's swiped!",
+          description: "Your crew is keeping up",
+        });
+      }
     },
   });
 
@@ -188,6 +246,18 @@ export default function SwipePage() {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          {currentRestaurant && group.members.length > 1 && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => nudgeMutation.mutate(currentRestaurant.id)}
+              disabled={nudgeMutation.isPending}
+              title="Nudge crew members who haven't swiped"
+              data-testid="button-nudge"
+            >
+              <Bell className="w-5 h-5" />
+            </Button>
+          )}
           <MemberAvatars members={group.members} size="sm" />
           <ThemeToggle />
         </div>

@@ -33,6 +33,7 @@ export interface IStorage {
   recordSwipe(groupId: string, memberId: string, restaurantId: string, liked: boolean): Promise<Swipe>;
   getSwipesForGroup(groupId: string): Promise<Swipe[]>;
   getMatchesForGroup(groupId: string): Promise<Restaurant[]>;
+  getMembersWhoHaventSwiped(groupId: string, restaurantId: string): Promise<GroupMember[]>;
 }
 
 const mockRestaurants: Restaurant[] = [
@@ -410,6 +411,18 @@ export class MemStorage implements IStorage {
     }
 
     return matches;
+  }
+
+  async getMembersWhoHaventSwiped(groupId: string, restaurantId: string): Promise<GroupMember[]> {
+    const group = this.groups.get(groupId);
+    if (!group) return [];
+
+    const swipes = this.swipes.get(groupId) || [];
+    const swipedMemberIds = new Set(
+      swipes.filter(s => s.restaurantId === restaurantId).map(s => s.memberId)
+    );
+
+    return group.members.filter(m => !swipedMemberIds.has(m.id));
   }
 }
 

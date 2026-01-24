@@ -120,7 +120,12 @@ export const achievementTypeEnum = [
   "social_butterfly",
   "foodie_veteran",
   "match_maker",
-  "explorer"
+  "explorer",
+  "sushi_squad",
+  "five_star_only",
+  "budget_boss",
+  "pizza_pal",
+  "taco_tuesday"
 ] as const;
 export type AchievementType = typeof achievementTypeEnum[number];
 
