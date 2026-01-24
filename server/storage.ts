@@ -224,11 +224,13 @@ export class MemStorage implements IStorage {
   private groups: Map<string, Group>;
   private swipes: Map<string, Swipe[]>;
   private restaurantCache: Map<string, Restaurant[]>;
+  private pendingRestaurantFetch: Map<string, Promise<Restaurant[]>>;
 
   constructor() {
     this.groups = new Map();
     this.swipes = new Map();
     this.restaurantCache = new Map();
+    this.pendingRestaurantFetch = new Map();
   }
 
   async createGroup(data: InsertGroup): Promise<{ group: Group; memberId: string }> {
@@ -311,8 +313,12 @@ export class MemStorage implements IStorage {
     group.status = status;
     
     // Reset doneSwiping for all members when a new swiping session starts
+    // Also clear restaurant cache and swipes so each session gets fresh random restaurants
     if (status === "swiping") {
       group.members = group.members.map(m => ({ ...m, doneSwiping: false }));
+      this.restaurantCache.delete(groupId);
+      this.pendingRestaurantFetch.delete(groupId);
+      this.swipes.delete(groupId);
     }
     
     this.groups.set(groupId, group);
@@ -344,13 +350,34 @@ export class MemStorage implements IStorage {
     const group = this.groups.get(groupId);
     if (!group || !group.preferences) return mockRestaurants;
 
+    // Return cached restaurants if available
     const cached = this.restaurantCache.get(groupId);
     if (cached && cached.length > 0) {
       return cached;
     }
 
+    // If a fetch is already in progress for this group, wait for it
+    // This prevents race conditions where multiple members trigger different random fetches
+    const pendingFetch = this.pendingRestaurantFetch.get(groupId);
+    if (pendingFetch) {
+      return pendingFetch;
+    }
+
+    // Create a new fetch promise and store it
+    const fetchPromise = this.fetchAndCacheRestaurants(groupId, group);
+    this.pendingRestaurantFetch.set(groupId, fetchPromise);
+
     try {
-      const yelpRestaurants = await fetchRestaurantsFromYelp(group.preferences);
+      const result = await fetchPromise;
+      return result;
+    } finally {
+      this.pendingRestaurantFetch.delete(groupId);
+    }
+  }
+
+  private async fetchAndCacheRestaurants(groupId: string, group: Group): Promise<Restaurant[]> {
+    try {
+      const yelpRestaurants = await fetchRestaurantsFromYelp(group.preferences!);
       
       if (yelpRestaurants.length > 0) {
         this.restaurantCache.set(groupId, yelpRestaurants);
@@ -362,11 +389,11 @@ export class MemStorage implements IStorage {
 
     let filtered = [...mockRestaurants];
 
-    if (group.preferences.priceRange.length > 0) {
+    if (group.preferences!.priceRange.length > 0) {
       filtered = filtered.filter(r => group.preferences!.priceRange.includes(r.priceRange));
     }
 
-    if (group.preferences.cuisineTypes.length > 0) {
+    if (group.preferences!.cuisineTypes.length > 0) {
       filtered = filtered.filter(r => group.preferences!.cuisineTypes.includes(r.cuisine));
     }
 
