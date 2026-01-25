@@ -239,12 +239,12 @@ export default function CrewManage() {
                   </span>
                 </div>
                 <Button
-                  variant="outline"
+                  variant={copied ? "default" : "outline"}
                   size="icon"
                   onClick={copyInviteCode}
                   data-testid="button-copy-code"
                 >
-                  {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                  {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                 </Button>
               </div>
               <p className="text-sm text-muted-foreground mt-3 text-center">
