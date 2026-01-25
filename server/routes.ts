@@ -2,9 +2,10 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { z } from "zod";
+import { randomUUID } from "crypto";
 import { storage } from "./storage";
 import { insertGroupSchema, joinGroupSchema, groupPreferencesSchema } from "@shared/schema";
-import type { WSMessage, Group, Restaurant } from "@shared/schema";
+import type { WSMessage, Group, Restaurant, GroupMember } from "@shared/schema";
 import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
 import { registerSocialRoutes } from "./social-routes";
 
@@ -96,7 +97,13 @@ export async function registerRoutes(
     try {
       const data = insertGroupSchema.parse(req.body);
       const result = await storage.createGroup(data);
-      res.json(result);
+      // Return leaderToken separately so client can store it, but strip from group object
+      const { leaderToken, ...groupWithoutToken } = result.group;
+      res.json({ 
+        group: groupWithoutToken, 
+        memberId: result.memberId,
+        leaderToken 
+      });
     } catch (error) {
       res.status(400).json({ error: "Invalid request" });
     }
@@ -129,7 +136,73 @@ export async function registerRoutes(
       res.status(404).json({ error: "Group not found" });
       return;
     }
-    res.json(group);
+    // Strip leaderToken from response for security
+    const { leaderToken, ...groupWithoutToken } = group;
+    res.json(groupWithoutToken);
+  });
+  
+  // Reclaim leadership using stored leader token
+  app.post("/api/groups/:id/reclaim-leadership", async (req, res) => {
+    try {
+      const { leaderToken, memberName } = req.body;
+      
+      if (!leaderToken || typeof leaderToken !== 'string') {
+        res.status(400).json({ error: "Leader token required" });
+        return;
+      }
+      
+      const group = await storage.getGroup(req.params.id);
+      if (!group) {
+        res.status(404).json({ error: "Group not found" });
+        return;
+      }
+      
+      // Verify the token matches
+      if (group.leaderToken !== leaderToken) {
+        res.status(403).json({ error: "Invalid leader token" });
+        return;
+      }
+      
+      // Find the current host
+      const currentHost = group.members.find(m => m.isHost);
+      
+      // Check if the leader is already in the group
+      const existingMember = currentHost && currentHost.name === (memberName || currentHost.name) 
+        ? currentHost 
+        : null;
+      
+      if (existingMember) {
+        // Leader is still in the group, just return their memberId
+        const { leaderToken: _, ...groupWithoutToken } = group;
+        res.json({ group: groupWithoutToken, memberId: existingMember.id, rejoined: true });
+        return;
+      }
+      
+      // Leader left and needs to rejoin - create new member with host privileges
+      const memberId = randomUUID();
+      const newHost: GroupMember = {
+        id: memberId,
+        name: memberName || "Leader",
+        isHost: true,
+        joinedAt: Date.now(),
+        doneSwiping: false
+      };
+      
+      // Demote old host if exists
+      const updatedMembers = group.members.map(m => ({ ...m, isHost: false }));
+      updatedMembers.push(newHost);
+      
+      const updatedGroup = { ...group, members: updatedMembers };
+      await storage.updateGroup(req.params.id, updatedGroup);
+      
+      // Broadcast member joined
+      broadcast(req.params.id, { type: "member_joined", member: newHost }, memberId);
+      
+      const { leaderToken: _, ...groupWithoutToken } = updatedGroup;
+      res.json({ group: groupWithoutToken, memberId, rejoined: false });
+    } catch (error) {
+      res.status(400).json({ error: "Invalid request" });
+    }
   });
 
   // Start swiping session - sets preferences and changes status to swiping

@@ -24,6 +24,7 @@ export interface IStorage {
   joinGroup(data: JoinGroup): Promise<{ group: Group; memberId: string } | null>;
   getGroup(id: string): Promise<Group | undefined>;
   getGroupByCode(code: string): Promise<Group | undefined>;
+  updateGroup(groupId: string, group: Group): Promise<Group | undefined>;
   updateGroupPreferences(groupId: string, preferences: GroupPreferences): Promise<Group | undefined>;
   updateGroupStatus(groupId: string, status: Group["status"]): Promise<Group | undefined>;
   addMember(groupId: string, member: GroupMember): Promise<Group | undefined>;
@@ -246,6 +247,8 @@ export class MemStorage implements IStorage {
       doneSwiping: false
     };
 
+    const leaderToken = randomUUID();
+    
     const group: Group = {
       id,
       code,
@@ -253,7 +256,8 @@ export class MemStorage implements IStorage {
       members: [host],
       preferences: null,
       status: "waiting",
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      leaderToken
     };
 
     this.groups.set(id, group);
@@ -293,6 +297,14 @@ export class MemStorage implements IStorage {
       }
     }
     return undefined;
+  }
+
+  async updateGroup(groupId: string, updatedGroup: Group): Promise<Group | undefined> {
+    const group = this.groups.get(groupId);
+    if (!group) return undefined;
+    
+    this.groups.set(groupId, updatedGroup);
+    return updatedGroup;
   }
 
   async updateGroupPreferences(groupId: string, preferences: GroupPreferences): Promise<Group | undefined> {

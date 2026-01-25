@@ -19,9 +19,56 @@ export default function GroupLobby() {
   const [copied, setCopied] = useState(false);
   const [ws, setWs] = useState<WebSocket | null>(null);
   const [group, setGroup] = useState<Group | null>(null);
+  const [hasLeaderToken, setHasLeaderToken] = useState(false);
+  const [isReclaiming, setIsReclaiming] = useState(false);
 
   const memberId = localStorage.getItem("grubmatch-member-id");
   const isHost = group?.members.find((m) => m.id === memberId)?.isHost ?? false;
+  const storedLeaderToken = params.id ? localStorage.getItem(`grubmatch-leader-token-${params.id}`) : null;
+  
+  // Check if user has a stored leader token for this group
+  useEffect(() => {
+    if (storedLeaderToken && !isHost && group) {
+      setHasLeaderToken(true);
+    } else {
+      setHasLeaderToken(false);
+    }
+  }, [storedLeaderToken, isHost, group]);
+  
+  // Auto-reclaim leadership on mount if user has leader token but isn't recognized
+  useEffect(() => {
+    const attemptAutoReclaim = async () => {
+      if (!params.id || !storedLeaderToken || isHost || !group || isReclaiming) return;
+      
+      // Check if user is already in the group
+      const isMember = group.members.some(m => m.id === memberId);
+      if (isMember) return; // Already in group, just not as host - don't auto-reclaim
+      
+      setIsReclaiming(true);
+      try {
+        const response = await apiRequest("POST", `/api/groups/${params.id}/reclaim-leadership`, {
+          leaderToken: storedLeaderToken,
+          memberName: "Leader"
+        });
+        
+        if (response.ok) {
+          const data = await response.json();
+          localStorage.setItem("grubmatch-member-id", data.memberId);
+          setGroup(data.group);
+          toast({
+            title: "Welcome back!",
+            description: "You've been recognized as the group leader.",
+          });
+        }
+      } catch {
+        // Silent fail - user can manually reclaim
+      } finally {
+        setIsReclaiming(false);
+      }
+    };
+    
+    attemptAutoReclaim();
+  }, [params.id, storedLeaderToken, isHost, group, memberId, isReclaiming, toast]);
 
   const { data: initialGroup, isLoading } = useQuery<Group>({
     queryKey: ["/api/groups", params.id],
@@ -190,6 +237,37 @@ export default function GroupLobby() {
       toast({
         title: "Couldn't remove member",
         description: "Something went wrong. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+  
+  const reclaimMutation = useMutation({
+    mutationFn: async () => {
+      if (!storedLeaderToken) throw new Error("No leader token");
+      const response = await apiRequest("POST", `/api/groups/${params.id}/reclaim-leadership`, {
+        leaderToken: storedLeaderToken,
+        memberName: group?.members.find(m => m.id === memberId)?.name || "Leader"
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to reclaim leadership");
+      }
+      return response.json();
+    },
+    onSuccess: (data) => {
+      localStorage.setItem("grubmatch-member-id", data.memberId);
+      setGroup(data.group);
+      setHasLeaderToken(false);
+      toast({
+        title: "Leadership reclaimed!",
+        description: "You're back in control of the group.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Couldn't reclaim leadership",
+        description: error.message || "The token may be invalid.",
         variant: "destructive",
       });
     },
@@ -368,6 +446,31 @@ export default function GroupLobby() {
               Set the Vibes
               <ArrowRight className="w-5 h-5 ml-2" />
             </Button>
+          ) : hasLeaderToken ? (
+            <div className="space-y-3">
+              <Button 
+                size="lg" 
+                className="w-full bg-gradient-to-r from-amber-500 to-orange-500"
+                onClick={() => reclaimMutation.mutate()}
+                disabled={reclaimMutation.isPending}
+                data-testid="button-reclaim-leadership"
+              >
+                {reclaimMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    Reclaiming...
+                  </>
+                ) : (
+                  <>
+                    <Crown className="w-5 h-5 mr-2" />
+                    Reclaim Leadership
+                  </>
+                )}
+              </Button>
+              <p className="text-xs text-center text-muted-foreground">
+                You created this group. Click to reclaim your host controls.
+              </p>
+            </div>
           ) : (
             <Card className="bg-gradient-to-r from-muted/50 to-muted/30 border-2 border-dashed">
               <CardContent className="py-6 text-center">

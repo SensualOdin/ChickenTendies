@@ -34,6 +34,10 @@ export default function CreateGroup() {
     onSuccess: (data) => {
       localStorage.setItem("grubmatch-member-id", data.memberId);
       localStorage.setItem("grubmatch-group-id", data.group.id);
+      // Store leader token for group leadership recovery
+      if (data.leaderToken) {
+        localStorage.setItem(`grubmatch-leader-token-${data.group.id}`, data.leaderToken);
+      }
       setLocation(`/group/${data.group.id}`);
     },
     onError: () => {

@@ -79,7 +79,8 @@ export const groupSchema = z.object({
   members: z.array(groupMemberSchema),
   preferences: groupPreferencesSchema.nullable(),
   status: z.enum(["waiting", "configuring", "swiping", "completed"]).default("waiting"),
-  createdAt: z.number()
+  createdAt: z.number(),
+  leaderToken: z.string().optional()
 });
 
 export type Group = z.infer<typeof groupSchema>;
