@@ -147,6 +147,7 @@ export type JoinGroup = z.infer<typeof joinGroupSchema>;
 export type WSMessage = 
   | { type: "member_joined"; member: GroupMember }
   | { type: "member_left"; memberId: string }
+  | { type: "member_removed"; memberId: string; memberName: string }
   | { type: "preferences_updated"; preferences: GroupPreferences }
   | { type: "status_changed"; status: Group["status"] }
   | { type: "swipe_made"; memberId: string; restaurantId: string }

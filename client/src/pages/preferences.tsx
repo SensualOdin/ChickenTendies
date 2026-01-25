@@ -122,9 +122,14 @@ export default function Preferences() {
     setUsingGPS(false);
   };
 
+  const memberId = localStorage.getItem("grubmatch-member-id");
+
   const saveMutation = useMutation({
     mutationFn: async (data: GroupPreferences) => {
-      const response = await apiRequest("PATCH", `/api/groups/${params.id}/preferences`, data);
+      const response = await apiRequest("POST", `/api/groups/${params.id}/start-session`, {
+        hostMemberId: memberId,
+        preferences: data,
+      });
       return response.json();
     },
     onSuccess: () => {

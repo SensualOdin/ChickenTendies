@@ -132,20 +132,40 @@ export async function registerRoutes(
     res.json(group);
   });
 
-  app.patch("/api/groups/:id/preferences", async (req, res) => {
+  // Start swiping session - sets preferences and changes status to swiping
+  app.post("/api/groups/:id/start-session", async (req, res) => {
     try {
-      const preferences = groupPreferencesSchema.parse(req.body);
-      const group = await storage.updateGroupPreferences(req.params.id, preferences);
+      const { hostMemberId, preferences } = req.body;
       
+      // Validate preferences
+      const validatedPreferences = groupPreferencesSchema.parse(preferences);
+      
+      const group = await storage.getGroup(req.params.id);
       if (!group) {
         res.status(404).json({ error: "Group not found" });
         return;
       }
 
-      broadcast(group.id, { type: "preferences_updated", preferences });
-      broadcast(group.id, { type: "status_changed", status: "swiping" });
+      // Verify the requester is the host
+      const hostMember = group.members.find(m => m.id === hostMemberId && m.isHost);
+      if (!hostMember) {
+        res.status(403).json({ error: "Only the host can start the session" });
+        return;
+      }
+      
+      const updatedGroup = await storage.updateGroupPreferences(req.params.id, validatedPreferences);
+      if (!updatedGroup) {
+        res.status(500).json({ error: "Failed to update preferences" });
+        return;
+      }
+      
+      // Update status to swiping
+      await storage.updateGroupStatus(req.params.id, "swiping");
 
-      res.json(group);
+      broadcast(req.params.id, { type: "preferences_updated", preferences: validatedPreferences });
+      broadcast(req.params.id, { type: "status_changed", status: "swiping" });
+
+      res.json(updatedGroup);
     } catch (error) {
       res.status(400).json({ error: "Invalid request" });
     }
@@ -273,6 +293,83 @@ export async function registerRoutes(
       });
 
       res.json({ success: true, group: result.group });
+    } catch (error) {
+      res.status(400).json({ error: "Invalid request" });
+    }
+  });
+
+  // Remove a member from the group (host only)
+  app.delete("/api/groups/:id/members/:memberId", async (req, res) => {
+    const { id: groupId, memberId: targetMemberId } = req.params;
+    const { hostMemberId } = req.body;
+
+    const group = await storage.getGroup(groupId);
+    if (!group) {
+      res.status(404).json({ error: "Group not found" });
+      return;
+    }
+
+    // Verify the requester is the host
+    const hostMember = group.members.find(m => m.id === hostMemberId && m.isHost);
+    if (!hostMember) {
+      res.status(403).json({ error: "Only the host can remove members" });
+      return;
+    }
+
+    // Can't remove the host
+    const targetMember = group.members.find(m => m.id === targetMemberId);
+    if (!targetMember) {
+      res.status(404).json({ error: "Member not found" });
+      return;
+    }
+
+    if (targetMember.isHost) {
+      res.status(400).json({ error: "Cannot remove the host" });
+      return;
+    }
+
+    const updatedGroup = await storage.removeMember(groupId, targetMemberId);
+    
+    // Broadcast to all members including the one being removed
+    broadcast(groupId, { 
+      type: "member_removed", 
+      memberId: targetMemberId,
+      memberName: targetMember.name
+    });
+
+    res.json({ success: true, group: updatedGroup });
+  });
+
+  // Update group preferences (host only, outside of session start)
+  app.patch("/api/groups/:id/preferences", async (req, res) => {
+    try {
+      const { hostMemberId, preferences } = req.body;
+      
+      // Validate preferences
+      const validatedPreferences = groupPreferencesSchema.parse(preferences);
+      
+      const group = await storage.getGroup(req.params.id);
+      if (!group) {
+        res.status(404).json({ error: "Group not found" });
+        return;
+      }
+
+      // Verify the requester is the host
+      const hostMember = group.members.find(m => m.id === hostMemberId && m.isHost);
+      if (!hostMember) {
+        res.status(403).json({ error: "Only the host can update preferences" });
+        return;
+      }
+
+      const updatedGroup = await storage.updateGroupPreferences(req.params.id, validatedPreferences);
+      if (!updatedGroup) {
+        res.status(500).json({ error: "Failed to update preferences" });
+        return;
+      }
+
+      broadcast(req.params.id, { type: "preferences_updated", preferences: validatedPreferences });
+
+      res.json({ success: true, group: updatedGroup });
     } catch (error) {
       res.status(400).json({ error: "Invalid request" });
     }
