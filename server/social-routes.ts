@@ -412,6 +412,35 @@ export function registerSocialRoutes(app: Express): void {
     }
   });
 
+  app.delete("/api/crews/:id", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      const groupId = req.params.id;
+      
+      const [group] = await db
+        .select()
+        .from(persistentGroups)
+        .where(eq(persistentGroups.id, groupId));
+      
+      if (!group) {
+        return res.status(404).json({ message: "Crew not found" });
+      }
+      
+      if (group.ownerId !== userId) {
+        return res.status(403).json({ message: "Only the owner can delete the crew" });
+      }
+      
+      await db
+        .delete(persistentGroups)
+        .where(eq(persistentGroups.id, groupId));
+      
+      res.json({ message: "Crew deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting crew:", error);
+      res.status(500).json({ message: "Failed to delete crew" });
+    }
+  });
+
   app.get("/api/crews/:id/sessions", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const groupId = req.params.id;

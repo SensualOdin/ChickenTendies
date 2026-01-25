@@ -396,7 +396,7 @@ export default function Dashboard() {
                         size="sm" 
                         variant="outline" 
                         data-testid={`button-manage-crew-${crew.id}`}
-                        onClick={() => toast({ title: crew.name, description: `${crew.memberCount || 1} member${(crew.memberCount || 1) !== 1 ? 's' : ''}. Crew management coming soon!` })}
+                        onClick={() => navigate(`/crew/${crew.id}`)}
                       >
                         Manage
                       </Button>

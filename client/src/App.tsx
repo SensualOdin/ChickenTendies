@@ -13,6 +13,7 @@ import Preferences from "@/pages/preferences";
 import SwipePage from "@/pages/swipe";
 import MatchesPage from "@/pages/matches";
 import ProfilePage from "@/pages/profile";
+import CrewManage from "@/pages/crew-manage";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -27,6 +28,7 @@ function Router() {
       <Route path="/group/:id/swipe" component={SwipePage} />
       <Route path="/group/:id/matches" component={MatchesPage} />
       <Route path="/profile" component={ProfilePage} />
+      <Route path="/crew/:id" component={CrewManage} />
       <Route component={NotFound} />
     </Switch>
   );
