@@ -61,8 +61,10 @@ export default function Dashboard() {
   const queryClient = useQueryClient();
   const [newCrewName, setNewCrewName] = useState("");
   const [friendEmail, setFriendEmail] = useState("");
+  const [crewInviteCode, setCrewInviteCode] = useState("");
   const [isCreateCrewOpen, setIsCreateCrewOpen] = useState(false);
   const [isAddFriendOpen, setIsAddFriendOpen] = useState(false);
+  const [isJoinCrewOpen, setIsJoinCrewOpen] = useState(false);
 
   const { data: friends = [], isLoading: friendsLoading } = useQuery<Friend[]>({
     queryKey: ["/api/friends"],
@@ -91,6 +93,21 @@ export default function Dashboard() {
     },
     onError: () => {
       toast({ title: "Error", description: "Failed to create crew", variant: "destructive" });
+    },
+  });
+
+  const joinCrewMutation = useMutation({
+    mutationFn: async (inviteCode: string) => {
+      return apiRequest("POST", "/api/crews/join", { inviteCode });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/crews"] });
+      setCrewInviteCode("");
+      setIsJoinCrewOpen(false);
+      toast({ title: "Joined crew!", description: "You're now part of the crew." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message || "Failed to join crew", variant: "destructive" });
     },
   });
 
@@ -303,6 +320,48 @@ export default function Dashboard() {
                   data-testid="button-create-crew-confirm"
                 >
                   Create Crew
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          <Dialog open={isJoinCrewOpen} onOpenChange={setIsJoinCrewOpen}>
+            <DialogTrigger asChild>
+              <Card className="hover-elevate cursor-pointer" data-testid="card-join-crew">
+                <CardContent className="p-6 flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+                    <UserPlus className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold">Join a Crew</h3>
+                    <p className="text-sm text-muted-foreground">Enter an invite code</p>
+                  </div>
+                  <ArrowRight className="w-5 h-5 ml-auto text-muted-foreground" />
+                </CardContent>
+              </Card>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Join a Crew</DialogTitle>
+                <DialogDescription>
+                  Enter the invite code shared by the crew owner to join.
+                </DialogDescription>
+              </DialogHeader>
+              <Input
+                placeholder="Enter invite code (e.g., ABC123)"
+                value={crewInviteCode}
+                onChange={(e) => setCrewInviteCode(e.target.value.toUpperCase())}
+                className="font-mono text-center text-lg tracking-widest"
+                maxLength={6}
+                data-testid="input-crew-invite-code"
+              />
+              <DialogFooter>
+                <Button
+                  onClick={() => joinCrewMutation.mutate(crewInviteCode)}
+                  disabled={crewInviteCode.trim().length < 6 || joinCrewMutation.isPending}
+                  data-testid="button-join-crew-confirm"
+                >
+                  {joinCrewMutation.isPending ? "Joining..." : "Join Crew"}
                 </Button>
               </DialogFooter>
             </DialogContent>

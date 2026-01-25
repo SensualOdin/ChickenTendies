@@ -26,7 +26,7 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { ArrowLeft, Crown, UserMinus, UserPlus, Trash2, LogOut, History, Users } from "lucide-react";
+import { ArrowLeft, Crown, UserMinus, UserPlus, Trash2, LogOut, History, Users, Copy, Check, Share2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -44,6 +44,7 @@ interface Crew {
   name: string;
   ownerId: string;
   memberIds: string[];
+  inviteCode: string;
   members: CrewMember[];
   createdAt: string;
   updatedAt: string;
@@ -74,6 +75,16 @@ export default function CrewManage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const copyInviteCode = () => {
+    if (crew?.inviteCode) {
+      navigator.clipboard.writeText(crew.inviteCode);
+      setCopied(true);
+      toast({ title: "Copied!", description: "Invite code copied to clipboard" });
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
 
   const { data: crew, isLoading: crewLoading } = useQuery<Crew>({
     queryKey: ["/api/crews", params.id],
@@ -211,6 +222,42 @@ export default function CrewManage() {
         <motion.div
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
+        >
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Share2 className="w-5 h-5" />
+                Invite Code
+              </CardTitle>
+              <CardDescription>Share this code to invite friends to your crew</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-3">
+                <div className="flex-1 bg-muted rounded-lg p-4 text-center">
+                  <span className="text-2xl font-mono font-bold tracking-widest" data-testid="text-invite-code">
+                    {crew.inviteCode}
+                  </span>
+                </div>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={copyInviteCode}
+                  data-testid="button-copy-code"
+                >
+                  {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                </Button>
+              </div>
+              <p className="text-sm text-muted-foreground mt-3 text-center">
+                Anyone with this code can join your crew from their dashboard
+              </p>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        <motion.div
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.1 }}
         >
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-2">
