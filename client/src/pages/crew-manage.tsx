@@ -26,7 +26,7 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { ArrowLeft, Crown, UserMinus, UserPlus, Trash2, LogOut, History, Users, Copy, Check, Share2 } from "lucide-react";
+import { ArrowLeft, Crown, UserMinus, UserPlus, Trash2, LogOut, History, Users, Copy, Check, Share2, Send } from "lucide-react";
 import { motion } from "framer-motion";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -83,6 +83,29 @@ export default function CrewManage() {
       setCopied(true);
       toast({ title: "Copied!", description: "Invite code copied to clipboard" });
       setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const shareInviteCode = async () => {
+    if (!crew) return;
+    
+    const shareMessage = `Join my crew "${crew.name}" on ChickenTinders! Use code: ${crew.inviteCode}`;
+    
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: "Join my ChickenTinders crew!",
+          text: shareMessage,
+        });
+      } catch (err) {
+        if ((err as Error).name !== "AbortError") {
+          navigator.clipboard.writeText(shareMessage);
+          toast({ title: "Copied!", description: "Share message copied to clipboard" });
+        }
+      }
+    } else {
+      navigator.clipboard.writeText(shareMessage);
+      toast({ title: "Copied!", description: "Share message copied to clipboard" });
     }
   };
 
@@ -238,17 +261,27 @@ export default function CrewManage() {
                     {crew.inviteCode}
                   </span>
                 </div>
-                <Button
-                  variant={copied ? "default" : "outline"}
-                  size="icon"
-                  onClick={copyInviteCode}
-                  data-testid="button-copy-code"
-                >
-                  {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                </Button>
+                <div className="flex flex-col gap-2">
+                  <Button
+                    variant={copied ? "default" : "outline"}
+                    size="icon"
+                    onClick={copyInviteCode}
+                    data-testid="button-copy-code"
+                  >
+                    {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  </Button>
+                  <Button
+                    variant="default"
+                    size="icon"
+                    onClick={shareInviteCode}
+                    data-testid="button-share-code"
+                  >
+                    <Send className="w-4 h-4" />
+                  </Button>
+                </div>
               </div>
               <p className="text-sm text-muted-foreground mt-3 text-center">
-                Anyone with this code can join your crew from their dashboard
+                Share the code with friends or tap send to message them directly
               </p>
             </CardContent>
           </Card>

@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Flame, Copy, Check, Users, ArrowRight, Loader2, PartyPopper, Sparkles, Clock, X, Crown, Settings } from "lucide-react";
+import { ArrowLeft, Flame, Copy, Check, Users, ArrowRight, Loader2, PartyPopper, Sparkles, Clock, X, Crown, Settings, Send } from "lucide-react";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { apiRequest } from "@/lib/queryClient";
@@ -144,6 +144,29 @@ export default function GroupLobby() {
     setTimeout(() => setCopied(false), 2000);
   }, [group, toast]);
 
+  const shareCode = useCallback(async () => {
+    if (!group) return;
+    
+    const shareMessage = `Let's find somewhere to eat together! Join my dinner search on ChickenTinders with code: ${group.code}`;
+    
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: "Join my ChickenTinders dinner search!",
+          text: shareMessage,
+        });
+      } catch (err) {
+        if ((err as Error).name !== "AbortError") {
+          navigator.clipboard.writeText(shareMessage);
+          toast({ title: "Copied!", description: "Share message copied to clipboard" });
+        }
+      }
+    } else {
+      navigator.clipboard.writeText(shareMessage);
+      toast({ title: "Copied!", description: "Share message copied to clipboard" });
+    }
+  }, [group, toast]);
+
   const handleContinue = () => {
     if (isHost) {
       setLocation(`/group/${params.id}/preferences`);
@@ -231,20 +254,34 @@ export default function GroupLobby() {
                 <p className="text-sm text-muted-foreground text-center mb-3">
                   Share this super secret code with your crew:
                 </p>
-                <button
-                  onClick={copyCode}
-                  className="w-full p-4 bg-gradient-to-r from-muted to-muted/80 rounded-xl flex items-center justify-center gap-3 hover-elevate border-2 border-dashed border-primary/30 transition-all hover:border-primary"
-                  data-testid="button-copy-code"
-                >
-                  <span className="text-3xl font-mono font-bold tracking-[0.2em] bg-gradient-to-r from-primary to-orange-500 bg-clip-text text-transparent" data-testid="text-group-code">
-                    {group.code}
-                  </span>
-                  {copied ? (
-                    <Check className="w-5 h-5 text-accent" />
-                  ) : (
-                    <Copy className="w-5 h-5 text-muted-foreground" />
-                  )}
-                </button>
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 bg-muted rounded-lg p-4 text-center">
+                    <span className="text-2xl font-mono font-bold tracking-widest" data-testid="text-group-code">
+                      {group.code}
+                    </span>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Button
+                      variant={copied ? "default" : "outline"}
+                      size="icon"
+                      onClick={copyCode}
+                      data-testid="button-copy-code"
+                    >
+                      {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                    </Button>
+                    <Button
+                      variant="default"
+                      size="icon"
+                      onClick={shareCode}
+                      data-testid="button-share-code"
+                    >
+                      <Send className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+                <p className="text-sm text-muted-foreground mt-3 text-center">
+                  Copy the code or tap send to message friends directly
+                </p>
               </div>
             </CardContent>
           </Card>
