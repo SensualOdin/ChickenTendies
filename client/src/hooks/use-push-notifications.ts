@@ -117,3 +117,86 @@ export function usePushNotifications() {
     unsubscribe,
   };
 }
+
+interface UseGroupPushNotificationsOptions {
+  groupId: string;
+  memberId: string;
+}
+
+export function useGroupPushNotifications({ groupId, memberId }: UseGroupPushNotificationsOptions) {
+  const [permission, setPermission] = useState<PermissionState>("default");
+  const [isSubscribed, setIsSubscribed] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [vapidKey, setVapidKey] = useState<string | null>(null);
+
+  const isPushSupported = typeof window !== "undefined" && 
+    "serviceWorker" in navigator && 
+    "PushManager" in window;
+
+  useEffect(() => {
+    if (!isPushSupported) {
+      setPermission("unsupported");
+      return;
+    }
+
+    setPermission(Notification.permission as PermissionState);
+
+    if (groupId) {
+      fetch(`/api/groups/${groupId}/push/vapid-key`)
+        .then((res) => res.json())
+        .then((data) => setVapidKey(data.vapidKey))
+        .catch(() => {});
+    }
+  }, [isPushSupported, groupId]);
+
+  const subscribe = useCallback(async () => {
+    if (!isPushSupported || !groupId || !memberId || !vapidKey) return false;
+
+    setIsLoading(true);
+    try {
+      const result = await Notification.requestPermission();
+      setPermission(result as PermissionState);
+
+      if (result !== "granted") {
+        setIsLoading(false);
+        return false;
+      }
+
+      const registration = await navigator.serviceWorker.register("/sw.js");
+      await navigator.serviceWorker.ready;
+
+      const subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(vapidKey),
+      });
+
+      const subscriptionJson = subscription.toJSON();
+      await apiRequest("POST", `/api/groups/${groupId}/push/subscribe`, {
+        memberId,
+        subscription: {
+          endpoint: subscriptionJson.endpoint,
+          keys: {
+            p256dh: subscriptionJson.keys?.p256dh,
+            auth: subscriptionJson.keys?.auth,
+          },
+        },
+      });
+
+      setIsSubscribed(true);
+      setIsLoading(false);
+      return true;
+    } catch (error) {
+      console.error("Group push subscription error:", error);
+      setIsLoading(false);
+      return false;
+    }
+  }, [isPushSupported, groupId, memberId, vapidKey]);
+
+  return {
+    isPushSupported,
+    permission,
+    isSubscribed,
+    isLoading,
+    subscribe,
+  };
+}

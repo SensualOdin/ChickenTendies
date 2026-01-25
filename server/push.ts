@@ -1,7 +1,7 @@
 import webpush from "web-push";
 import { db } from "./db";
-import { pushSubscriptions } from "@shared/schema";
-import { eq, inArray } from "drizzle-orm";
+import { pushSubscriptions, groupPushSubscriptions } from "@shared/schema";
+import { eq, inArray, and } from "drizzle-orm";
 
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY;
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY;
@@ -92,5 +92,69 @@ export async function sendPushToUsers(
     }
   } catch (error) {
     console.error("Error sending push notifications to users:", error);
+  }
+}
+
+export async function sendPushToGroupMembers(
+  groupId: string,
+  payload: { title: string; body: string; url?: string; data?: any }
+): Promise<void> {
+  if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
+    return;
+  }
+
+  try {
+    const subscriptions = await db
+      .select()
+      .from(groupPushSubscriptions)
+      .where(eq(groupPushSubscriptions.groupId, groupId));
+
+    for (const sub of subscriptions) {
+      try {
+        await webpush.sendNotification(
+          {
+            endpoint: sub.endpoint,
+            keys: {
+              p256dh: sub.p256dh,
+              auth: sub.auth,
+            },
+          },
+          JSON.stringify(payload)
+        );
+      } catch (error: any) {
+        if (error.statusCode === 404 || error.statusCode === 410) {
+          await db.delete(groupPushSubscriptions).where(eq(groupPushSubscriptions.id, sub.id));
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Error sending push notifications to group members:", error);
+  }
+}
+
+export async function saveGroupPushSubscription(
+  groupId: string,
+  memberId: string,
+  subscription: { endpoint: string; keys: { p256dh: string; auth: string } }
+): Promise<void> {
+  try {
+    // Remove existing subscription for this endpoint in this group
+    await db.delete(groupPushSubscriptions).where(
+      and(
+        eq(groupPushSubscriptions.groupId, groupId),
+        eq(groupPushSubscriptions.endpoint, subscription.endpoint)
+      )
+    );
+    
+    // Insert new subscription
+    await db.insert(groupPushSubscriptions).values({
+      groupId,
+      memberId,
+      endpoint: subscription.endpoint,
+      p256dh: subscription.keys.p256dh,
+      auth: subscription.keys.auth,
+    });
+  } catch (error) {
+    console.error("Error saving group push subscription:", error);
   }
 }

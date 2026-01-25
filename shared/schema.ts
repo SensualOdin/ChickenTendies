@@ -160,7 +160,8 @@ export type WSMessage =
   | { type: "sync"; group: Group; restaurants: Restaurant[]; matches: Restaurant[] }
   | { type: "nudge"; fromMemberName: string; restaurantName: string; targetMemberIds?: string[] }
   | { type: "member_done_swiping"; memberId: string; memberName: string }
-  | { type: "live_reaction"; memberId: string; memberName: string; reaction: ReactionType; restaurantId: string };
+  | { type: "live_reaction"; memberId: string; memberName: string; reaction: ReactionType; restaurantId: string }
+  | { type: "all_done_swiping" };
 
 // Export auth models
 export * from "./models/auth";

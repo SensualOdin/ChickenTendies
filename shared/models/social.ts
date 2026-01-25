@@ -101,6 +101,19 @@ export const pushSubscriptions = pgTable("push_subscriptions", {
 export type PushSubscription = typeof pushSubscriptions.$inferSelect;
 export type InsertPushSubscription = typeof pushSubscriptions.$inferInsert;
 
+export const groupPushSubscriptions = pgTable("group_push_subscriptions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  groupId: varchar("group_id").notNull(),
+  memberId: varchar("member_id").notNull(),
+  endpoint: text("endpoint").notNull(),
+  p256dh: text("p256dh").notNull(),
+  auth: text("auth").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type GroupPushSubscription = typeof groupPushSubscriptions.$inferSelect;
+export type InsertGroupPushSubscription = typeof groupPushSubscriptions.$inferInsert;
+
 export const diningHistory = pgTable("dining_history", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   groupId: varchar("group_id").notNull().references(() => persistentGroups.id),

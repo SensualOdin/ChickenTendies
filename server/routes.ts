@@ -8,6 +8,7 @@ import { insertGroupSchema, joinGroupSchema, groupPreferencesSchema } from "@sha
 import type { WSMessage, Group, Restaurant, GroupMember } from "@shared/schema";
 import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
 import { registerSocialRoutes } from "./social-routes";
+import { sendPushToGroupMembers, saveGroupPushSubscription, getVapidPublicKey } from "./push";
 
 interface WSClient {
   ws: WebSocket;
@@ -365,9 +366,71 @@ export async function registerRoutes(
         memberName: result.member.name
       });
 
+      // Check if ALL members are now done swiping
+      const allDone = result.group.members.every(m => m.doneSwiping);
+      if (allDone && result.group.members.length > 0) {
+        // Send push notification to all group members
+        sendPushToGroupMembers(req.params.id, {
+          title: "Everyone's done swiping!",
+          body: `Your group "${result.group.name}" has finished swiping. Check out your matches!`,
+          url: `/group/${req.params.id}/matches`,
+          data: { groupId: req.params.id, type: "all_done_swiping" }
+        });
+        
+        // Also broadcast via WebSocket for users who are still on the page
+        broadcast(req.params.id, { type: "all_done_swiping" });
+      }
+
       res.json({ success: true, group: result.group });
     } catch (error) {
       res.status(400).json({ error: "Invalid request" });
+    }
+  });
+  
+  // Group push notification subscription endpoints
+  app.get("/api/groups/:id/push/vapid-key", (req, res) => {
+    const vapidKey = getVapidPublicKey();
+    if (!vapidKey) {
+      res.status(500).json({ error: "VAPID keys not configured" });
+      return;
+    }
+    res.json({ vapidKey });
+  });
+  
+  const groupPushSubscribeSchema = z.object({
+    memberId: z.string(),
+    subscription: z.object({
+      endpoint: z.string(),
+      keys: z.object({
+        p256dh: z.string(),
+        auth: z.string()
+      })
+    })
+  });
+  
+  app.post("/api/groups/:id/push/subscribe", async (req, res) => {
+    try {
+      const { memberId, subscription } = groupPushSubscribeSchema.parse(req.body);
+      const groupId = req.params.id;
+      
+      // Verify group exists
+      const group = await storage.getGroup(groupId);
+      if (!group) {
+        res.status(404).json({ error: "Group not found" });
+        return;
+      }
+      
+      // Verify member is in the group
+      const member = group.members.find(m => m.id === memberId);
+      if (!member) {
+        res.status(403).json({ error: "Member not in group" });
+        return;
+      }
+      
+      await saveGroupPushSubscription(groupId, memberId, subscription);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(400).json({ error: "Invalid subscription data" });
     }
   });
 

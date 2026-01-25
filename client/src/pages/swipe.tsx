@@ -8,7 +8,8 @@ import { SwipeCard, SwipeButtons, type SwipeAction } from "@/components/swipe-ca
 import { MemberAvatars } from "@/components/member-avatars";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Flame, ChevronRight, PartyPopper, Bell, Timer, Vote, Trophy, Heart, ThumbsUp, Eye, Star, Utensils } from "lucide-react";
+import { useGroupPushNotifications } from "@/hooks/use-push-notifications";
+import { Flame, ChevronRight, PartyPopper, Bell, Timer, Vote, Trophy, Heart, ThumbsUp, Eye, Star, Utensils, BellRing, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Group, Restaurant, WSMessage, ReactionType } from "@shared/schema";
 import confetti from "canvas-confetti";
@@ -30,8 +31,27 @@ export default function SwipePage() {
   const [liveReactions, setLiveReactions] = useState<Array<{id: string; memberId: string; memberName: string; reaction: ReactionType; restaurantId: string}>>([]);
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [visitedRestaurantIds, setVisitedRestaurantIds] = useState<Set<string>>(new Set());
+  const [showNotificationPrompt, setShowNotificationPrompt] = useState(true);
 
   const memberId = localStorage.getItem("grubmatch-member-id");
+  
+  const { 
+    isPushSupported, 
+    permission, 
+    isSubscribed, 
+    isLoading: notificationLoading, 
+    subscribe: subscribeToNotifications 
+  } = useGroupPushNotifications({ 
+    groupId: params.id || "", 
+    memberId: memberId || "" 
+  });
+  
+  const shouldShowNotificationPrompt = 
+    showNotificationPrompt && 
+    isPushSupported && 
+    permission !== "granted" && 
+    permission !== "denied" &&
+    !isSubscribed;
 
   // Fetch visited restaurants from user's crews for smart exclusions
   useEffect(() => {
@@ -367,6 +387,47 @@ export default function SwipePage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {shouldShowNotificationPrompt && (
+        <motion.div
+          initial={{ y: -50, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: -50, opacity: 0 }}
+          className="bg-gradient-to-r from-primary/10 to-orange-500/10 border-b px-4 py-3"
+        >
+          <div className="flex items-center justify-between max-w-lg mx-auto gap-3">
+            <div className="flex items-center gap-2 text-sm">
+              <BellRing className="w-4 h-4 text-primary shrink-0" />
+              <span>Get notified when everyone's done swiping!</span>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Button
+                size="sm"
+                variant="default"
+                onClick={async () => {
+                  const success = await subscribeToNotifications();
+                  if (success) {
+                    toast({ title: "Notifications enabled!", description: "We'll ping you when everyone finishes." });
+                    setShowNotificationPrompt(false);
+                  }
+                }}
+                disabled={notificationLoading}
+                data-testid="button-enable-notifications"
+              >
+                {notificationLoading ? "..." : "Enable"}
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={() => setShowNotificationPrompt(false)}
+                data-testid="button-dismiss-notifications"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       <header className="flex items-center justify-between p-4 md:p-6 shrink-0">
         <div className="flex items-center gap-3">
