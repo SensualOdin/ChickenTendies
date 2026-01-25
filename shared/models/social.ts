@@ -24,6 +24,7 @@ export const persistentGroups = pgTable("persistent_groups", {
   name: varchar("name", { length: 100 }).notNull(),
   ownerId: varchar("owner_id").notNull().references(() => users.id),
   memberIds: text("member_ids").array().notNull().default(sql`ARRAY[]::text[]`),
+  inviteCode: varchar("invite_code", { length: 10 }).notNull().unique(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

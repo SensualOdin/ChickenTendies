@@ -277,12 +277,22 @@ export function registerSocialRoutes(app: Express): void {
         return res.status(400).json({ message: "Name is required" });
       }
       
+      const generateInviteCode = () => {
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        let code = '';
+        for (let i = 0; i < 6; i++) {
+          code += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return code;
+      };
+      
       const [group] = await db
         .insert(persistentGroups)
         .values({
           name,
           ownerId: userId,
           memberIds: memberIds || [],
+          inviteCode: generateInviteCode(),
         })
         .returning();
       
@@ -302,6 +312,56 @@ export function registerSocialRoutes(app: Express): void {
     } catch (error) {
       console.error("Error creating crew:", error);
       res.status(500).json({ message: "Failed to create crew" });
+    }
+  });
+
+  app.post("/api/crews/join", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      const { inviteCode } = req.body;
+      
+      if (!inviteCode) {
+        return res.status(400).json({ message: "Invite code is required" });
+      }
+      
+      const [group] = await db
+        .select()
+        .from(persistentGroups)
+        .where(eq(persistentGroups.inviteCode, inviteCode.toUpperCase().trim()));
+      
+      if (!group) {
+        return res.status(404).json({ message: "Invalid invite code" });
+      }
+      
+      if (group.ownerId === userId) {
+        return res.status(400).json({ message: "You're already the owner of this crew" });
+      }
+      
+      if (group.memberIds.includes(userId)) {
+        return res.status(400).json({ message: "You're already a member of this crew" });
+      }
+      
+      const [updated] = await db
+        .update(persistentGroups)
+        .set({
+          memberIds: [...group.memberIds, userId],
+          updatedAt: new Date(),
+        })
+        .where(eq(persistentGroups.id, group.id))
+        .returning();
+      
+      await db.insert(notifications).values({
+        userId: group.ownerId,
+        type: "member_joined",
+        title: "New crew member!",
+        message: `Someone joined "${group.name}" using the invite code`,
+        data: { groupId: group.id, memberId: userId },
+      });
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error joining crew:", error);
+      res.status(500).json({ message: "Failed to join crew" });
     }
   });
 
