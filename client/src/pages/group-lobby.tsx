@@ -147,7 +147,7 @@ export default function GroupLobby() {
   const shareCode = useCallback(async () => {
     if (!group) return;
     
-    const shareMessage = `Let's find somewhere to eat together! Join my dinner search on ChickenTinders with code: ${group.code}`;
+    const shareMessage = `Swipe right on dinner! Join my party on ChickenTinders with code: ${group.code}`;
     
     if (navigator.share) {
       try {
