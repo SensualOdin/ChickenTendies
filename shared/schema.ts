@@ -66,6 +66,7 @@ export const groupPreferencesSchema = z.object({
   longitude: z.number().optional(),
   trySomethingNew: z.boolean().optional().default(false), // Hide cuisines already matched on
   excludeCuisines: z.array(z.string()).optional().default([]), // Cuisines to exclude
+  excludeVisited: z.boolean().optional().default(false), // Exclude restaurants crew has already visited
 });
 
 export type GroupPreferences = z.infer<typeof groupPreferencesSchema>;
@@ -143,6 +144,9 @@ export const joinGroupSchema = z.object({
 
 export type JoinGroup = z.infer<typeof joinGroupSchema>;
 
+// Reaction types for live reactions during swiping
+export type ReactionType = "fire" | "heart" | "drool" | "thumbsup" | "eyes" | "star";
+
 // WebSocket message types
 export type WSMessage = 
   | { type: "member_joined"; member: GroupMember }
@@ -154,7 +158,8 @@ export type WSMessage =
   | { type: "match_found"; restaurant: Restaurant }
   | { type: "sync"; group: Group; restaurants: Restaurant[]; matches: Restaurant[] }
   | { type: "nudge"; fromMemberName: string; restaurantName: string; targetMemberIds?: string[] }
-  | { type: "member_done_swiping"; memberId: string; memberName: string };
+  | { type: "member_done_swiping"; memberId: string; memberName: string }
+  | { type: "live_reaction"; memberId: string; memberName: string; reaction: ReactionType; restaurantId: string };
 
 // Export auth models
 export * from "./models/auth";

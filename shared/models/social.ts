@@ -43,6 +43,9 @@ export const diningSessions = pgTable("dining_sessions", {
   preferences: jsonb("preferences"),
   startedAt: timestamp("started_at").defaultNow(),
   endedAt: timestamp("ended_at"),
+  visitedRestaurantId: varchar("visited_restaurant_id"),
+  visitedRestaurantData: jsonb("visited_restaurant_data"),
+  visitedAt: timestamp("visited_at"),
 });
 
 export type DiningSession = typeof diningSessions.$inferSelect;

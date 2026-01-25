@@ -2,7 +2,7 @@ import { motion, useMotionValue, useTransform, PanInfo } from "framer-motion";
 import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Star, MapPin, X, Leaf, Flame, Sparkles, Phone, Calendar, Truck, ShoppingBag, Heart, Coffee, Pizza, Utensils } from "lucide-react";
+import { Star, MapPin, X, Leaf, Flame, Sparkles, Phone, Calendar, Truck, ShoppingBag, Heart, Coffee, Pizza, Utensils, History } from "lucide-react";
 import type { Restaurant } from "@shared/schema";
 
 export type SwipeAction = "like" | "dislike" | "superlike";
@@ -11,9 +11,10 @@ interface SwipeCardProps {
   restaurant: Restaurant;
   onSwipe: (action: SwipeAction) => void;
   isTop: boolean;
+  visitedBefore?: boolean;
 }
 
-export function SwipeCard({ restaurant, onSwipe, isTop }: SwipeCardProps) {
+export function SwipeCard({ restaurant, onSwipe, isTop, visitedBefore = false }: SwipeCardProps) {
   const [exitX, setExitX] = useState(0);
   const [exitY, setExitY] = useState(0);
   const x = useMotionValue(0);
@@ -98,6 +99,15 @@ export function SwipeCard({ restaurant, onSwipe, isTop }: SwipeCardProps) {
             <span className="text-3xl font-extrabold text-yellow-400">SUPER!</span>
           </div>
         </motion.div>
+
+        {visitedBefore && (
+          <div className="absolute top-4 right-4 z-10">
+            <Badge className="bg-purple-500/90 backdrop-blur-sm text-white border-0 font-semibold shadow-lg" data-testid="badge-visited-before">
+              <History className="w-3 h-3 mr-1" />
+              Been here before
+            </Badge>
+          </div>
+        )}
 
         <div className="absolute bottom-0 left-0 right-0 p-6 text-white">
           <div className="flex flex-wrap items-center gap-2 mb-2">

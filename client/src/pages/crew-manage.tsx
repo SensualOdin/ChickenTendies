@@ -26,7 +26,7 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { ArrowLeft, Crown, UserMinus, UserPlus, Trash2, LogOut, History, Users, Copy, Check, Share2, Send } from "lucide-react";
+import { ArrowLeft, Crown, UserMinus, UserPlus, Trash2, LogOut, History, Users, Copy, Check, Share2, Send, ChevronDown, ChevronUp, MapPin, Utensils } from "lucide-react";
 import { motion } from "framer-motion";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -66,6 +66,27 @@ interface DiningSession {
   matchedRestaurantId?: string;
   startedAt: string;
   endedAt?: string;
+  visitedRestaurantId?: string;
+  visitedRestaurantData?: {
+    name: string;
+    cuisine: string;
+    imageUrl?: string;
+  };
+  visitedAt?: string;
+}
+
+interface SessionMatch {
+  id: string;
+  sessionId: string;
+  restaurantId: string;
+  restaurantData: {
+    name: string;
+    cuisine: string;
+    priceRange: string;
+    rating: number;
+    imageUrl?: string;
+  };
+  matchedAt: string;
 }
 
 export default function CrewManage() {
@@ -76,6 +97,7 @@ export default function CrewManage() {
   const queryClient = useQueryClient();
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
 
   const copyInviteCode = () => {
     if (crew?.inviteCode) {
@@ -122,6 +144,32 @@ export default function CrewManage() {
   const { data: sessions = [] } = useQuery<DiningSession[]>({
     queryKey: ["/api/crews", params.id, "sessions"],
     enabled: isAuthenticated && !!params.id,
+  });
+
+  const { data: sessionMatches = [] } = useQuery<SessionMatch[]>({
+    queryKey: ["/api/sessions", expandedSessionId, "matches"],
+    enabled: isAuthenticated && !!expandedSessionId,
+  });
+
+  const markVisitedMutation = useMutation({
+    mutationFn: async ({ sessionId, restaurantId, restaurantData }: { 
+      sessionId: string; 
+      restaurantId: string; 
+      restaurantData: SessionMatch["restaurantData"];
+    }) => {
+      return apiRequest("POST", `/api/sessions/${sessionId}/visited`, { 
+        restaurantId, 
+        restaurantData 
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/crews", params.id, "sessions"] });
+      toast({ title: "Logged!", description: "Your visit has been recorded" });
+      setExpandedSessionId(null);
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to log visit", variant: "destructive" });
+    },
   });
 
   const addMemberMutation = useMutation({
@@ -423,24 +471,81 @@ export default function CrewManage() {
                   No dining sessions yet. Start one from the dashboard!
                 </p>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {sessions.slice(0, 5).map((session) => (
-                    <div
-                      key={session.id}
-                      className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
-                      data-testid={`session-${session.id}`}
-                    >
-                      <div>
-                        <p className="font-medium">
-                          {new Date(session.startedAt).toLocaleDateString()}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          {session.matchedRestaurantId ? "Match found!" : "No match"}
-                        </p>
+                    <div key={session.id} className="rounded-lg bg-muted/50 overflow-hidden">
+                      <div
+                        className="flex items-center justify-between p-3 cursor-pointer hover-elevate"
+                        onClick={() => setExpandedSessionId(expandedSessionId === session.id ? null : session.id)}
+                        data-testid={`session-${session.id}`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                            <Utensils className="w-5 h-5 text-primary" />
+                          </div>
+                          <div>
+                            <p className="font-medium">
+                              {new Date(session.startedAt).toLocaleDateString()}
+                            </p>
+                            {session.visitedRestaurantData ? (
+                              <p className="text-sm text-primary flex items-center gap-1">
+                                <MapPin className="w-3 h-3" />
+                                Went to {session.visitedRestaurantData.name}
+                              </p>
+                            ) : (
+                              <p className="text-sm text-muted-foreground">
+                                {session.matchedRestaurantId ? "Has matches - tap to log visit" : "No matches"}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant={session.visitedRestaurantId ? "default" : "secondary"}>
+                            {session.visitedRestaurantId ? "Visited" : session.endedAt ? "Completed" : "Active"}
+                          </Badge>
+                          {session.matchedRestaurantId && !session.visitedRestaurantId && (
+                            expandedSessionId === session.id ? 
+                              <ChevronUp className="w-4 h-4 text-muted-foreground" /> : 
+                              <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                          )}
+                        </div>
                       </div>
-                      <Badge variant={session.matchedRestaurantId ? "default" : "secondary"}>
-                        {session.endedAt ? "Completed" : "In Progress"}
-                      </Badge>
+                      
+                      {expandedSessionId === session.id && !session.visitedRestaurantId && sessionMatches.length > 0 && (
+                        <div className="px-3 pb-3 border-t border-border/50">
+                          <p className="text-sm text-muted-foreground py-2">Where did you end up going?</p>
+                          <div className="space-y-2">
+                            {sessionMatches.map((match) => (
+                              <div
+                                key={match.id}
+                                className="flex items-center justify-between p-2 rounded-md bg-background hover-elevate cursor-pointer"
+                                onClick={() => markVisitedMutation.mutate({
+                                  sessionId: session.id,
+                                  restaurantId: match.restaurantId,
+                                  restaurantData: match.restaurantData,
+                                })}
+                                data-testid={`button-visited-${match.restaurantId}`}
+                              >
+                                <div className="flex items-center gap-2">
+                                  {match.restaurantData?.imageUrl && (
+                                    <div 
+                                      className="w-8 h-8 rounded bg-cover bg-center" 
+                                      style={{ backgroundImage: `url(${match.restaurantData.imageUrl})` }}
+                                    />
+                                  )}
+                                  <div>
+                                    <p className="text-sm font-medium">{match.restaurantData?.name}</p>
+                                    <p className="text-xs text-muted-foreground">{match.restaurantData?.cuisine}</p>
+                                  </div>
+                                </div>
+                                <Button size="sm" variant="ghost" disabled={markVisitedMutation.isPending}>
+                                  We went here!
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

@@ -298,6 +298,51 @@ export async function registerRoutes(
     }
   });
 
+  // Send a live reaction during swiping
+  const reactionSchema = z.object({
+    memberId: z.string(),
+    memberName: z.string(),
+    reaction: z.enum(["fire", "heart", "drool", "thumbsup", "eyes", "star"]),
+    restaurantId: z.string(),
+  });
+
+  app.post("/api/groups/:id/reaction", async (req, res) => {
+    try {
+      const parsed = reactionSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({ error: "Invalid reaction data" });
+        return;
+      }
+      
+      const { memberId, memberName, reaction, restaurantId } = parsed.data;
+      
+      const group = await storage.getGroup(req.params.id);
+      if (!group) {
+        res.status(404).json({ error: "Group not found" });
+        return;
+      }
+
+      // Verify member is in the group
+      const member = group.members.find(m => m.id === memberId);
+      if (!member) {
+        res.status(403).json({ error: "Member not in group" });
+        return;
+      }
+
+      broadcast(req.params.id, {
+        type: "live_reaction",
+        memberId,
+        memberName: member.name,
+        reaction,
+        restaurantId
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      res.status(400).json({ error: "Invalid request" });
+    }
+  });
+
   // Remove a member from the group (host only)
   app.delete("/api/groups/:id/members/:memberId", async (req, res) => {
     const { id: groupId, memberId: targetMemberId } = req.params;

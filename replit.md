@@ -39,6 +39,13 @@ Preferred communication style: Simple, everyday language.
 - **Yelp Integration**: Real restaurant data fetched from Yelp Fusion API (see `server/yelp.ts`), with fallback to mock data
 - **WebSocket Sync**: Real-time updates broadcast group state changes to all connected members
 
+### Key Features (Recent)
+- **Live Reactions**: Real-time emoji reactions during swiping visible to the whole group (WebSocket-powered)
+- **Final Vote Mode**: When indecisive, users can trigger a "Final Vote" with their liked restaurants and a countdown timer
+- **Smart Exclusions**: "Been here before" badges show on swipe cards for previously visited restaurants
+- **Visit Tracking**: "We Went Here" logging in dining sessions to track actual restaurant visits
+- **Reservation Integration**: Direct links to Yelp reservation pages from match cards
+
 ### Build Process
 - **Development**: Vite dev server with HMR, Express backend via tsx
 - **Production**: Vite builds client to `dist/public`, esbuild bundles server to `dist/index.cjs`

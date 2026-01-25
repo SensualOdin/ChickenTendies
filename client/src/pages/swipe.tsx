@@ -8,9 +8,9 @@ import { SwipeCard, SwipeButtons, type SwipeAction } from "@/components/swipe-ca
 import { MemberAvatars } from "@/components/member-avatars";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Flame, ChevronRight, PartyPopper, Bell } from "lucide-react";
+import { Flame, ChevronRight, PartyPopper, Bell, Timer, Vote, Trophy, Heart, ThumbsUp, Eye, Star, Utensils } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import type { Group, Restaurant, WSMessage } from "@shared/schema";
+import type { Group, Restaurant, WSMessage, ReactionType } from "@shared/schema";
 import confetti from "canvas-confetti";
 
 export default function SwipePage() {
@@ -24,8 +24,32 @@ export default function SwipePage() {
   const [group, setGroup] = useState<Group | null>(null);
   const [showMatchCelebration, setShowMatchCelebration] = useState(false);
   const [latestMatch, setLatestMatch] = useState<Restaurant | null>(null);
+  const [showFinalVote, setShowFinalVote] = useState(false);
+  const [finalVoteTimer, setFinalVoteTimer] = useState(60);
+  const [likedRestaurants, setLikedRestaurants] = useState<Restaurant[]>([]);
+  const [liveReactions, setLiveReactions] = useState<Array<{id: string; memberId: string; memberName: string; reaction: ReactionType; restaurantId: string}>>([]);
+  const [showReactionPicker, setShowReactionPicker] = useState(false);
+  const [visitedRestaurantIds, setVisitedRestaurantIds] = useState<Set<string>>(new Set());
 
   const memberId = localStorage.getItem("grubmatch-member-id");
+
+  // Fetch visited restaurants from user's crews for smart exclusions
+  useEffect(() => {
+    const fetchVisitedRestaurants = async () => {
+      try {
+        const response = await fetch("/api/sessions/visited-restaurants", {
+          credentials: "include",
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setVisitedRestaurantIds(new Set(data.restaurantIds || []));
+        }
+      } catch (error) {
+        // Silently fail - visited restaurant feature is optional
+      }
+    };
+    fetchVisitedRestaurants();
+  }, []);
 
   const getSwipedIds = (): Set<string> => {
     const stored = localStorage.getItem(`swiped-${params.id}`);
@@ -134,6 +158,14 @@ export default function SwipePage() {
             description: "They're waiting for everyone else",
           });
         }
+      } else if (message.type === "live_reaction") {
+        // Add the reaction to display
+        const reactionId = `${message.memberId}-${Date.now()}`;
+        setLiveReactions(prev => [...prev, { ...message, id: reactionId }]);
+        // Remove reaction after animation
+        setTimeout(() => {
+          setLiveReactions(prev => prev.filter(r => r.id !== reactionId));
+        }, 2500);
       }
     };
 
@@ -199,6 +231,34 @@ export default function SwipePage() {
     },
   });
 
+  const reactionMutation = useMutation({
+    mutationFn: async (reaction: ReactionType) => {
+      if (!currentRestaurant || !memberId) return;
+      const memberName = group?.members.find(m => m.id === memberId)?.name || "Someone";
+      const response = await apiRequest("POST", `/api/groups/${params.id}/reaction`, {
+        memberId,
+        memberName,
+        reaction,
+        restaurantId: currentRestaurant.id,
+      });
+      return response.json();
+    },
+  });
+
+  const sendReaction = (reaction: ReactionType) => {
+    reactionMutation.mutate(reaction);
+    setShowReactionPicker(false);
+  };
+
+  const reactionIcons: Record<ReactionType, { icon: typeof Flame; color: string }> = {
+    fire: { icon: Flame, color: "text-orange-500" },
+    heart: { icon: Heart, color: "text-pink-500" },
+    drool: { icon: Utensils, color: "text-yellow-500" },
+    thumbsup: { icon: ThumbsUp, color: "text-blue-500" },
+    eyes: { icon: Eye, color: "text-purple-500" },
+    star: { icon: Star, color: "text-yellow-400" },
+  };
+
   const handleSwipe = useCallback((action: SwipeAction) => {
     if (currentIndex >= restaurants.length) return;
     
@@ -207,8 +267,37 @@ export default function SwipePage() {
     const superLiked = action === "superlike";
     swipeMutation.mutate({ restaurantId: restaurant.id, liked, superLiked });
     saveSwipedId(restaurant.id);
+    
+    if (liked) {
+      setLikedRestaurants(prev => [...prev, restaurant]);
+    }
+    
     setCurrentIndex((prev) => prev + 1);
   }, [currentIndex, restaurants, swipeMutation, params.id]);
+
+  useEffect(() => {
+    if (!showFinalVote || finalVoteTimer <= 0) return;
+    
+    const timer = setInterval(() => {
+      setFinalVoteTimer(prev => prev - 1);
+    }, 1000);
+    
+    return () => clearInterval(timer);
+  }, [showFinalVote, finalVoteTimer]);
+
+  const startFinalVote = () => {
+    setFinalVoteTimer(60);
+    setShowFinalVote(true);
+  };
+
+  const selectFinalChoice = (restaurant: Restaurant) => {
+    setShowFinalVote(false);
+    toast({
+      title: "Decision made!",
+      description: `You picked ${restaurant.name}!`,
+    });
+    setMatches(prev => [...prev, restaurant]);
+  };
 
   const isLoading = groupLoading || restaurantsLoading;
   const currentRestaurant = restaurants[currentIndex];
@@ -415,8 +504,83 @@ export default function SwipePage() {
                   restaurant={currentRestaurant}
                   onSwipe={handleSwipe}
                   isTop={true}
+                  visitedBefore={visitedRestaurantIds.has(currentRestaurant.id)}
                 />
               )}
+
+              <AnimatePresence>
+                {liveReactions.filter(r => r.restaurantId === currentRestaurant?.id).map((reaction, index) => {
+                  const ReactionIcon = reactionIcons[reaction.reaction].icon;
+                  const colorClass = reactionIcons[reaction.reaction].color;
+                  return (
+                    <motion.div
+                      key={reaction.id}
+                      className="absolute pointer-events-none z-20"
+                      initial={{ 
+                        x: 50 + (index % 3) * 60, 
+                        y: 200 + (index % 2) * 40, 
+                        scale: 0, 
+                        opacity: 0 
+                      }}
+                      animate={{ 
+                        y: 50, 
+                        scale: 1, 
+                        opacity: 1 
+                      }}
+                      exit={{ 
+                        y: -50, 
+                        opacity: 0, 
+                        scale: 0.5 
+                      }}
+                      transition={{ duration: 0.6, ease: "easeOut" }}
+                    >
+                      <div className="flex items-center gap-1 bg-black/70 backdrop-blur-sm rounded-full px-3 py-1.5 shadow-lg">
+                        <ReactionIcon className={`w-5 h-5 ${colorClass}`} />
+                        <span className="text-white text-sm font-medium">{reaction.memberName}</span>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </AnimatePresence>
+
+              <AnimatePresence>
+                {showReactionPicker && (
+                  <motion.div
+                    className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30"
+                    initial={{ y: 20, opacity: 0, scale: 0.9 }}
+                    animate={{ y: 0, opacity: 1, scale: 1 }}
+                    exit={{ y: 20, opacity: 0, scale: 0.9 }}
+                  >
+                    <div className="flex gap-2 bg-card/95 backdrop-blur-sm rounded-full px-3 py-2 shadow-xl border">
+                      {(Object.keys(reactionIcons) as ReactionType[]).map((reactionType) => {
+                        const { icon: Icon, color } = reactionIcons[reactionType];
+                        return (
+                          <Button
+                            key={reactionType}
+                            size="icon"
+                            variant="ghost"
+                            className="rounded-full"
+                            onClick={() => sendReaction(reactionType)}
+                            data-testid={`button-reaction-${reactionType}`}
+                          >
+                            <Icon className={`w-5 h-5 ${color}`} />
+                          </Button>
+                        );
+                      })}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <Button
+                size="icon"
+                variant="ghost"
+                className="absolute bottom-4 right-4 z-20 rounded-full bg-background/80 backdrop-blur-sm shadow-lg"
+                onClick={() => setShowReactionPicker(!showReactionPicker)}
+                data-testid="button-toggle-reactions"
+              >
+                <Heart className={`w-5 h-5 ${showReactionPicker ? 'text-pink-500 fill-pink-500' : ''}`} />
+              </Button>
             </div>
 
             <div className="shrink-0 max-w-md mx-auto w-full">
@@ -446,9 +610,112 @@ export default function SwipePage() {
                   </span>
                 )}
               </div>
+
+              {likedRestaurants.length >= 3 && (
+                <motion.div 
+                  className="mt-6"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                >
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={startFinalVote}
+                    className="w-full text-muted-foreground"
+                    data-testid="button-final-vote"
+                  >
+                    <Vote className="w-4 h-4 mr-2" />
+                    Can't decide? Start Final Vote
+                  </Button>
+                </motion.div>
+              )}
             </div>
           </>
         )}
+
+        <AnimatePresence>
+          {showFinalVote && (
+            <motion.div
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowFinalVote(false)}
+            >
+              <motion.div
+                className="bg-card rounded-xl p-6 max-w-md w-full max-h-[80vh] overflow-auto shadow-2xl border"
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="text-center mb-6">
+                  <div className="flex items-center justify-center gap-2 mb-2">
+                    <Trophy className="w-6 h-6 text-yellow-500" />
+                    <h2 className="text-2xl font-extrabold">Final Vote</h2>
+                    <Trophy className="w-6 h-6 text-yellow-500" />
+                  </div>
+                  <p className="text-muted-foreground text-sm">Pick your favorite from your top choices!</p>
+                  
+                  <div className="flex items-center justify-center gap-2 mt-4 text-lg font-bold">
+                    <Timer className={`w-5 h-5 ${finalVoteTimer <= 10 ? 'text-destructive animate-pulse' : 'text-primary'}`} />
+                    <span className={finalVoteTimer <= 10 ? 'text-destructive' : ''}>
+                      {Math.floor(finalVoteTimer / 60)}:{(finalVoteTimer % 60).toString().padStart(2, '0')}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  {likedRestaurants.slice(-5).reverse().map((restaurant, index) => (
+                    <motion.div
+                      key={restaurant.id}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: index * 0.1 }}
+                    >
+                      <Card 
+                        className="overflow-hidden hover-elevate cursor-pointer"
+                        onClick={() => selectFinalChoice(restaurant)}
+                        data-testid={`card-final-vote-${restaurant.id}`}
+                      >
+                        <div className="flex items-center gap-3 p-3">
+                          <div 
+                            className="w-16 h-16 rounded-lg bg-cover bg-center shrink-0"
+                            style={{ backgroundImage: `url(${restaurant.imageUrl})` }}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="font-bold truncate">{restaurant.name}</div>
+                            <div className="text-sm text-muted-foreground flex items-center gap-2">
+                              <span>{restaurant.cuisine}</span>
+                              <span>{restaurant.priceRange}</span>
+                            </div>
+                            <div className="text-sm flex items-center gap-1 text-yellow-500">
+                              <Flame className="w-3 h-3" />
+                              <span>{restaurant.rating}</span>
+                            </div>
+                          </div>
+                          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary">
+                            #{index + 1}
+                          </div>
+                        </div>
+                      </Card>
+                    </motion.div>
+                  ))}
+                </div>
+
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full mt-4 text-muted-foreground"
+                  onClick={() => setShowFinalVote(false)}
+                  data-testid="button-close-final-vote"
+                >
+                  Keep swiping
+                </Button>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </main>
     </div>
   );

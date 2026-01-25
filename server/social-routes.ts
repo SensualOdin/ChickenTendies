@@ -629,6 +629,31 @@ export function registerSocialRoutes(app: Express): void {
     }
   });
 
+  app.get("/api/crews/:id/visited-restaurants", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const groupId = req.params.id;
+      
+      const sessions = await db
+        .select({
+          visitedRestaurantId: diningSessions.visitedRestaurantId,
+          visitedRestaurantData: diningSessions.visitedRestaurantData,
+          visitedAt: diningSessions.visitedAt,
+        })
+        .from(diningSessions)
+        .where(
+          and(
+            eq(diningSessions.groupId, groupId),
+            sql`${diningSessions.visitedRestaurantId} IS NOT NULL`
+          )
+        );
+      
+      res.json(sessions);
+    } catch (error) {
+      console.error("Error fetching visited restaurants:", error);
+      res.status(500).json({ message: "Failed to fetch visited restaurants" });
+    }
+  });
+
   app.post("/api/sessions/:id/swipe", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = getUserId(req);
@@ -747,6 +772,98 @@ export function registerSocialRoutes(app: Express): void {
     } catch (error) {
       console.error("Error fetching matches:", error);
       res.status(500).json({ message: "Failed to fetch matches" });
+    }
+  });
+
+  app.post("/api/sessions/:id/visited", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const sessionId = req.params.id;
+      const userId = getUserId(req);
+      const { restaurantId, restaurantData } = req.body;
+      
+      if (!restaurantId) {
+        return res.status(400).json({ message: "Restaurant ID is required" });
+      }
+      
+      const [session] = await db
+        .select()
+        .from(diningSessions)
+        .where(eq(diningSessions.id, sessionId));
+      
+      if (!session) {
+        return res.status(404).json({ message: "Session not found" });
+      }
+      
+      const [group] = await db
+        .select()
+        .from(persistentGroups)
+        .where(eq(persistentGroups.id, session.groupId));
+      
+      if (!group) {
+        return res.status(404).json({ message: "Group not found" });
+      }
+      
+      const isMember = group.ownerId === userId || group.memberIds.includes(userId);
+      if (!isMember) {
+        return res.status(403).json({ message: "Not authorized to update this session" });
+      }
+      
+      const [updated] = await db
+        .update(diningSessions)
+        .set({
+          visitedRestaurantId: restaurantId,
+          visitedRestaurantData: restaurantData || null,
+          visitedAt: new Date(),
+        })
+        .where(eq(diningSessions.id, sessionId))
+        .returning();
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error logging restaurant visit:", error);
+      res.status(500).json({ message: "Failed to log visit" });
+    }
+  });
+
+  // Get all visited restaurants for the current user across all their crews
+  app.get("/api/sessions/visited-restaurants", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      
+      // Get all crews the user is a member of
+      const userCrewMemberships = await db
+        .select({ crewId: crewMembers.crewId })
+        .from(crewMembers)
+        .where(eq(crewMembers.userId, userId));
+      
+      const crewIds = userCrewMemberships.map(m => m.crewId);
+      
+      if (crewIds.length === 0) {
+        res.json({ restaurantIds: [] });
+        return;
+      }
+      
+      // Get all sessions for those crews that have visited restaurants
+      const visitedSessions = await db
+        .select({
+          visitedRestaurantId: diningSessions.visitedRestaurantId,
+        })
+        .from(diningSessions)
+        .where(
+          and(
+            inArray(diningSessions.crewId, crewIds),
+            sql`${diningSessions.visitedRestaurantId} IS NOT NULL`
+          )
+        );
+      
+      const restaurantIds = visitedSessions
+        .map(s => s.visitedRestaurantId)
+        .filter((id): id is string => id !== null);
+      
+      res.json({ restaurantIds });
+    } catch (error) {
+      console.error("Error fetching visited restaurants:", error);
+      res.status(500).json({ message: "Failed to fetch visited restaurants" });
     }
   });
 

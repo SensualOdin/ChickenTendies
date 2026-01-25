@@ -5,8 +5,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Home, Flame, Loader2, Star, MapPin, ExternalLink, Heart, PartyPopper, Trophy, Sparkles, RefreshCw, CalendarPlus } from "lucide-react";
+import { Home, Flame, Loader2, Star, MapPin, ExternalLink, Heart, PartyPopper, Trophy, Sparkles, RefreshCw, CalendarPlus, Phone, Check } from "lucide-react";
 import { motion } from "framer-motion";
+import { useState } from "react";
+import { useToast } from "@/hooks/use-toast";
 import type { Group, Restaurant } from "@shared/schema";
 
 function generateCalendarUrl(restaurant: Restaurant, groupName: string) {
@@ -36,6 +38,8 @@ function generateCalendarUrl(restaurant: Restaurant, groupName: string) {
 export default function MatchesPage() {
   const params = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const [visitedRestaurantId, setVisitedRestaurantId] = useState<string | null>(null);
 
   const { data: group, isLoading: groupLoading } = useQuery<Group>({
     queryKey: ["/api/groups", params.id],
@@ -183,20 +187,20 @@ export default function MatchesPage() {
                           <MapPin className="w-3 h-3 mr-1" />
                           Let's Go!
                         </Button>
-                        <Button 
-                          size="sm" 
-                          variant="outline" 
-                          className="text-xs" 
-                          data-testid={`button-website-${restaurant.id}`}
-                          onClick={() => {
-                            if (restaurant.yelpUrl) {
+                        {restaurant.yelpUrl && (
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            className="text-xs" 
+                            data-testid={`button-reserve-${restaurant.id}`}
+                            onClick={() => {
                               window.open(restaurant.yelpUrl, '_blank');
-                            }
-                          }}
-                        >
-                          <ExternalLink className="w-3 h-3 mr-1" />
-                          Menu
-                        </Button>
+                            }}
+                          >
+                            <Phone className="w-3 h-3 mr-1" />
+                            Reserve
+                          </Button>
+                        )}
                         <Button 
                           size="sm" 
                           variant="outline" 
@@ -207,7 +211,29 @@ export default function MatchesPage() {
                           }}
                         >
                           <CalendarPlus className="w-3 h-3 mr-1" />
-                          Add to Calendar
+                          Calendar
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant={visitedRestaurantId === restaurant.id ? "default" : "outline"}
+                          className="text-xs" 
+                          data-testid={`button-visited-${restaurant.id}`}
+                          onClick={() => {
+                            setVisitedRestaurantId(restaurant.id);
+                            toast({ 
+                              title: "Logged!", 
+                              description: `Marked "${restaurant.name}" as your destination!` 
+                            });
+                          }}
+                        >
+                          {visitedRestaurantId === restaurant.id ? (
+                            <>
+                              <Check className="w-3 h-3 mr-1" />
+                              Going here!
+                            </>
+                          ) : (
+                            "We went here"
+                          )}
                         </Button>
                       </div>
                     </CardContent>
