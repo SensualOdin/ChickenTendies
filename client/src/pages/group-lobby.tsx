@@ -194,13 +194,15 @@ export default function GroupLobby() {
   const shareCode = useCallback(async () => {
     if (!group) return;
     
-    const shareMessage = `Swipe right on dinner! Join my party on ChickenTinders with code: ${group.code}`;
+    const joinUrl = `${window.location.origin}/join?code=${group.code}`;
+    const shareMessage = `Swipe right on dinner! Join my party on ChickenTinders: ${joinUrl}`;
     
     if (navigator.share) {
       try {
         await navigator.share({
           title: "Join my ChickenTinders dinner search!",
           text: shareMessage,
+          url: joinUrl,
         });
       } catch (err) {
         if ((err as Error).name !== "AbortError") {

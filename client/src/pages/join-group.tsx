@@ -1,4 +1,4 @@
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
@@ -13,18 +13,28 @@ import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Flame, Loader2, Ticket, User } from "lucide-react";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
+import { useEffect } from "react";
 
 export default function JoinGroupPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const searchString = useSearch();
+  const urlParams = new URLSearchParams(searchString);
+  const codeFromUrl = (urlParams.get("code") || "").toUpperCase().slice(0, 6);
 
   const form = useForm<JoinGroup>({
     resolver: zodResolver(joinGroupSchema),
     defaultValues: {
-      code: "",
+      code: codeFromUrl,
       memberName: "",
     },
   });
+
+  useEffect(() => {
+    if (codeFromUrl) {
+      form.setValue("code", codeFromUrl);
+    }
+  }, [codeFromUrl, form]);
 
   const joinMutation = useMutation({
     mutationFn: async (data: JoinGroup) => {

@@ -111,13 +111,15 @@ export default function CrewManage() {
   const shareInviteCode = async () => {
     if (!crew) return;
     
-    const shareMessage = `Join my crew "${crew.name}" on ChickenTinders! Use code: ${crew.inviteCode}`;
+    const joinUrl = `${window.location.origin}/join?code=${crew.inviteCode}`;
+    const shareMessage = `Join my crew "${crew.name}" on ChickenTinders: ${joinUrl}`;
     
     if (navigator.share) {
       try {
         await navigator.share({
           title: "Join my ChickenTinders crew!",
           text: shareMessage,
+          url: joinUrl,
         });
       } catch (err) {
         if ((err as Error).name !== "AbortError") {
