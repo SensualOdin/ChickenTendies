@@ -205,7 +205,7 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background safe-top safe-x">
       <header className="flex items-center justify-between p-4 md:p-6 border-b">
         <Link href="/" className="flex items-center gap-2">
           <img src={logoImage} alt="ChickenTinders" className="w-10 h-10 rounded-xl object-cover shadow-lg shadow-primary/30" />
@@ -216,7 +216,7 @@ export default function Dashboard() {
             <span className="text-xs text-muted-foreground hidden sm:block">Swipe Together, Dine Together</span>
           </div>
         </Link>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-3">
           <div className="relative">
             <Button variant="ghost" size="icon" data-testid="button-notifications">
               <Bell className="w-5 h-5" />
@@ -236,11 +236,6 @@ export default function Dashboard() {
             </Avatar>
           </Link>
           <span className="hidden sm:inline font-medium">{user.firstName || user.email}</span>
-          <Link href="/profile">
-            <Button variant="ghost" size="icon" data-testid="button-profile">
-              <User className="w-5 h-5" />
-            </Button>
-          </Link>
           <Button variant="ghost" size="icon" onClick={() => logout()} data-testid="button-logout">
             <LogOut className="w-5 h-5" />
           </Button>
@@ -248,55 +243,55 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <main className="p-4 md:p-6 max-w-6xl mx-auto">
+      <main className="p-4 md:p-6 max-w-6xl mx-auto safe-bottom">
         <motion.div
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           className="mb-8"
         >
-          <h1 className="text-3xl font-bold mb-2">Welcome back, {user.firstName || "Chef"}!</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold mb-2">Welcome back, {user.firstName || "Chef"}!</h1>
           <p className="text-muted-foreground">Ready to find where to eat tonight?</p>
         </motion.div>
 
-        <div className="grid lg:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-8">
           <Card className="hover-elevate cursor-pointer" onClick={() => navigate("/create")} data-testid="card-quick-start">
-            <CardContent className="p-6 flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-orange-500 flex items-center justify-center">
+            <CardContent className="p-4 sm:p-6 flex items-center gap-4">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-primary to-orange-500 flex items-center justify-center">
                 <Play className="w-6 h-6 text-primary-foreground" />
               </div>
               <div>
-                <h3 className="font-bold">Quick Start</h3>
-                <p className="text-sm text-muted-foreground">Start a new dining session</p>
+                <h3 className="font-bold text-sm sm:text-base">Quick Start</h3>
+                <p className="text-sm text-muted-foreground hidden sm:block">Start a new dining session</p>
               </div>
-              <ArrowRight className="w-5 h-5 ml-auto text-muted-foreground" />
+              <ArrowRight className="w-5 h-5 ml-auto text-muted-foreground hidden sm:block" />
             </CardContent>
           </Card>
 
           <Card className="hover-elevate cursor-pointer" onClick={() => navigate("/join")} data-testid="card-join-party">
-            <CardContent className="p-6 flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-accent to-emerald-500 flex items-center justify-center">
+            <CardContent className="p-4 sm:p-6 flex items-center gap-4">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-accent to-emerald-500 flex items-center justify-center">
                 <Users className="w-6 h-6 text-accent-foreground" />
               </div>
               <div>
-                <h3 className="font-bold">Join a Party</h3>
-                <p className="text-sm text-muted-foreground">Enter a group code</p>
+                <h3 className="font-bold text-sm sm:text-base">Join a Party</h3>
+                <p className="text-sm text-muted-foreground hidden sm:block">Enter a group code</p>
               </div>
-              <ArrowRight className="w-5 h-5 ml-auto text-muted-foreground" />
+              <ArrowRight className="w-5 h-5 ml-auto text-muted-foreground hidden sm:block" />
             </CardContent>
           </Card>
 
           <Dialog open={isCreateCrewOpen} onOpenChange={setIsCreateCrewOpen}>
             <DialogTrigger asChild>
               <Card className="hover-elevate cursor-pointer" data-testid="card-create-crew">
-                <CardContent className="p-6 flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-yellow-500 to-orange-500 flex items-center justify-center">
+                <CardContent className="p-4 sm:p-6 flex items-center gap-4">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-yellow-500 to-orange-500 flex items-center justify-center">
                     <Plus className="w-6 h-6 text-white" />
                   </div>
                   <div>
-                    <h3 className="font-bold">Create a Crew</h3>
-                    <p className="text-sm text-muted-foreground">Start a persistent group</p>
+                    <h3 className="font-bold text-sm sm:text-base">Create a Crew</h3>
+                    <p className="text-sm text-muted-foreground hidden sm:block">Start a persistent group</p>
                   </div>
-                  <ArrowRight className="w-5 h-5 ml-auto text-muted-foreground" />
+                  <ArrowRight className="w-5 h-5 ml-auto text-muted-foreground hidden sm:block" />
                 </CardContent>
               </Card>
             </DialogTrigger>
@@ -328,15 +323,15 @@ export default function Dashboard() {
           <Dialog open={isJoinCrewOpen} onOpenChange={setIsJoinCrewOpen}>
             <DialogTrigger asChild>
               <Card className="hover-elevate cursor-pointer" data-testid="card-join-crew">
-                <CardContent className="p-6 flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
+                <CardContent className="p-4 sm:p-6 flex items-center gap-4">
+                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
                     <UserPlus className="w-6 h-6 text-white" />
                   </div>
                   <div>
-                    <h3 className="font-bold">Join a Crew</h3>
-                    <p className="text-sm text-muted-foreground">Enter an invite code</p>
+                    <h3 className="font-bold text-sm sm:text-base">Join a Crew</h3>
+                    <p className="text-sm text-muted-foreground hidden sm:block">Enter an invite code</p>
                   </div>
-                  <ArrowRight className="w-5 h-5 ml-auto text-muted-foreground" />
+                  <ArrowRight className="w-5 h-5 ml-auto text-muted-foreground hidden sm:block" />
                 </CardContent>
               </Card>
             </DialogTrigger>

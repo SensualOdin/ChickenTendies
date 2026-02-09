@@ -291,7 +291,7 @@ export default function GroupLobby() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background safe-top safe-x">
       <header className="flex items-center justify-between p-4 md:p-6">
         <Link href="/">
           <Button variant="ghost" size="icon" data-testid="button-back">
@@ -310,7 +310,7 @@ export default function GroupLobby() {
         <ThemeToggle />
       </header>
 
-      <main className="px-4 md:px-6 py-8 max-w-lg mx-auto space-y-6">
+      <main className="px-4 md:px-6 py-8 max-w-lg mx-auto space-y-6 safe-bottom">
         <motion.div
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}

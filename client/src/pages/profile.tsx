@@ -67,7 +67,7 @@ export default function ProfilePage() {
   if (!user) return null;
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background safe-top safe-x">
       <header className="flex items-center justify-between p-4 md:p-6 border-b">
         <div className="flex items-center gap-3">
           <Link href="/dashboard">
@@ -80,7 +80,7 @@ export default function ProfilePage() {
         <ThemeToggle />
       </header>
 
-      <main className="p-4 md:p-6 max-w-4xl mx-auto space-y-6">
+      <main className="p-4 md:p-6 max-w-4xl mx-auto space-y-6 safe-bottom">
         <motion.div
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}

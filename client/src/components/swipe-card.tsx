@@ -71,22 +71,22 @@ export function SwipeCard({ restaurant, onSwipe, isTop, visitedBefore = false }:
         </div>
 
         <motion.div
-          className="absolute top-8 left-8 z-10"
+          className="absolute top-4 left-4 sm:top-8 sm:left-8 z-10"
           style={{ opacity: nopeOpacity }}
         >
-          <div className="flex items-center gap-2 px-6 py-3 border-4 border-destructive rounded-xl rotate-[-20deg] bg-destructive/20 backdrop-blur-sm">
+          <div className="flex items-center gap-2 px-4 py-2 sm:px-6 sm:py-3 border-4 border-destructive rounded-xl rotate-[-20deg] bg-destructive/20 backdrop-blur-sm">
             <X className="w-8 h-8 text-destructive" />
-            <span className="text-3xl font-extrabold text-destructive">NOPE</span>
+            <span className="text-2xl sm:text-3xl font-extrabold text-destructive">NOPE</span>
           </div>
         </motion.div>
 
         <motion.div
-          className="absolute top-8 right-8 z-10"
+          className="absolute top-4 right-4 sm:top-8 sm:right-8 z-10"
           style={{ opacity: likeOpacity }}
         >
-          <div className="flex items-center gap-2 px-6 py-3 border-4 border-accent rounded-xl rotate-[20deg] bg-accent/20 backdrop-blur-sm">
+          <div className="flex items-center gap-2 px-4 py-2 sm:px-6 sm:py-3 border-4 border-accent rounded-xl rotate-[20deg] bg-accent/20 backdrop-blur-sm">
             <Flame className="w-8 h-8 text-accent" />
-            <span className="text-3xl font-extrabold text-accent">YUM!</span>
+            <span className="text-2xl sm:text-3xl font-extrabold text-accent">YUM!</span>
           </div>
         </motion.div>
 
@@ -94,9 +94,9 @@ export function SwipeCard({ restaurant, onSwipe, isTop, visitedBefore = false }:
           className="absolute top-1/3 left-1/2 -translate-x-1/2 z-10"
           style={{ opacity: superLikeOpacity }}
         >
-          <div className="flex items-center gap-2 px-6 py-3 border-4 border-yellow-400 rounded-xl bg-yellow-400/20 backdrop-blur-sm">
+          <div className="flex items-center gap-2 px-4 py-2 sm:px-6 sm:py-3 border-4 border-yellow-400 rounded-xl bg-yellow-400/20 backdrop-blur-sm">
             <Sparkles className="w-8 h-8 text-yellow-400" />
-            <span className="text-3xl font-extrabold text-yellow-400">SUPER!</span>
+            <span className="text-2xl sm:text-3xl font-extrabold text-yellow-400">SUPER!</span>
           </div>
         </motion.div>
 
@@ -109,7 +109,7 @@ export function SwipeCard({ restaurant, onSwipe, isTop, visitedBefore = false }:
           </div>
         )}
 
-        <div className="absolute bottom-0 left-0 right-0 p-6 text-white">
+        <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-6 text-white">
           <div className="flex flex-wrap items-center gap-2 mb-2">
             <Badge className="bg-white/20 backdrop-blur-sm text-white border-0 font-semibold">
               {restaurant.cuisine}
@@ -151,7 +151,7 @@ export function SwipeCard({ restaurant, onSwipe, isTop, visitedBefore = false }:
             </div>
           )}
 
-          <h2 className="text-3xl font-extrabold mb-2" data-testid="text-restaurant-name">
+          <h2 className="text-2xl sm:text-3xl font-extrabold mb-2" data-testid="text-restaurant-name">
             {restaurant.name}
           </h2>
 
@@ -190,7 +190,7 @@ export function SwipeButtons({
   disabled?: boolean;
 }) {
   return (
-    <div className="flex items-center justify-center gap-4 mt-6">
+    <div className="flex items-center justify-center gap-3 sm:gap-4 mt-4 sm:mt-6">
       <motion.button
         onClick={() => onSwipe("dislike")}
         disabled={disabled}

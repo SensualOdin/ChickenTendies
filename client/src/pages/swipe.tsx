@@ -353,7 +353,7 @@ export default function SwipePage() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col relative">
+    <div className="h-[100dvh] bg-background flex flex-col relative safe-top safe-x">
       <AnimatePresence>
         {showMatchCelebration && latestMatch && (
           <motion.div
@@ -492,7 +492,7 @@ export default function SwipePage() {
         </motion.div>
       )}
 
-      <main className="flex-1 px-4 md:px-6 py-6 flex flex-col">
+      <main className="flex-1 px-4 md:px-6 py-3 sm:py-6 flex flex-col safe-bottom">
         {isComplete ? (
           <motion.div 
             className="flex-1 flex items-center justify-center"
@@ -550,7 +550,7 @@ export default function SwipePage() {
           </motion.div>
         ) : (
           <>
-            <div className="flex-1 relative max-w-md mx-auto w-full" style={{ minHeight: "400px" }}>
+            <div className="flex-1 relative max-w-md mx-auto w-full" style={{ minHeight: "min(400px, 55dvh)" }}>
               {nextRestaurant && (
                 <SwipeCard
                   key={nextRestaurant.id}
@@ -650,7 +650,7 @@ export default function SwipePage() {
                 disabled={swipeMutation.isPending || isComplete}
               />
 
-              <div className="flex justify-center gap-1 mt-6">
+              <div className="flex justify-center gap-1 mt-3 sm:mt-6">
                 {restaurants.slice(0, 10).map((_, i) => (
                   <motion.div
                     key={i}
@@ -674,7 +674,7 @@ export default function SwipePage() {
 
               {likedRestaurants.length >= 3 && (
                 <motion.div 
-                  className="mt-6"
+                  className="mt-3 sm:mt-6"
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                 >

@@ -45,6 +45,7 @@ Preferred communication style: Simple, everyday language.
 - **Smart Exclusions**: "Been here before" badges show on swipe cards for previously visited restaurants
 - **Visit Tracking**: "We Went Here" logging in dining sessions to track actual restaurant visits
 - **Reservation Integration**: Direct links to Yelp reservation pages from match cards
+- **Mobile-First PWA**: Full Progressive Web App with viewport-fit=cover, safe area insets for notched phones (iPhone Dynamic Island), responsive text/spacing with sm: breakpoints, 100dvh swipe page, 2-column mobile dashboard grid, hidden decorative elements on small screens
 
 ### Build Process
 - **Development**: Vite dev server with HMR, Express backend via tsx

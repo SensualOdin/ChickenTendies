@@ -20,7 +20,7 @@ export default function Home() {
   const [, navigate] = useLocation();
 
   return (
-    <div className="min-h-screen bg-background overflow-hidden">
+    <div className="min-h-screen bg-background overflow-hidden safe-top safe-x">
       <header className="flex items-center justify-between p-4 md:p-6">
         <motion.div 
           className="flex items-center gap-2"
@@ -78,25 +78,25 @@ export default function Home() {
         </div>
       </header>
 
-      <main className="px-4 md:px-6 pb-12">
+      <main className="px-4 md:px-6 pb-12 safe-bottom">
         <div className="max-w-4xl mx-auto">
           <section className="text-center py-12 md:py-20 relative">
             <motion.div 
-              className="absolute -top-10 left-1/4 text-4xl"
+              className="absolute -top-10 left-1/4 text-4xl hidden sm:block"
               animate={{ y: [0, -10, 0], rotate: [0, 10, 0] }}
               transition={{ duration: 2, repeat: Infinity }}
             >
               🍗
             </motion.div>
             <motion.div 
-              className="absolute top-20 right-1/4 text-3xl"
+              className="absolute top-20 right-1/4 text-3xl hidden sm:block"
               animate={{ y: [0, 10, 0], rotate: [0, -10, 0] }}
               transition={{ duration: 2.5, repeat: Infinity, delay: 0.5 }}
             >
               🍕
             </motion.div>
             <motion.div 
-              className="absolute bottom-0 left-1/3 text-2xl"
+              className="absolute bottom-0 left-1/3 text-2xl hidden sm:block"
               animate={{ y: [0, -8, 0] }}
               transition={{ duration: 1.8, repeat: Infinity, delay: 0.3 }}
             >
@@ -115,7 +115,7 @@ export default function Home() {
             </motion.div>
 
             <motion.h1 
-              className="text-4xl md:text-6xl font-extrabold tracking-tight mb-6"
+              className="text-3xl sm:text-4xl md:text-6xl font-extrabold tracking-tight mb-6"
               initial={{ y: 30, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               transition={{ delay: 0.3 }}
@@ -128,7 +128,7 @@ export default function Home() {
             </motion.h1>
 
             <motion.p 
-              className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-10"
+              className="text-base sm:text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-10"
               initial={{ y: 30, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               transition={{ delay: 0.4 }}
@@ -144,14 +144,14 @@ export default function Home() {
               transition={{ delay: 0.5 }}
             >
               <Link href="/create">
-                <Button size="lg" className="w-full sm:w-auto text-lg px-8 bg-gradient-to-r from-primary to-orange-500 hover:from-primary/90 hover:to-orange-500/90 shadow-lg shadow-primary/30" data-testid="button-create-group">
+                <Button size="lg" className="w-full sm:w-auto text-base sm:text-lg px-6 sm:px-8 bg-gradient-to-r from-primary to-orange-500 hover:from-primary/90 hover:to-orange-500/90 shadow-lg shadow-primary/30" data-testid="button-create-group">
                   <PartyPopper className="w-5 h-5 mr-2" />
                   Start a Party
                   <ArrowRight className="w-5 h-5 ml-2" />
                 </Button>
               </Link>
               <Link href="/join">
-                <Button size="lg" variant="outline" className="w-full sm:w-auto text-lg px-8 border-2" data-testid="button-join-group">
+                <Button size="lg" variant="outline" className="w-full sm:w-auto text-base sm:text-lg px-6 sm:px-8 border-2" data-testid="button-join-group">
                   Join the Fun
                 </Button>
               </Link>
@@ -223,14 +223,14 @@ export default function Home() {
             <Card className="overflow-hidden bg-gradient-to-br from-primary/10 via-background to-accent/10 border-2 border-primary/20">
               <CardContent className="p-8 md:p-12 text-center relative">
                 <motion.div 
-                  className="absolute top-4 left-8 text-2xl"
+                  className="absolute top-4 left-8 text-2xl hidden sm:block"
                   animate={{ rotate: [0, 20, 0] }}
                   transition={{ duration: 2, repeat: Infinity }}
                 >
                   🎊
                 </motion.div>
                 <motion.div 
-                  className="absolute top-4 right-8 text-2xl"
+                  className="absolute top-4 right-8 text-2xl hidden sm:block"
                   animate={{ rotate: [0, -20, 0] }}
                   transition={{ duration: 2, repeat: Infinity, delay: 0.5 }}
                 >

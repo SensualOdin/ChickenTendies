@@ -268,7 +268,7 @@ export default function CrewManage() {
   const availableFriends = acceptedFriends.filter(f => !allMemberIds.includes(f.friendId));
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background safe-top safe-x">
       <header className="flex items-center gap-4 p-4 md:p-6 border-b">
         <Link href="/dashboard">
           <Button variant="ghost" size="icon" data-testid="button-back">
@@ -289,7 +289,7 @@ export default function CrewManage() {
         )}
       </header>
 
-      <main className="p-4 md:p-6 max-w-2xl mx-auto space-y-6">
+      <main className="p-4 md:p-6 max-w-2xl mx-auto space-y-6 safe-bottom">
         <motion.div
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}

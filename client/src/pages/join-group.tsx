@@ -50,7 +50,7 @@ export default function JoinGroupPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background safe-top safe-x">
       <header className="flex items-center justify-between p-4 md:p-6">
         <Link href="/">
           <Button variant="ghost" size="icon" data-testid="button-back">
@@ -69,7 +69,7 @@ export default function JoinGroupPage() {
         <ThemeToggle />
       </header>
 
-      <main className="px-4 md:px-6 py-8 max-w-md mx-auto">
+      <main className="px-4 md:px-6 py-8 max-w-md mx-auto safe-bottom">
         <motion.div
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}

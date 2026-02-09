@@ -165,7 +165,7 @@ export default function Preferences() {
   const radius = form.watch("radius");
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background safe-top safe-x">
       <header className="flex items-center justify-between p-4 md:p-6">
         <Link href={`/group/${params.id}`}>
           <Button variant="ghost" size="icon" data-testid="button-back">
@@ -181,7 +181,7 @@ export default function Preferences() {
         <ThemeToggle />
       </header>
 
-      <main className="px-4 md:px-6 py-8 max-w-lg mx-auto">
+      <main className="px-4 md:px-6 py-8 max-w-lg mx-auto safe-bottom">
         <motion.div
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}

@@ -78,7 +78,7 @@ export default function MatchesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background safe-top safe-x">
       <header className="flex items-center justify-between p-4 md:p-6">
         <div className="flex items-center gap-2">
           <Link href="/">
@@ -97,7 +97,7 @@ export default function MatchesPage() {
         <ThemeToggle />
       </header>
 
-      <main className="px-4 md:px-6 py-6 max-w-2xl mx-auto">
+      <main className="px-4 md:px-6 py-6 max-w-2xl mx-auto safe-bottom">
         <motion.div 
           className="text-center mb-8"
           initial={{ y: 20, opacity: 0 }}
@@ -172,7 +172,7 @@ export default function MatchesPage() {
                         {restaurant.description}
                       </p>
 
-                      <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                         <Button 
                           size="sm" 
                           className="bg-gradient-to-r from-primary to-orange-500 text-xs" 
