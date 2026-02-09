@@ -15,6 +15,7 @@ import MatchesPage from "@/pages/matches";
 import ProfilePage from "@/pages/profile";
 import CrewManage from "@/pages/crew-manage";
 import NotFound from "@/pages/not-found";
+import { PWAInstallPrompt } from "@/components/pwa-install-prompt";
 
 function Router() {
   return (
@@ -41,6 +42,7 @@ function App() {
         <TooltipProvider>
           <Toaster />
           <Router />
+          <PWAInstallPrompt />
         </TooltipProvider>
       </QueryClientProvider>
     </ThemeProvider>
