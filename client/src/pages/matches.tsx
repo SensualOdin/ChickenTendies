@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Home, Flame, Loader2, Star, MapPin, ExternalLink, Heart, PartyPopper, Trophy, Sparkles, RefreshCw, CalendarPlus, Phone, Check } from "lucide-react";
+import { Home, Flame, Loader2, Star, MapPin, ExternalLink, Heart, PartyPopper, Trophy, Sparkles, RefreshCw, CalendarPlus, Phone, Check, Truck } from "lucide-react";
 import { motion } from "framer-motion";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -186,6 +186,19 @@ export default function MatchesPage() {
                         >
                           <MapPin className="w-3 h-3 mr-1" />
                           Let's Go!
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-xs"
+                          data-testid={`button-doordash-${restaurant.id}`}
+                          onClick={() => {
+                            const query = encodeURIComponent(restaurant.name);
+                            window.open(`https://www.doordash.com/search/store/${query}/`, '_blank');
+                          }}
+                        >
+                          <Truck className="w-3 h-3 mr-1" />
+                          DoorDash
                         </Button>
                         {restaurant.yelpUrl && (
                           <Button 
