@@ -26,7 +26,7 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { ArrowLeft, Crown, UserMinus, UserPlus, Trash2, LogOut, History, Users, Copy, Check, Share2, Send, ChevronDown, ChevronUp, MapPin, Utensils } from "lucide-react";
+import { ArrowLeft, Crown, UserMinus, UserPlus, Trash2, LogOut, History, Users, Copy, Check, Share2, Send, ChevronDown, ChevronUp, MapPin, Utensils, Play, Zap } from "lucide-react";
 import { motion } from "framer-motion";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -63,6 +63,8 @@ interface Friend {
 interface DiningSession {
   id: string;
   groupId: string;
+  status?: string;
+  createdById?: string;
   matchedRestaurantId?: string;
   startedAt: string;
   endedAt?: string;
@@ -147,6 +149,7 @@ export default function CrewManage() {
   const { data: sessions = [] } = useQuery<DiningSession[]>({
     queryKey: ["/api/crews", params.id, "sessions"],
     enabled: isAuthenticated && !!params.id,
+    refetchInterval: 10000,
   });
 
   const { data: sessionMatches = [] } = useQuery<SessionMatch[]>({
@@ -269,6 +272,7 @@ export default function CrewManage() {
   const acceptedFriends = friends.filter(f => f.status === "accepted");
   const allMemberIds = [crew.ownerId, ...crew.memberIds];
   const availableFriends = acceptedFriends.filter(f => !allMemberIds.includes(f.friendId));
+  const activeSessions = sessions.filter(s => s.status === "active" || (!s.endedAt && !s.status));
 
   return (
     <div className="min-h-screen bg-background safe-top safe-x">
@@ -337,6 +341,36 @@ export default function CrewManage() {
             </CardContent>
           </Card>
         </motion.div>
+
+        {activeSessions.length > 0 && (
+          <motion.div
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.05 }}
+          >
+            <Card className="border-primary/30 bg-primary/5">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center flex-shrink-0">
+                    <Zap className="w-5 h-5 text-primary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold">Active Session</p>
+                    <p className="text-sm text-muted-foreground">
+                      Started {new Date(activeSessions[0].startedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                    </p>
+                  </div>
+                  <Link href={`/group/${activeSessions[0].groupId}`}>
+                    <Button data-testid="button-join-active-session">
+                      <Play className="w-4 h-4 mr-2" />
+                      Join
+                    </Button>
+                  </Link>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
 
         <motion.div
           initial={{ y: 20, opacity: 0 }}
@@ -503,9 +537,18 @@ export default function CrewManage() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <Badge variant={session.visitedRestaurantId ? "default" : "secondary"}>
-                            {session.visitedRestaurantId ? "Visited" : session.endedAt ? "Completed" : "Active"}
-                          </Badge>
+                          {session.status === "active" || (!session.endedAt && !session.status) ? (
+                            <Link href={`/group/${session.groupId}`}>
+                              <Button size="sm" data-testid={`button-join-session-${session.id}`}>
+                                <Play className="w-3 h-3 mr-1" />
+                                Join
+                              </Button>
+                            </Link>
+                          ) : (
+                            <Badge variant={session.visitedRestaurantId ? "default" : "secondary"}>
+                              {session.visitedRestaurantId ? "Visited" : "Completed"}
+                            </Badge>
+                          )}
                           {session.matchedRestaurantId && !session.visitedRestaurantId && (
                             expandedSessionId === session.id ? 
                               <ChevronUp className="w-4 h-4 text-muted-foreground" /> : 

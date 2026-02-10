@@ -563,7 +563,7 @@ export function registerSocialRoutes(app: Express): void {
       sendPushToUsers(memberIds, {
         title: "New dining session!",
         body: `Someone started a new session in "${group.name}" - join the hunt!`,
-        url: "/dashboard",
+        url: `/group/${group.id}`,
         data: { sessionId: session.id, groupId: group.id },
       });
       
