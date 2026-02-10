@@ -899,6 +899,22 @@ export function registerSocialRoutes(app: Express): void {
     }
   });
 
+  app.post("/api/notifications/read-all", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      
+      await db
+        .update(notifications)
+        .set({ read: true })
+        .where(eq(notifications.userId, userId));
+      
+      res.json({ message: "All notifications marked as read" });
+    } catch (error) {
+      console.error("Error marking all notifications as read:", error);
+      res.status(500).json({ message: "Failed to update notifications" });
+    }
+  });
+
   app.post("/api/notifications/:id/read", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = getUserId(req);
@@ -918,22 +934,6 @@ export function registerSocialRoutes(app: Express): void {
     } catch (error) {
       console.error("Error marking notification as read:", error);
       res.status(500).json({ message: "Failed to update notification" });
-    }
-  });
-
-  app.post("/api/notifications/read-all", isAuthenticated, async (req: Request, res: Response) => {
-    try {
-      const userId = getUserId(req);
-      
-      await db
-        .update(notifications)
-        .set({ read: true })
-        .where(eq(notifications.userId, userId));
-      
-      res.json({ message: "All notifications marked as read" });
-    } catch (error) {
-      console.error("Error marking all notifications as read:", error);
-      res.status(500).json({ message: "Failed to update notifications" });
     }
   });
 
