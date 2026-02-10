@@ -490,6 +490,20 @@ export function registerSocialRoutes(app: Express): void {
         return res.status(403).json({ message: "Only the owner can delete the crew" });
       }
       
+      const sessions = await db
+        .select({ id: diningSessions.id })
+        .from(diningSessions)
+        .where(eq(diningSessions.groupId, groupId));
+      
+      const sessionIds = sessions.map(s => s.id);
+      
+      if (sessionIds.length > 0) {
+        await db.delete(sessionSwipes).where(inArray(sessionSwipes.sessionId, sessionIds));
+        await db.delete(sessionMatches).where(inArray(sessionMatches.sessionId, sessionIds));
+      }
+      
+      await db.delete(diningSessions).where(eq(diningSessions.groupId, groupId));
+      await db.delete(diningHistory).where(eq(diningHistory.groupId, groupId));
       await db
         .delete(persistentGroups)
         .where(eq(persistentGroups.id, groupId));
