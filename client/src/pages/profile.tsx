@@ -1,16 +1,21 @@
+import { useState } from "react";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
 import { 
   Trophy, Sparkles, Users, Flame, Award, 
   MapPin, Utensils, Heart, ArrowLeft, Star,
-  Lock
+  Lock, Pencil, Check, X
 } from "lucide-react";
 
 interface Stats {
@@ -49,6 +54,10 @@ const iconMap: Record<string, typeof Trophy> = {
 
 export default function ProfilePage() {
   const { user } = useAuth();
+  const { toast } = useToast();
+  const [isEditing, setIsEditing] = useState(false);
+  const [editFirstName, setEditFirstName] = useState("");
+  const [editLastName, setEditLastName] = useState("");
 
   const { data: stats } = useQuery<Stats>({
     queryKey: ["/api/stats"],
@@ -62,9 +71,48 @@ export default function ProfilePage() {
     queryKey: ["/api/achievements/available"],
   });
 
+  const updateProfileMutation = useMutation({
+    mutationFn: async (data: { firstName: string; lastName: string }) => {
+      const res = await apiRequest("PATCH", "/api/auth/profile", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      setIsEditing(false);
+      toast({ title: "Profile updated" });
+    },
+    onError: (error: Error) => {
+      toast({ title: error.message || "Failed to update profile", variant: "destructive" });
+    },
+  });
+
   const unlockedTypes = new Set(achievements.map(a => a.achievementType));
 
+  const startEditing = () => {
+    setEditFirstName(user?.firstName || "");
+    setEditLastName(user?.lastName || "");
+    setIsEditing(true);
+  };
+
+  const cancelEditing = () => {
+    setIsEditing(false);
+  };
+
+  const saveProfile = () => {
+    if (!editFirstName.trim()) {
+      toast({ title: "First name is required", variant: "destructive" });
+      return;
+    }
+    updateProfileMutation.mutate({
+      firstName: editFirstName.trim(),
+      lastName: editLastName.trim(),
+    });
+  };
+
   if (!user) return null;
+
+  const displayName = [user.firstName, user.lastName].filter(Boolean).join(" ");
+  const hasName = !!user.firstName;
 
   return (
     <div className="min-h-screen bg-background safe-top safe-x">
@@ -87,20 +135,92 @@ export default function ProfilePage() {
         >
           <Card>
             <CardContent className="p-6">
-              <div className="flex items-center gap-4">
-                <Avatar className="w-20 h-20">
-                  <AvatarImage src={user.profileImageUrl || undefined} />
-                  <AvatarFallback className="text-2xl">
-                    {user.firstName?.[0] || user.email?.[0]?.toUpperCase() || "U"}
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <h2 className="text-2xl font-bold">
-                    {user.firstName} {user.lastName}
-                  </h2>
-                  <p className="text-muted-foreground">{user.email}</p>
+              {isEditing ? (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-4 mb-2">
+                    <Avatar className="w-20 h-20">
+                      <AvatarImage src={user.profileImageUrl || undefined} />
+                      <AvatarFallback className="text-2xl">
+                        {editFirstName?.[0]?.toUpperCase() || user.email?.[0]?.toUpperCase() || "U"}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1">
+                      <h2 className="text-lg font-semibold mb-1">Edit Display Name</h2>
+                      <p className="text-sm text-muted-foreground">{user.email}</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="firstName">First Name</Label>
+                      <Input
+                        id="firstName"
+                        data-testid="input-first-name"
+                        value={editFirstName}
+                        onChange={(e) => setEditFirstName(e.target.value)}
+                        placeholder="Your first name"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="lastName">Last Name</Label>
+                      <Input
+                        id="lastName"
+                        data-testid="input-last-name"
+                        value={editLastName}
+                        onChange={(e) => setEditLastName(e.target.value)}
+                        placeholder="Your last name (optional)"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Button
+                      onClick={saveProfile}
+                      disabled={updateProfileMutation.isPending || !editFirstName.trim()}
+                      data-testid="button-save-profile"
+                    >
+                      <Check className="w-4 h-4 mr-2" />
+                      {updateProfileMutation.isPending ? "Saving..." : "Save"}
+                    </Button>
+                    <Button variant="ghost" onClick={cancelEditing} data-testid="button-cancel-edit">
+                      <X className="w-4 h-4 mr-2" />
+                      Cancel
+                    </Button>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="flex items-center gap-4">
+                  <Avatar className="w-20 h-20">
+                    <AvatarImage src={user.profileImageUrl || undefined} />
+                    <AvatarFallback className="text-2xl">
+                      {user.firstName?.[0] || user.email?.[0]?.toUpperCase() || "U"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h2 className="text-2xl font-bold" data-testid="text-display-name">
+                        {hasName ? displayName : (user.email || "User")}
+                      </h2>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={startEditing}
+                        data-testid="button-edit-profile"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    <p className="text-muted-foreground truncate">{user.email}</p>
+                    {!hasName && (
+                      <button
+                        onClick={startEditing}
+                        className="text-sm text-primary mt-1 underline underline-offset-2"
+                        data-testid="button-set-name-prompt"
+                      >
+                        Set your display name
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         </motion.div>

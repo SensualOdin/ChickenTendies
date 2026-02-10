@@ -7,6 +7,7 @@ import { eq } from "drizzle-orm";
 export interface IAuthStorage {
   getUser(id: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
+  updateProfile(id: string, data: { firstName: string; lastName: string }): Promise<User>;
 }
 
 class AuthStorage implements IAuthStorage {
@@ -16,16 +17,31 @@ class AuthStorage implements IAuthStorage {
   }
 
   async upsertUser(userData: UpsertUser): Promise<User> {
+    const updateData: Record<string, any> = { updatedAt: new Date() };
+    if (userData.email) updateData.email = userData.email;
+    if (userData.firstName) updateData.firstName = userData.firstName;
+    if (userData.lastName) updateData.lastName = userData.lastName;
+    if (userData.profileImageUrl) updateData.profileImageUrl = userData.profileImageUrl;
+
     const [user] = await db
       .insert(users)
       .values(userData)
       .onConflictDoUpdate({
         target: users.id,
-        set: {
-          ...userData,
-          updatedAt: new Date(),
-        },
+        set: updateData,
       })
+      .returning();
+    return user;
+  }
+  async updateProfile(id: string, data: { firstName: string; lastName: string }): Promise<User> {
+    const [user] = await db
+      .update(users)
+      .set({
+        firstName: data.firstName,
+        lastName: data.lastName,
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, id))
       .returning();
     return user;
   }

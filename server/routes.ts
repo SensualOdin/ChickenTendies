@@ -191,7 +191,9 @@ export async function registerRoutes(
 
       const currentUser = userMap.get(userId);
       const displayName = currentUser
-        ? [currentUser.firstName, currentUser.lastName].filter(Boolean).join(" ") || "Member"
+        ? [currentUser.firstName, currentUser.lastName].filter(Boolean).join(" ")
+          || currentUser.email?.split("@")[0]
+          || "Member"
         : "Member";
 
       let memGroup = await storage.getGroup(groupId);
@@ -199,7 +201,9 @@ export async function registerRoutes(
       if (!memGroup) {
         const ownerUser = userMap.get(persistentGroup.ownerId);
         const ownerName = ownerUser
-          ? [ownerUser.firstName, ownerUser.lastName].filter(Boolean).join(" ") || "Host"
+          ? [ownerUser.firstName, ownerUser.lastName].filter(Boolean).join(" ")
+            || ownerUser.email?.split("@")[0]
+            || "Host"
           : "Host";
 
         const hostMemberId = randomUUID();
