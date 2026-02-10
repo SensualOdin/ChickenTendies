@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, varchar, timestamp, text, integer, boolean, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, varchar, timestamp, text, integer, boolean, jsonb, serial, real, index } from "drizzle-orm/pg-core";
 import { users } from "./auth";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -156,3 +156,35 @@ export const userAchievements = pgTable("user_achievements", {
 
 export type UserAchievement = typeof userAchievements.$inferSelect;
 export type InsertUserAchievement = typeof userAchievements.$inferInsert;
+
+export const analyticsActionEnum = ["swipe_left", "swipe_right", "super_like", "click_details"] as const;
+export type AnalyticsAction = typeof analyticsActionEnum[number];
+
+export const analyticsEvents = pgTable("analytics_events", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id"),
+  sessionId: varchar("session_id"),
+  restaurantId: varchar("restaurant_id").notNull(),
+  restaurantName: varchar("restaurant_name", { length: 300 }),
+  action: varchar("action", { length: 30 }).notNull(),
+  cuisineTags: jsonb("cuisine_tags"),
+  priceRange: varchar("price_range", { length: 10 }),
+  distanceMiles: real("distance_miles"),
+  userLat: varchar("user_lat", { length: 20 }),
+  userLng: varchar("user_lng", { length: 20 }),
+  dayOfWeek: integer("day_of_week"),
+  hourOfDay: integer("hour_of_day"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("analytics_cuisine_idx").on(table.cuisineTags),
+  index("analytics_geo_idx").on(table.userLat, table.userLng),
+  index("analytics_restaurant_idx").on(table.restaurantId),
+  index("analytics_action_idx").on(table.action),
+  index("analytics_created_idx").on(table.createdAt),
+]);
+
+export type AnalyticsEvent = typeof analyticsEvents.$inferSelect;
+export type InsertAnalyticsEvent = typeof analyticsEvents.$inferInsert;
+
+export const insertAnalyticsEventSchema = createInsertSchema(analyticsEvents).omit({ id: true, createdAt: true });
+export type InsertAnalyticsEventInput = z.infer<typeof insertAnalyticsEventSchema>;

@@ -9,6 +9,7 @@ import type { WSMessage, Group, Restaurant, GroupMember } from "@shared/schema";
 import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
 import { registerSocialRoutes } from "./social-routes";
 import { sendPushToGroupMembers, saveGroupPushSubscription, getVapidPublicKey } from "./push";
+import { logBatchAnalyticsEvents, getAnalyticsSummary, getCuisineDemand, getRestaurantAnalytics } from "./analytics";
 
 interface WSClient {
   ws: WebSocket;
@@ -269,7 +270,7 @@ export async function registerRoutes(
 
   app.post("/api/groups/:id/swipe", async (req, res) => {
     try {
-      const { restaurantId, liked, memberId } = req.body;
+      const { restaurantId, liked, memberId, superLiked } = req.body;
       
       if (!restaurantId || typeof liked !== "boolean" || !memberId) {
         res.status(400).json({ error: "Invalid request" });
@@ -553,6 +554,70 @@ export async function registerRoutes(
       res.json({ success: true, group: updatedGroup });
     } catch (error) {
       res.status(400).json({ error: "Invalid request" });
+    }
+  });
+
+  app.post("/api/analytics/events", async (req, res) => {
+    try {
+      const { events } = req.body;
+      if (!Array.isArray(events) || events.length === 0) {
+        res.status(400).json({ error: "Events array required" });
+        return;
+      }
+      if (events.length > 50) {
+        res.status(400).json({ error: "Max 50 events per batch" });
+        return;
+      }
+      await logBatchAnalyticsEvents(events);
+      res.json({ success: true, count: events.length });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to log events" });
+    }
+  });
+
+  app.get("/api/analytics/summary", async (req, res) => {
+    try {
+      const days = parseInt(req.query.days as string) || 30;
+      const summary = await getAnalyticsSummary(Math.min(days, 365));
+      res.json(summary);
+    } catch (error) {
+      console.error("[Analytics] Summary error:", error);
+      res.status(500).json({ error: "Failed to fetch analytics" });
+    }
+  });
+
+  app.get("/api/analytics/demand", async (req, res) => {
+    try {
+      const { cuisine, latMin, latMax, lngMin, lngMax } = req.query;
+      if (!cuisine || typeof cuisine !== "string") {
+        res.status(400).json({ error: "cuisine query parameter required" });
+        return;
+      }
+      const demand = await getCuisineDemand(
+        cuisine,
+        latMin as string | undefined,
+        latMax as string | undefined,
+        lngMin as string | undefined,
+        lngMax as string | undefined
+      );
+      res.json(demand);
+    } catch (error) {
+      console.error("[Analytics] Demand error:", error);
+      res.status(500).json({ error: "Failed to fetch demand" });
+    }
+  });
+
+  app.get("/api/analytics/restaurant/:restaurantId", async (req, res) => {
+    try {
+      const result = await getRestaurantAnalytics(req.params.restaurantId);
+      if (!result) {
+        res.json({ message: "No data available for this restaurant" });
+        return;
+      }
+      res.json(result);
+    } catch (error) {
+      console.error("[Analytics] Restaurant error:", error);
+      res.status(500).json({ error: "Failed to fetch restaurant analytics" });
     }
   });
 

@@ -14,6 +14,7 @@ import SwipePage from "@/pages/swipe";
 import MatchesPage from "@/pages/matches";
 import ProfilePage from "@/pages/profile";
 import CrewManage from "@/pages/crew-manage";
+import AnalyticsPage from "@/pages/analytics";
 import NotFound from "@/pages/not-found";
 import { PWAInstallPrompt } from "@/components/pwa-install-prompt";
 
@@ -30,6 +31,7 @@ function Router() {
       <Route path="/group/:id/matches" component={MatchesPage} />
       <Route path="/profile" component={ProfilePage} />
       <Route path="/crew/:id" component={CrewManage} />
+      <Route path="/analytics" component={AnalyticsPage} />
       <Route component={NotFound} />
     </Switch>
   );

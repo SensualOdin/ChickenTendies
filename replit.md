@@ -46,6 +46,7 @@ Preferred communication style: Simple, everyday language.
 - **Visit Tracking**: "We Went Here" logging in dining sessions to track actual restaurant visits
 - **Reservation Integration**: Direct links to Yelp reservation pages from match cards
 - **Mobile-First PWA**: Full Progressive Web App with viewport-fit=cover, safe area insets for notched phones (iPhone Dynamic Island), responsive text/spacing with sm: breakpoints, 100dvh swipe page, 2-column mobile dashboard grid, hidden decorative elements on small screens
+- **Analytics Intent Engine**: Every swipe action (left/right/super-like) is logged to `analytics_events` table with full context (cuisine, price, location, time). Frontend `useAnalytics` hook batches events for efficiency. Dashboard at `/analytics` shows top cuisines, price preferences, hourly/daily activity, top restaurants, and demand lookups via recharts. API endpoints: `GET /api/analytics/summary`, `GET /api/analytics/demand?cuisine=X`, `GET /api/analytics/restaurant/:id`, `POST /api/analytics/events`
 
 ### Build Process
 - **Development**: Vite dev server with HMR, Express backend via tsx

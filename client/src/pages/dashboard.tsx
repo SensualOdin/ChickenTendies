@@ -20,7 +20,7 @@ import { useNotifications } from "@/hooks/use-notifications";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Users, Plus, LogOut, ArrowRight, UserPlus, Check, X, UserMinus, Bell, BellRing, Play, User } from "lucide-react";
+import { Users, Plus, LogOut, ArrowRight, UserPlus, Check, X, UserMinus, Bell, BellRing, Play, User, BarChart3 } from "lucide-react";
 import { motion } from "framer-motion";
 import logoImage from "@assets/460272BC-3FCC-4927-8C2E-4C236353E7AB_1768880143398.png";
 import { useState } from "react";
@@ -227,6 +227,11 @@ export default function Dashboard() {
               )}
             </Button>
           </div>
+          <Link href="/analytics">
+            <Button variant="ghost" size="icon" data-testid="button-analytics">
+              <BarChart3 className="w-5 h-5" />
+            </Button>
+          </Link>
           <Link href="/profile">
             <Avatar className="w-8 h-8 cursor-pointer hover:ring-2 ring-primary transition-all">
               <AvatarImage src={user.profileImageUrl || undefined} />

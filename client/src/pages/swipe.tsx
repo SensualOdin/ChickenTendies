@@ -9,6 +9,7 @@ import { MemberAvatars } from "@/components/member-avatars";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useGroupPushNotifications } from "@/hooks/use-push-notifications";
+import { useAnalytics } from "@/hooks/use-analytics";
 import { Flame, ChevronRight, PartyPopper, Bell, Timer, Vote, Trophy, Heart, ThumbsUp, Eye, Star, Utensils, BellRing, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Group, Restaurant, WSMessage, ReactionType } from "@shared/schema";
@@ -34,6 +35,7 @@ export default function SwipePage() {
   const [showNotificationPrompt, setShowNotificationPrompt] = useState(true);
 
   const memberId = localStorage.getItem("grubmatch-member-id");
+  const { trackSwipe, flushNow } = useAnalytics(params.id, memberId || undefined);
   
   const { 
     isPushSupported, 
@@ -287,13 +289,19 @@ export default function SwipePage() {
     const superLiked = action === "superlike";
     swipeMutation.mutate({ restaurantId: restaurant.id, liked, superLiked });
     saveSwipedId(restaurant.id);
+
+    const analyticsAction = superLiked ? "super_like" as const : liked ? "swipe_right" as const : "swipe_left" as const;
+    trackSwipe(restaurant, analyticsAction, {
+      lat: group?.preferences?.latitude,
+      lng: group?.preferences?.longitude,
+    });
     
     if (liked) {
       setLikedRestaurants(prev => [...prev, restaurant]);
     }
     
     setCurrentIndex((prev) => prev + 1);
-  }, [currentIndex, restaurants, swipeMutation, params.id]);
+  }, [currentIndex, restaurants, swipeMutation, params.id, trackSwipe, group]);
 
   useEffect(() => {
     if (!showFinalVote || finalVoteTimer <= 0) return;
