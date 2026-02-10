@@ -1,14 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
+import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, BarChart3, TrendingUp, MousePointerClick, Star, ThumbsDown, ThumbsUp, Clock, Calendar, Search } from "lucide-react";
+import { ArrowLeft, BarChart3, TrendingUp, MousePointerClick, Star, ThumbsDown, ThumbsUp, Clock, Calendar, Search, ShieldAlert } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from "recharts";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const CHART_COLORS = [
   "hsl(var(--primary))",
@@ -60,23 +61,52 @@ interface RestaurantData {
 }
 
 export default function AnalyticsPage() {
+  const { user, isLoading: authLoading } = useAuth();
+  const [, setLocation] = useLocation();
   const [days, setDays] = useState("30");
   const [cuisineSearch, setCuisineSearch] = useState("");
   const [restaurantSearch, setRestaurantSearch] = useState("");
 
+  const isAdmin = !!user?.isAdmin;
+
   const { data: summary, isLoading } = useQuery<SummaryData>({
     queryKey: ["/api/analytics/summary", `?days=${days}`],
+    enabled: isAdmin,
   });
 
   const { data: demandData } = useQuery<DemandData>({
     queryKey: ["/api/analytics/demand", `?cuisine=${encodeURIComponent(cuisineSearch)}`],
-    enabled: cuisineSearch.length > 0,
+    enabled: isAdmin && cuisineSearch.length > 0,
   });
 
   const { data: restaurantData } = useQuery<RestaurantData>({
     queryKey: ["/api/analytics/restaurant", restaurantSearch],
-    enabled: restaurantSearch.length > 0,
+    enabled: isAdmin && restaurantSearch.length > 0,
   });
+
+  useEffect(() => {
+    if (!authLoading && !isAdmin) {
+      setLocation("/dashboard");
+    }
+  }, [isAdmin, authLoading, setLocation]);
+
+  if (authLoading) return null;
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Card className="max-w-md">
+          <CardContent className="p-6 text-center space-y-4">
+            <ShieldAlert className="w-12 h-12 mx-auto text-muted-foreground" />
+            <h2 className="text-xl font-bold">Admin Access Required</h2>
+            <p className="text-muted-foreground">This page is only available to administrators.</p>
+            <Link href="/dashboard">
+              <Button data-testid="button-back-dashboard">Back to Dashboard</Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const totalSwipes = summary?.totals.events || 0;
   const rightSwipes = summary?.totals.rightSwipes || 0;

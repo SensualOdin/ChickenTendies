@@ -228,11 +228,13 @@ export default function Dashboard() {
               )}
             </Button>
           </div>
-          <Link href="/analytics">
-            <Button variant="ghost" size="icon" data-testid="button-analytics">
-              <BarChart3 className="w-5 h-5" />
-            </Button>
-          </Link>
+          {user.isAdmin && (
+            <Link href="/analytics">
+              <Button variant="ghost" size="icon" data-testid="button-analytics">
+                <BarChart3 className="w-5 h-5" />
+              </Button>
+            </Link>
+          )}
           <Link href="/profile">
             <Avatar className="w-8 h-8 cursor-pointer hover:ring-2 ring-primary transition-all">
               <AvatarImage src={user.profileImageUrl || undefined} />

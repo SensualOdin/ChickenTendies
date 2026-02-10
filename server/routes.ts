@@ -12,9 +12,28 @@ import { registerSocialRoutes } from "./social-routes";
 import { sendPushToGroupMembers, saveGroupPushSubscription, getVapidPublicKey } from "./push";
 import { logBatchAnalyticsEvents, getAnalyticsSummary, getCuisineDemand, getRestaurantAnalytics } from "./analytics";
 import { db } from "./db";
+import { authStorage } from "./replit_integrations/auth/storage";
 import { eq, and, inArray } from "drizzle-orm";
 
 const sessionUserMap: Map<string, string> = new Map();
+
+async function isAdminUser(req: any, res: any, next: any) {
+  try {
+    const userId = req.user?.claims?.sub;
+    if (!userId) {
+      res.status(401).json({ error: "Not authenticated" });
+      return;
+    }
+    const user = await authStorage.getUser(userId);
+    if (!user?.isAdmin) {
+      res.status(403).json({ error: "Admin access required" });
+      return;
+    }
+    next();
+  } catch {
+    res.status(500).json({ error: "Authorization check failed" });
+  }
+}
 
 interface WSClient {
   ws: WebSocket;
@@ -693,7 +712,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/analytics/summary", async (req, res) => {
+  app.get("/api/analytics/summary", isAuthenticated, isAdminUser, async (req, res) => {
     try {
       const days = parseInt(req.query.days as string) || 30;
       const summary = await getAnalyticsSummary(Math.min(days, 365));
@@ -704,7 +723,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/analytics/demand", async (req, res) => {
+  app.get("/api/analytics/demand", isAuthenticated, isAdminUser, async (req, res) => {
     try {
       const { cuisine, latMin, latMax, lngMin, lngMax } = req.query;
       if (!cuisine || typeof cuisine !== "string") {
@@ -725,7 +744,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/analytics/restaurant/:restaurantId", async (req, res) => {
+  app.get("/api/analytics/restaurant/:restaurantId", isAuthenticated, isAdminUser, async (req, res) => {
     try {
       const result = await getRestaurantAnalytics(req.params.restaurantId);
       if (!result) {
