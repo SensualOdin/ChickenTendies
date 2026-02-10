@@ -1,4 +1,5 @@
 import { Link, useLocation } from "wouter";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -20,10 +21,10 @@ import { useNotifications } from "@/hooks/use-notifications";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Users, Plus, LogOut, ArrowRight, UserPlus, Check, X, UserMinus, Bell, BellRing, Play, User, BarChart3 } from "lucide-react";
-import { motion } from "framer-motion";
+import { Users, Plus, LogOut, ArrowRight, UserPlus, Check, X, UserMinus, Bell, BellRing, BellOff, Play, User, BarChart3, CheckCheck } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import logoImage from "@assets/460272BC-3FCC-4927-8C2E-4C236353E7AB_1768880143398.png";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 
 interface Friend {
@@ -65,6 +66,8 @@ export default function Dashboard() {
   const [isCreateCrewOpen, setIsCreateCrewOpen] = useState(false);
   const [isAddFriendOpen, setIsAddFriendOpen] = useState(false);
   const [isJoinCrewOpen, setIsJoinCrewOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const notificationRef = useRef<HTMLDivElement>(null);
 
   const { data: friends = [], isLoading: friendsLoading } = useQuery<Friend[]>({
     queryKey: ["/api/friends"],
@@ -179,6 +182,34 @@ export default function Dashboard() {
     },
   });
 
+  const markAllReadMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/notifications/read-all");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+    },
+  });
+
+  const markReadMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest("POST", `/api/notifications/${id}/read`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
+    },
+  });
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
+        setIsNotificationsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const pendingRequests = friends.filter(f => f.status === "pending" && !f.isRequester);
   const sentRequests = friends.filter(f => f.status === "pending" && f.isRequester);
   const acceptedFriends = friends.filter(f => f.status === "accepted");
@@ -207,19 +238,24 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-background safe-top safe-x">
-      <header className="flex items-center justify-between p-4 md:p-6 border-b">
-        <Link href="/" className="flex items-center gap-2">
+      <header className="flex items-center justify-between p-4 md:p-6 border-b gap-2">
+        <Link href="/" className="flex items-center gap-2 shrink-0">
           <img src={logoImage} alt="ChickenTinders" className="w-10 h-10 rounded-xl object-cover shadow-lg shadow-primary/30" />
-          <div className="flex flex-col">
-            <span className="text-xl font-bold bg-gradient-to-r from-primary to-orange-500 bg-clip-text text-transparent leading-tight">
-              ChickenTinders
-            </span>
-            <span className="text-xs text-muted-foreground hidden sm:block">Swipe Together, Dine Together</span>
-          </div>
+          <span className="text-xl font-bold bg-gradient-to-r from-primary to-orange-500 bg-clip-text text-transparent leading-tight hidden sm:inline">
+            ChickenTinders
+          </span>
         </Link>
-        <div className="flex items-center gap-1.5 sm:gap-3">
-          <div className="relative">
-            <Button variant="ghost" size="icon" data-testid="button-notifications">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+          <div className="relative" ref={notificationRef}>
+            <Button
+              variant="ghost"
+              size="icon"
+              data-testid="button-notifications"
+              onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
+              aria-expanded={isNotificationsOpen}
+              aria-controls="notification-panel"
+              aria-label={`Notifications${unreadNotifications.length > 0 ? ` (${unreadNotifications.length} unread)` : ''}`}
+            >
               <Bell className="w-5 h-5" />
               {unreadNotifications.length > 0 && (
                 <span className="absolute -top-1 -right-1 w-5 h-5 bg-primary text-primary-foreground text-xs rounded-full flex items-center justify-center">
@@ -227,6 +263,69 @@ export default function Dashboard() {
                 </span>
               )}
             </Button>
+            <AnimatePresence>
+              {isNotificationsOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: -8, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -8, scale: 0.95 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute right-0 top-full mt-2 w-80 max-w-[calc(100vw-2rem)] max-h-96 overflow-y-auto rounded-md border bg-background shadow-lg z-50"
+                  id="notification-panel"
+                  role="region"
+                  aria-label="Notifications"
+                  data-testid="notification-panel"
+                >
+                  <div className="flex items-center justify-between gap-2 p-3 border-b sticky top-0 bg-background z-10">
+                    <h3 className="font-semibold text-sm">Notifications</h3>
+                    {unreadNotifications.length > 0 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-xs"
+                        onClick={() => markAllReadMutation.mutate()}
+                        data-testid="button-mark-all-read"
+                      >
+                        <CheckCheck className="w-3.5 h-3.5 mr-1" />
+                        Mark all read
+                      </Button>
+                    )}
+                  </div>
+                  {notifications.length === 0 ? (
+                    <div className="p-6 text-center text-muted-foreground text-sm">
+                      <BellOff className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                      No notifications yet
+                    </div>
+                  ) : (
+                    <div>
+                      {notifications.map((n) => (
+                        <div
+                          key={n.id}
+                          className={cn(
+                            "flex items-start gap-3 p-3 border-b last:border-0 cursor-pointer transition-colors",
+                            !n.isRead ? "bg-primary/5" : ""
+                          )}
+                          onClick={() => {
+                            if (!n.isRead) markReadMutation.mutate(n.id);
+                          }}
+                          data-testid={`notification-item-${n.id}`}
+                        >
+                          <div className={cn(
+                            "w-2 h-2 rounded-full mt-1.5 shrink-0",
+                            !n.isRead ? "bg-primary" : "bg-transparent"
+                          )} />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{n.type === "session_started" ? "Session Started" : n.type === "friend_request" ? "Friend Request" : n.type === "crew_joined" ? "New Crew Member" : "Notification"}</p>
+                            <p className="text-xs text-muted-foreground line-clamp-2">{n.message}</p>
+                            <p className="text-xs text-muted-foreground mt-1">{new Date(n.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
           {user.isAdmin && (
             <Link href="/analytics">
@@ -243,7 +342,6 @@ export default function Dashboard() {
               </AvatarFallback>
             </Avatar>
           </Link>
-          <span className="hidden sm:inline font-medium">{user.firstName || user.email}</span>
           <Button variant="ghost" size="icon" onClick={() => logout()} data-testid="button-logout">
             <LogOut className="w-5 h-5" />
           </Button>
