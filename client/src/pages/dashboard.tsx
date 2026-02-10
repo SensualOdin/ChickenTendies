@@ -74,6 +74,7 @@ export default function Dashboard() {
   const { data: crews = [], isLoading: crewsLoading } = useQuery<Crew[]>({
     queryKey: ["/api/crews"],
     enabled: isAuthenticated,
+    refetchInterval: 15000,
   });
 
   const { data: notifications = [] } = useQuery<Notification[]>({

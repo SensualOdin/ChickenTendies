@@ -136,6 +136,7 @@ export default function CrewManage() {
   const { data: crew, isLoading: crewLoading } = useQuery<Crew>({
     queryKey: ["/api/crews", params.id],
     enabled: isAuthenticated && !!params.id,
+    refetchInterval: 10000,
   });
 
   const { data: friends = [] } = useQuery<Friend[]>({
