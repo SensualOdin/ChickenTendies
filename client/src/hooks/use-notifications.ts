@@ -57,7 +57,21 @@ export function useNotifications() {
           ToastAction,
           {
             altText: "Join session",
-            onClick: () => setLocation(`/group/${groupId}`),
+            onClick: async () => {
+              try {
+                const res = await fetch(`/api/groups/${groupId}/join-session`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  credentials: "include",
+                });
+                if (res.ok) {
+                  const data = await res.json();
+                  localStorage.setItem("grubmatch-member-id", data.memberId);
+                  localStorage.setItem("grubmatch-group-id", groupId);
+                  setLocation(`/group/${groupId}`);
+                }
+              } catch {}
+            },
           },
           "Join"
         ) as ToastActionElement;

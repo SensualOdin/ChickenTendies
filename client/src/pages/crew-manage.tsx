@@ -28,7 +28,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { ArrowLeft, Crown, UserMinus, UserPlus, Trash2, LogOut, History, Users, Copy, Check, Share2, Send, ChevronDown, ChevronUp, MapPin, Utensils, Play, Zap } from "lucide-react";
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 
 interface CrewMember {
@@ -100,6 +100,39 @@ export default function CrewManage() {
   const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null);
+  const [isJoiningSession, setIsJoiningSession] = useState(false);
+
+  const joinSession = useCallback(async (groupId: string) => {
+    setIsJoiningSession(true);
+    try {
+      const res = await fetch(`/api/groups/${groupId}/join-session`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+      });
+      if (res.ok) {
+        const data = await res.json();
+        localStorage.setItem("grubmatch-member-id", data.memberId);
+        localStorage.setItem("grubmatch-group-id", groupId);
+        navigate(`/group/${groupId}`);
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        toast({
+          title: "Couldn't join session",
+          description: errorData.error || "The session may have ended.",
+          variant: "destructive",
+        });
+      }
+    } catch {
+      toast({
+        title: "Couldn't join session",
+        description: "Something went wrong. Try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsJoiningSession(false);
+    }
+  }, [navigate, toast]);
 
   const copyInviteCode = () => {
     if (crew?.inviteCode) {
@@ -360,12 +393,14 @@ export default function CrewManage() {
                       Started {new Date(activeSessions[0].startedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
                     </p>
                   </div>
-                  <Link href={`/group/${activeSessions[0].groupId}`}>
-                    <Button data-testid="button-join-active-session">
-                      <Play className="w-4 h-4 mr-2" />
-                      Join
-                    </Button>
-                  </Link>
+                  <Button
+                    data-testid="button-join-active-session"
+                    disabled={isJoiningSession}
+                    onClick={() => joinSession(activeSessions[0].groupId)}
+                  >
+                    <Play className="w-4 h-4 mr-2" />
+                    {isJoiningSession ? "Joining..." : "Join"}
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -538,12 +573,18 @@ export default function CrewManage() {
                         </div>
                         <div className="flex items-center gap-2">
                           {session.status === "active" || (!session.endedAt && !session.status) ? (
-                            <Link href={`/group/${session.groupId}`}>
-                              <Button size="sm" data-testid={`button-join-session-${session.id}`}>
-                                <Play className="w-3 h-3 mr-1" />
-                                Join
-                              </Button>
-                            </Link>
+                            <Button
+                              size="sm"
+                              data-testid={`button-join-session-${session.id}`}
+                              disabled={isJoiningSession}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                joinSession(session.groupId);
+                              }}
+                            >
+                              <Play className="w-3 h-3 mr-1" />
+                              Join
+                            </Button>
                           ) : (
                             <Badge variant={session.visitedRestaurantId ? "default" : "secondary"}>
                               {session.visitedRestaurantId ? "Visited" : "Completed"}

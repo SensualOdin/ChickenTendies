@@ -300,10 +300,10 @@ export class MemStorage implements IStorage {
   }
 
   async updateGroup(groupId: string, updatedGroup: Group): Promise<Group | undefined> {
-    const group = this.groups.get(groupId);
-    if (!group) return undefined;
-    
     this.groups.set(groupId, updatedGroup);
+    if (!this.swipes.has(groupId)) {
+      this.swipes.set(groupId, []);
+    }
     return updatedGroup;
   }
 

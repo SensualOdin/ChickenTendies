@@ -4,12 +4,17 @@ import { WebSocketServer, WebSocket } from "ws";
 import { z } from "zod";
 import { randomUUID } from "crypto";
 import { storage } from "./storage";
-import { insertGroupSchema, joinGroupSchema, groupPreferencesSchema } from "@shared/schema";
+import { insertGroupSchema, joinGroupSchema, groupPreferencesSchema, persistentGroups, diningSessions, users } from "@shared/schema";
 import type { WSMessage, Group, Restaurant, GroupMember } from "@shared/schema";
 import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
+import { isAuthenticated } from "./replit_integrations/auth";
 import { registerSocialRoutes } from "./social-routes";
 import { sendPushToGroupMembers, saveGroupPushSubscription, getVapidPublicKey } from "./push";
 import { logBatchAnalyticsEvents, getAnalyticsSummary, getCuisineDemand, getRestaurantAnalytics } from "./analytics";
+import { db } from "./db";
+import { eq, and, inArray } from "drizzle-orm";
+
+const sessionUserMap: Map<string, string> = new Map();
 
 interface WSClient {
   ws: WebSocket;
@@ -142,7 +147,116 @@ export async function registerRoutes(
     const { leaderToken, ...groupWithoutToken } = group;
     res.json(groupWithoutToken);
   });
-  
+
+  app.post("/api/groups/:id/join-session", isAuthenticated, async (req, res) => {
+    try {
+      const groupId = String(req.params.id);
+      const userId = (req.user as any)?.claims?.sub || "";
+
+      const [persistentGroup] = await db
+        .select()
+        .from(persistentGroups)
+        .where(eq(persistentGroups.id, groupId as string));
+
+      if (!persistentGroup) {
+        res.status(404).json({ error: "Group not found" });
+        return;
+      }
+
+      const allMemberIds = [persistentGroup.ownerId, ...persistentGroup.memberIds];
+      if (!allMemberIds.includes(userId)) {
+        res.status(403).json({ error: "You are not a member of this crew" });
+        return;
+      }
+
+      const sessionResults = await db
+        .select()
+        .from(diningSessions)
+        .where(eq(diningSessions.groupId, groupId as string));
+      const activeSession = sessionResults.find(
+        s => s.status === "active" || (!s.endedAt && !s.status)
+      );
+
+      if (!activeSession) {
+        res.status(404).json({ error: "No active session found" });
+        return;
+      }
+
+      const crewUserIds = [persistentGroup.ownerId, ...persistentGroup.memberIds];
+      const crewUsers = await db
+        .select()
+        .from(users)
+        .where(inArray(users.id, crewUserIds));
+      const userMap = new Map(crewUsers.map(u => [u.id, u]));
+
+      const currentUser = userMap.get(userId);
+      const displayName = currentUser
+        ? [currentUser.firstName, currentUser.lastName].filter(Boolean).join(" ") || "Member"
+        : "Member";
+
+      let memGroup = await storage.getGroup(groupId);
+
+      if (!memGroup) {
+        const ownerUser = userMap.get(persistentGroup.ownerId);
+        const ownerName = ownerUser
+          ? [ownerUser.firstName, ownerUser.lastName].filter(Boolean).join(" ") || "Host"
+          : "Host";
+
+        const hostMemberId = randomUUID();
+        const host: GroupMember = {
+          id: hostMemberId,
+          name: ownerName,
+          isHost: true,
+          joinedAt: Date.now(),
+          doneSwiping: false,
+        };
+
+        memGroup = {
+          id: groupId,
+          code: persistentGroup.inviteCode,
+          name: persistentGroup.name,
+          members: [host],
+          preferences: activeSession.preferences as any,
+          status: "waiting",
+          createdAt: Date.now(),
+          leaderToken: randomUUID(),
+        };
+        await storage.updateGroup(groupId, memGroup);
+
+        sessionUserMap.set(`${groupId}:${persistentGroup.ownerId}`, hostMemberId);
+      }
+
+      const existingMemberId = sessionUserMap.get(`${groupId}:${userId}`);
+      if (existingMemberId) {
+        const existingMember = memGroup.members.find(m => m.id === existingMemberId);
+        if (existingMember) {
+          res.json({ memberId: existingMemberId, group: memGroup });
+          return;
+        }
+      }
+
+      const memberId = randomUUID();
+      const newMember: GroupMember = {
+        id: memberId,
+        name: displayName,
+        isHost: false,
+        joinedAt: Date.now(),
+        doneSwiping: false,
+      };
+
+      memGroup.members.push(newMember);
+      await storage.updateGroup(groupId, memGroup);
+      sessionUserMap.set(`${groupId}:${userId}`, memberId);
+
+      broadcast(groupId, { type: "member_joined", member: newMember }, memberId);
+
+      res.json({ memberId, group: memGroup });
+    } catch (error) {
+      console.error("Error joining session:", error);
+      res.status(500).json({ error: "Failed to join session" });
+    }
+  });
+
   // Reclaim leadership using stored leader token
   app.post("/api/groups/:id/reclaim-leadership", async (req, res) => {
     try {
