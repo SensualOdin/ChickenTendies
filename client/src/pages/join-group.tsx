@@ -8,19 +8,21 @@ import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { joinGroupSchema, type JoinGroup } from "@shared/schema";
-import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 import { ArrowLeft, Flame, Loader2, Ticket, User } from "lucide-react";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 export default function JoinGroupPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { isAuthenticated } = useAuth();
   const searchString = useSearch();
   const urlParams = new URLSearchParams(searchString);
   const codeFromUrl = (urlParams.get("code") || "").toUpperCase().slice(0, 6);
+  const [needsAuth, setNeedsAuth] = useState(false);
 
   const form = useForm<JoinGroup>({
     resolver: zodResolver(joinGroupSchema),
@@ -36,19 +38,118 @@ export default function JoinGroupPage() {
     }
   }, [codeFromUrl, form]);
 
+  useEffect(() => {
+    if (!isAuthenticated || !codeFromUrl) return;
+    const pendingJoin = sessionStorage.getItem("chickentinders-pending-crew-join");
+    if (pendingJoin !== "true") return;
+    sessionStorage.removeItem("chickentinders-pending-crew-join");
+    
+    const joinCrew = async () => {
+      try {
+        const res = await fetch("/api/crews/join", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ inviteCode: codeFromUrl }),
+          credentials: "include",
+        });
+        if (res.ok) {
+          const crew = await res.json();
+          toast({
+            title: "You're in!",
+            description: `You joined the crew "${crew.name}"`,
+          });
+          setLocation(`/crew/${crew.id}`);
+        } else {
+          const errorData = await res.json().catch(() => ({}));
+          if (errorData.message?.includes("already")) {
+            toast({ title: "Already a member", description: errorData.message });
+          } else {
+            toast({
+              title: "Couldn't join crew",
+              description: "The invite code may be invalid. Try entering it manually.",
+              variant: "destructive",
+            });
+          }
+        }
+      } catch {
+        toast({
+          title: "Something went wrong",
+          description: "Please try entering the code again.",
+          variant: "destructive",
+        });
+      }
+    };
+    joinCrew();
+  }, [isAuthenticated, codeFromUrl, toast, setLocation]);
+
   const joinMutation = useMutation({
     mutationFn: async (data: JoinGroup) => {
-      const response = await apiRequest("POST", "/api/groups/join", data);
-      return response.json();
+      const partyResponse = await fetch("/api/groups/join", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+        credentials: "include",
+      });
+
+      if (partyResponse.ok) {
+        const result = await partyResponse.json();
+        return { type: "party" as const, data: result };
+      }
+
+      if (partyResponse.status !== 404) {
+        throw new Error("INVALID_CODE");
+      }
+
+      const crewResponse = await fetch("/api/crews/join", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inviteCode: data.code }),
+        credentials: "include",
+      });
+
+      if (crewResponse.ok) {
+        const result = await crewResponse.json();
+        return { type: "crew" as const, data: result };
+      }
+
+      if (crewResponse.status === 401) {
+        throw new Error("AUTH_REQUIRED");
+      }
+
+      const errorData = await crewResponse.json().catch(() => ({}));
+      if (errorData.message?.includes("already")) {
+        throw new Error(errorData.message);
+      }
+
+      throw new Error("INVALID_CODE");
     },
-    onSuccess: (data) => {
-      localStorage.setItem("grubmatch-member-id", data.memberId);
-      localStorage.setItem("grubmatch-group-id", data.group.id);
-      setLocation(`/group/${data.group.id}`);
+    onSuccess: (result) => {
+      if (result.type === "party") {
+        localStorage.setItem("grubmatch-member-id", result.data.memberId);
+        localStorage.setItem("grubmatch-group-id", result.data.group.id);
+        setLocation(`/group/${result.data.group.id}`);
+      } else {
+        toast({
+          title: "You're in!",
+          description: `You joined the crew "${result.data.name}"`,
+        });
+        setLocation(`/crew/${result.data.id}`);
+      }
     },
-    onError: () => {
+    onError: (error: Error) => {
+      if (error.message === "AUTH_REQUIRED") {
+        setNeedsAuth(true);
+        return;
+      }
+      if (error.message.includes("already")) {
+        toast({
+          title: "Already a member",
+          description: error.message,
+        });
+        return;
+      }
       toast({
-        title: "Hmm, that didn't work 🤔",
+        title: "Hmm, that didn't work",
         description: "Double-check that code and try again!",
         variant: "destructive",
       });
@@ -56,7 +157,15 @@ export default function JoinGroupPage() {
   });
 
   const onSubmit = (data: JoinGroup) => {
+    setNeedsAuth(false);
     joinMutation.mutate({ ...data, code: data.code.toUpperCase() });
+  };
+
+  const handleSignIn = () => {
+    const code = form.getValues("code");
+    sessionStorage.setItem("chickentinders-join-code", code);
+    sessionStorage.setItem("chickentinders-pending-crew-join", "true");
+    window.location.href = "/api/login";
   };
 
   return (
@@ -92,91 +201,115 @@ export default function JoinGroupPage() {
                 animate={{ rotate: [0, 10, -10, 0] }}
                 transition={{ duration: 1.5, repeat: Infinity }}
               >
-                🎟️
+                <Ticket className="w-10 h-10 mx-auto text-primary" />
               </motion.div>
-              <CardTitle className="text-2xl">Join the Party!</CardTitle>
+              <CardTitle className="text-2xl" data-testid="text-join-title">Join the Party!</CardTitle>
               <CardDescription>
                 Got a secret code? Let's get you in!
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Form {...form}>
-                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                  <FormField
-                    control={form.control}
-                    name="code"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="flex items-center gap-2">
-                          <Ticket className="w-4 h-4 text-primary" />
-                          Secret Party Code
-                        </FormLabel>
-                        <FormControl>
-                          <Input 
-                            placeholder="ABC123" 
-                            maxLength={6}
-                            className="text-center text-2xl tracking-[0.3em] font-mono uppercase border-2 bg-muted/50"
-                            {...field}
-                            onChange={(e) => field.onChange(e.target.value.toUpperCase())}
-                            data-testid="input-group-code"
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="memberName"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="flex items-center gap-2">
-                          <User className="w-4 h-4 text-accent" />
-                          Your Name
-                        </FormLabel>
-                        <FormControl>
-                          <Input 
-                            placeholder="What should we call you?" 
-                            className="border-2"
-                            {...field}
-                            data-testid="input-member-name"
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
+              {needsAuth ? (
+                <div className="space-y-4 text-center">
+                  <p className="text-muted-foreground">
+                    This is a crew invite code. You need to sign in to join a crew.
+                  </p>
                   <Button 
-                    type="submit" 
-                    className="w-full bg-gradient-to-r from-primary to-orange-500 hover:from-primary/90 hover:to-orange-500/90" 
+                    className="w-full bg-gradient-to-r from-primary to-orange-500"
                     size="lg"
-                    disabled={joinMutation.isPending}
-                    data-testid="button-submit-join"
+                    onClick={handleSignIn}
+                    data-testid="button-sign-in-to-join"
                   >
-                    {joinMutation.isPending ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Joining the fun...
-                      </>
-                    ) : (
-                      <>
-                        🚀 Jump In!
-                      </>
-                    )}
+                    Sign In to Join
                   </Button>
-                </form>
-              </Form>
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => setNeedsAuth(false)}
+                    data-testid="button-try-different-code"
+                  >
+                    Try a Different Code
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <Form {...form}>
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                      <FormField
+                        control={form.control}
+                        name="code"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="flex items-center gap-2">
+                              <Ticket className="w-4 h-4 text-primary" />
+                              Secret Party Code
+                            </FormLabel>
+                            <FormControl>
+                              <Input 
+                                placeholder="ABC123" 
+                                maxLength={6}
+                                className="text-center text-2xl tracking-[0.3em] font-mono uppercase border-2 bg-muted/50"
+                                {...field}
+                                onChange={(e) => field.onChange(e.target.value.toUpperCase())}
+                                data-testid="input-group-code"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
 
-              <div className="mt-6 text-center">
-                <p className="text-sm text-muted-foreground">
-                  No code yet?{" "}
-                  <Link href="/create" className="text-primary font-medium hover:underline" data-testid="link-create-instead">
-                    Start your own party!
-                  </Link>
-                </p>
-              </div>
+                      <FormField
+                        control={form.control}
+                        name="memberName"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="flex items-center gap-2">
+                              <User className="w-4 h-4 text-accent" />
+                              Your Name
+                            </FormLabel>
+                            <FormControl>
+                              <Input 
+                                placeholder="What should we call you?" 
+                                className="border-2"
+                                {...field}
+                                data-testid="input-member-name"
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <Button 
+                        type="submit" 
+                        className="w-full bg-gradient-to-r from-primary to-orange-500 hover:from-primary/90 hover:to-orange-500/90" 
+                        size="lg"
+                        disabled={joinMutation.isPending}
+                        data-testid="button-submit-join"
+                      >
+                        {joinMutation.isPending ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Joining the fun...
+                          </>
+                        ) : (
+                          "Jump In!"
+                        )}
+                      </Button>
+                    </form>
+                  </Form>
+
+                  <div className="mt-6 text-center">
+                    <p className="text-sm text-muted-foreground">
+                      No code yet?{" "}
+                      <Link href="/create" className="text-primary font-medium hover:underline" data-testid="link-create-instead">
+                        Start your own party!
+                      </Link>
+                    </p>
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
         </motion.div>

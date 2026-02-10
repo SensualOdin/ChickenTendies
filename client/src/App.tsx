@@ -1,4 +1,4 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -17,6 +17,22 @@ import CrewManage from "@/pages/crew-manage";
 import AnalyticsPage from "@/pages/analytics";
 import NotFound from "@/pages/not-found";
 import { PWAInstallPrompt } from "@/components/pwa-install-prompt";
+import { useEffect } from "react";
+
+function PendingCrewJoinRedirect() {
+  const [location, setLocation] = useLocation();
+  
+  useEffect(() => {
+    if (location !== "/" && location !== "/dashboard") return;
+    const savedCode = sessionStorage.getItem("chickentinders-join-code");
+    if (savedCode) {
+      sessionStorage.removeItem("chickentinders-join-code");
+      setLocation(`/join?code=${encodeURIComponent(savedCode)}`);
+    }
+  }, [location, setLocation]);
+  
+  return null;
+}
 
 function Router() {
   return (
@@ -43,6 +59,7 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <Toaster />
+          <PendingCrewJoinRedirect />
           <Router />
           <PWAInstallPrompt />
         </TooltipProvider>
