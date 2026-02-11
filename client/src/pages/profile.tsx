@@ -9,13 +9,13 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { useTheme } from "@/lib/theme-provider";
 import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
 import { 
   Trophy, Sparkles, Users, Flame, Award, 
   MapPin, Utensils, Heart, ArrowLeft, Star,
-  Lock, Pencil, Check, X
+  Lock, Pencil, Check, X, Sun, Moon, LogOut, Settings
 } from "lucide-react";
 
 interface Stats {
@@ -53,7 +53,8 @@ const iconMap: Record<string, typeof Trophy> = {
 };
 
 export default function ProfilePage() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const { theme, setTheme } = useTheme();
   const { toast } = useToast();
   const [isEditing, setIsEditing] = useState(false);
   const [editFirstName, setEditFirstName] = useState("");
@@ -125,7 +126,6 @@ export default function ProfilePage() {
           </Link>
           <h1 className="text-xl font-bold">Profile</h1>
         </div>
-        <ThemeToggle />
       </header>
 
       <main className="p-4 md:p-6 max-w-4xl mx-auto space-y-6 safe-bottom">
@@ -321,6 +321,62 @@ export default function ProfilePage() {
                     </motion.div>
                   );
                 })}
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+
+        <motion.div
+          initial={{ y: 20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.3 }}
+        >
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Settings className="w-5 h-5" />
+                Settings
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-3">
+                  {theme === "dark" ? (
+                    <Moon className="w-5 h-5 text-muted-foreground" />
+                  ) : (
+                    <Sun className="w-5 h-5 text-muted-foreground" />
+                  )}
+                  <div>
+                    <p className="text-sm font-medium">Appearance</p>
+                    <p className="text-xs text-muted-foreground">
+                      {theme === "dark" ? "Dark mode" : "Light mode"}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+                  data-testid="button-theme-toggle"
+                >
+                  {theme === "dark" ? (
+                    <Sun className="w-4 h-4 mr-2" />
+                  ) : (
+                    <Moon className="w-4 h-4 mr-2" />
+                  )}
+                  {theme === "dark" ? "Light mode" : "Dark mode"}
+                </Button>
+              </div>
+              <div className="border-t pt-4">
+                <Button
+                  variant="outline"
+                  className="w-full text-destructive"
+                  onClick={() => logout()}
+                  data-testid="button-logout"
+                >
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Sign Out
+                </Button>
               </div>
             </CardContent>
           </Card>

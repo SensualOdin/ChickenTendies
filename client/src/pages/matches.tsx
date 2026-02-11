@@ -3,7 +3,6 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Home, Flame, Loader2, Star, MapPin, ExternalLink, Heart, PartyPopper, Trophy, Sparkles, RefreshCw, CalendarPlus, Phone, Check, Truck } from "lucide-react";
 import { motion } from "framer-motion";
@@ -94,7 +93,6 @@ export default function MatchesPage() {
           </div>
           <span className="font-bold">{group.name}</span>
         </div>
-        <ThemeToggle />
       </header>
 
       <main className="px-4 md:px-6 py-6 max-w-2xl mx-auto safe-bottom">

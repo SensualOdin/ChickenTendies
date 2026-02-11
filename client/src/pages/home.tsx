@@ -1,7 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { Users, Utensils, Heart, ArrowRight, Sparkles, Flame, Pizza, PartyPopper, LogIn, LogOut, User, LayoutDashboard } from "lucide-react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/hooks/use-auth";
@@ -74,7 +73,6 @@ export default function Home() {
               </Button>
             </a>
           )}
-          <ThemeToggle />
         </div>
       </header>
 

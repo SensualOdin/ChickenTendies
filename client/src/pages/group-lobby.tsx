@@ -3,7 +3,6 @@ import { useParams, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Flame, Copy, Check, Users, ArrowRight, Loader2, PartyPopper, Sparkles, Clock, X, Crown, Settings, Send } from "lucide-react";
@@ -309,7 +308,6 @@ export default function GroupLobby() {
             <span className="text-xs text-muted-foreground hidden sm:block">Swipe Together, Dine Together</span>
           </div>
         </div>
-        <ThemeToggle />
       </header>
 
       <main className="px-4 md:px-6 py-8 max-w-lg mx-auto space-y-6 safe-bottom">

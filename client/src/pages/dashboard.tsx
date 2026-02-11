@@ -2,7 +2,6 @@ import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -21,7 +20,7 @@ import { useNotifications } from "@/hooks/use-notifications";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Users, Plus, LogOut, ArrowRight, UserPlus, Check, X, UserMinus, Bell, BellRing, BellOff, Play, User, BarChart3, CheckCheck } from "lucide-react";
+import { Users, Plus, ArrowRight, UserPlus, Check, X, UserMinus, Bell, BellRing, BellOff, Play, User, BarChart3, CheckCheck } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import logoImage from "@assets/460272BC-3FCC-4927-8C2E-4C236353E7AB_1768880143398.png";
 import { useState, useRef, useEffect } from "react";
@@ -49,12 +48,12 @@ interface Notification {
   id: string;
   type: string;
   message: string;
-  isRead: boolean;
+  read: boolean;
   createdAt: string;
 }
 
 export default function Dashboard() {
-  const { user, logout, isAuthenticated, isLoading: authLoading } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   useNotifications();
   const { isPushSupported, permission, isSubscribed, isLoading: pushLoading, subscribe } = usePushNotifications();
   const [, navigate] = useLocation();
@@ -213,7 +212,7 @@ export default function Dashboard() {
   const pendingRequests = friends.filter(f => f.status === "pending" && !f.isRequester);
   const sentRequests = friends.filter(f => f.status === "pending" && f.isRequester);
   const acceptedFriends = friends.filter(f => f.status === "accepted");
-  const unreadNotifications = notifications.filter(n => !n.isRead);
+  const unreadNotifications = notifications.filter(n => !n.read);
 
   if (authLoading) {
     return (
@@ -303,16 +302,16 @@ export default function Dashboard() {
                           key={n.id}
                           className={cn(
                             "flex items-start gap-3 p-3 border-b last:border-0 cursor-pointer transition-colors",
-                            !n.isRead ? "bg-primary/5" : ""
+                            !n.read ? "bg-primary/5" : ""
                           )}
                           onClick={() => {
-                            if (!n.isRead) markReadMutation.mutate(n.id);
+                            if (!n.read) markReadMutation.mutate(n.id);
                           }}
                           data-testid={`notification-item-${n.id}`}
                         >
                           <div className={cn(
                             "w-2 h-2 rounded-full mt-1.5 shrink-0",
-                            !n.isRead ? "bg-primary" : "bg-transparent"
+                            !n.read ? "bg-primary" : "bg-transparent"
                           )} />
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium truncate">{n.type === "session_started" ? "Session Started" : n.type === "friend_request" ? "Friend Request" : n.type === "crew_joined" ? "New Crew Member" : "Notification"}</p>
@@ -342,10 +341,6 @@ export default function Dashboard() {
               </AvatarFallback>
             </Avatar>
           </Link>
-          <Button variant="ghost" size="icon" onClick={() => logout()} data-testid="button-logout">
-            <LogOut className="w-5 h-5" />
-          </Button>
-          <ThemeToggle />
         </div>
       </header>
 

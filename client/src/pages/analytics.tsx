@@ -4,7 +4,6 @@ import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { ArrowLeft, BarChart3, TrendingUp, MousePointerClick, Star, ThumbsDown, ThumbsUp, Clock, Calendar, Search, ShieldAlert } from "lucide-react";
@@ -164,7 +163,6 @@ export default function AnalyticsPage() {
                 <SelectItem value="365">Last year</SelectItem>
               </SelectContent>
             </Select>
-            <ThemeToggle />
           </div>
         </div>
       </header>

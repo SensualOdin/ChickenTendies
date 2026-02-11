@@ -19,7 +19,7 @@ interface Notification {
   type: string;
   title: string;
   message: string;
-  isRead: boolean;
+  read: boolean;
   data?: NotificationData;
   createdAt: string;
 }
@@ -41,7 +41,7 @@ export function useNotifications() {
     if (notifications.length === 0) return;
 
     const latestNotification = notifications[0];
-    if (!latestNotification || latestNotification.isRead) return;
+    if (!latestNotification || latestNotification.read) return;
 
     if (lastNotificationIdRef.current !== latestNotification.id) {
       lastNotificationIdRef.current = latestNotification.id;
@@ -87,7 +87,7 @@ export function useNotifications() {
     }
   }, [notifications, toast, queryClient, setLocation]);
 
-  const unreadCount = notifications.filter(n => !n.isRead).length;
+  const unreadCount = notifications.filter(n => !n.read).length;
 
   return { notifications, unreadCount };
 }

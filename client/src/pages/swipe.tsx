@@ -3,7 +3,6 @@ import { useParams, useLocation, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { SwipeCard, SwipeButtons, type SwipeAction } from "@/components/swipe-card";
 import { MemberAvatars } from "@/components/member-avatars";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -463,7 +462,6 @@ export default function SwipePage() {
             </Button>
           )}
           <MemberAvatars members={group.members} size="sm" />
-          <ThemeToggle />
         </div>
       </header>
 

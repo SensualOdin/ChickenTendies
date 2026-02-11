@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { insertGroupSchema, type InsertGroup } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -70,7 +69,6 @@ export default function CreateGroup() {
             <span className="text-xs text-muted-foreground hidden sm:block">Swipe Together, Dine Together</span>
           </div>
         </div>
-        <ThemeToggle />
       </header>
 
       <main className="px-4 md:px-6 py-8 max-w-md mx-auto safe-bottom">
