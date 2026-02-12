@@ -22,6 +22,12 @@ The app is built as a Progressive Web App (PWA), meaning it works on any device 
 
 Sign in with your Replit account to unlock persistent crews, friends, dining history, achievements, push notifications, and your personal profile. All the social and long-term features require an account.
 
+### Branded Login Page
+- A custom ChickenTinders-branded sign-in page appears before users are redirected to the Replit authentication screen
+- Shows the app logo, a welcome message, a summary of what signing in unlocks (crews, visit tracking, secure data), and a clear "Continue with Replit" button
+- Includes an explanation that users will be briefly redirected to Replit and then brought right back
+- Helps users understand what Replit is and feel confident about the sign-in process
+
 ---
 
 ## Core Features
@@ -201,6 +207,7 @@ When the group can't seem to agree and swiping isn't producing matches:
 
 ### User Profile
 - View your avatar, name, and email from your Replit account
+- Name display handles long names gracefully with text truncation
 - Stats dashboard showing:
   - Total swipes made
   - Super-likes given
@@ -208,6 +215,10 @@ When the group can't seem to agree and swiping isn't producing matches:
   - Places visited
   - Number of crews you're in
   - Achievements unlocked
+
+### Reliable Stats Tracking
+- Both party and crew swipe endpoints log analytics events on the server using your authenticated user ID
+- Stats are queried from a single source of truth (the analytics events table) so every swipe reliably counts toward your profile stats regardless of whether it was a party or crew session
 
 ### Achievement System
 - Unlock achievements based on your activity:
@@ -301,6 +312,11 @@ The entire app is optimized for mobile devices:
 ### Auto-Fill Invite Codes
 - When someone clicks a shared link, the join page automatically fills in the invite code
 - Reduces friction — one tap to share, one tap to join
+
+### PWA Link Handling
+- When a shared invite link is opened in a regular browser (not the installed app), the join page shows a helpful hint banner
+- The banner tells the user they can open their installed ChickenTinders app and enter the code there to stay signed in, or just continue in the browser
+- Only appears when a code is present in the URL and the app is not running in standalone/PWA mode
 
 ---
 
