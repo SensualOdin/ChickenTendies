@@ -23,7 +23,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { Users, Plus, ArrowRight, UserPlus, Check, X, UserMinus, Bell, BellRing, BellOff, Play, User, BarChart3, CheckCheck } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import logoImage from "@assets/460272BC-3FCC-4927-8C2E-4C236353E7AB_1768880143398.png";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 
 interface Friend {
@@ -42,6 +42,7 @@ interface Crew {
   createdAt: string;
   memberCount: number;
   isOwner: boolean;
+  hasActiveSession?: boolean;
 }
 
 interface Notification {
@@ -66,6 +67,7 @@ export default function Dashboard() {
   const [isAddFriendOpen, setIsAddFriendOpen] = useState(false);
   const [isJoinCrewOpen, setIsJoinCrewOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
+  const [joiningCrewId, setJoiningCrewId] = useState<string | null>(null);
   const notificationRef = useRef<HTMLDivElement>(null);
 
   const { data: friends = [], isLoading: friendsLoading } = useQuery<Friend[]>({
@@ -175,6 +177,38 @@ export default function Dashboard() {
       toast({ title: "Error", description: "Failed to start session", variant: "destructive" });
     },
   });
+
+  const joinCrewSession = useCallback(async (crewId: string) => {
+    setJoiningCrewId(crewId);
+    try {
+      const response = await fetch(`/api/groups/${crewId}/join-session`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+      });
+      if (response.ok) {
+        const data = await response.json();
+        localStorage.setItem("grubmatch-member-id", data.memberId);
+        localStorage.setItem("grubmatch-group-id", data.group.id);
+        navigate(`/group/${data.group.id}`);
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        toast({
+          title: "Couldn't join session",
+          description: errorData.error || "The session may have ended.",
+          variant: "destructive",
+        });
+      }
+    } catch {
+      toast({
+        title: "Couldn't join session",
+        description: "Something went wrong. Try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setJoiningCrewId(null);
+    }
+  }, [navigate, toast]);
 
   const removeFriendMutation = useMutation({
     mutationFn: async (friendshipId: string) => {
@@ -541,17 +575,30 @@ export default function Dashboard() {
                       </div>
                       {crew.isOwner && <Badge variant="secondary">Owner</Badge>}
                     </CardHeader>
-                    <CardContent className="flex gap-2">
-                      <Button 
-                        size="sm" 
-                        className="flex-1" 
-                        data-testid={`button-start-session-${crew.id}`}
-                        onClick={() => startSessionMutation.mutate(crew)}
-                        disabled={startSessionMutation.isPending}
-                      >
-                        <Play className="w-4 h-4 mr-1" />
-                        {startSessionMutation.isPending ? "Starting..." : "Start Session"}
-                      </Button>
+                    <CardContent className="flex gap-2 flex-wrap">
+                      {crew.hasActiveSession ? (
+                        <Button 
+                          size="sm" 
+                          className="flex-1"
+                          data-testid={`button-join-session-${crew.id}`}
+                          onClick={() => joinCrewSession(crew.id)}
+                          disabled={joiningCrewId === crew.id}
+                        >
+                          <ArrowRight className="w-4 h-4 mr-1" />
+                          {joiningCrewId === crew.id ? "Joining..." : "Join Session"}
+                        </Button>
+                      ) : (
+                        <Button 
+                          size="sm" 
+                          className="flex-1" 
+                          data-testid={`button-start-session-${crew.id}`}
+                          onClick={() => startSessionMutation.mutate(crew)}
+                          disabled={startSessionMutation.isPending}
+                        >
+                          <Play className="w-4 h-4 mr-1" />
+                          {startSessionMutation.isPending ? "Starting..." : "Start Session"}
+                        </Button>
+                      )}
                       <Button 
                         size="sm" 
                         variant="outline" 

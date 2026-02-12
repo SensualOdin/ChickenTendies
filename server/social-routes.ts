@@ -261,8 +261,30 @@ export function registerSocialRoutes(app: Express): void {
           )
         )
         .orderBy(desc(persistentGroups.updatedAt));
+
+      const groupIds = groups.map(g => g.id);
+      let activeSessionMap = new Map<string, boolean>();
+      if (groupIds.length > 0) {
+        const activeSessions = await db
+          .select({ groupId: diningSessions.groupId })
+          .from(diningSessions)
+          .where(
+            and(
+              inArray(diningSessions.groupId, groupIds),
+              eq(diningSessions.status, "active")
+            )
+          );
+        for (const s of activeSessions) {
+          activeSessionMap.set(s.groupId, true);
+        }
+      }
+
+      const enrichedGroups = groups.map(g => ({
+        ...g,
+        hasActiveSession: activeSessionMap.has(g.id),
+      }));
       
-      res.json(groups);
+      res.json(enrichedGroups);
     } catch (error) {
       console.error("Error fetching crews:", error);
       res.status(500).json({ message: "Failed to fetch crews" });

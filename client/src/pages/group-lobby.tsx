@@ -81,6 +81,12 @@ export default function GroupLobby() {
   }, [initialGroup]);
 
   useEffect(() => {
+    if (group?.status === "swiping" && params.id) {
+      setLocation(`/group/${params.id}/swipe`);
+    }
+  }, [group?.status, params.id, setLocation]);
+
+  useEffect(() => {
     if (!params.id || !memberId) return;
 
     let socket: WebSocket | null = null;
