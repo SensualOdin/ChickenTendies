@@ -154,7 +154,6 @@ export default function CrewManage() {
         await navigator.share({
           title: "Join my ChickenTinders crew!",
           text: shareMessage,
-          url: joinUrl,
         });
       } catch (err) {
         if ((err as Error).name !== "AbortError") {

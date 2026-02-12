@@ -207,7 +207,6 @@ export default function GroupLobby() {
         await navigator.share({
           title: "Join my ChickenTinders dinner search!",
           text: shareMessage,
-          url: joinUrl,
         });
       } catch (err) {
         if ((err as Error).name !== "AbortError") {

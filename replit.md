@@ -47,7 +47,8 @@ Preferred communication style: Simple, everyday language.
 - **Visit Tracking**: "We Went Here" logging in dining sessions to track actual restaurant visits
 - **Reservation Integration**: Direct links to Yelp reservation pages from match cards
 - **Mobile-First PWA**: Full Progressive Web App with viewport-fit=cover, safe area insets for notched phones (iPhone Dynamic Island), responsive text/spacing with sm: breakpoints, 100dvh swipe page, 2-column mobile dashboard grid, hidden decorative elements on small screens
-- **Analytics Intent Engine**: Every swipe action (left/right/super-like) is logged to `analytics_events` table with full context (cuisine, price, location, time). Frontend `useAnalytics` hook batches events for efficiency. Dashboard at `/analytics` shows top cuisines, price preferences, hourly/daily activity, top restaurants, and demand lookups via recharts. API endpoints: `GET /api/analytics/summary`, `GET /api/analytics/demand?cuisine=X`, `GET /api/analytics/restaurant/:id`, `POST /api/analytics/events`
+- **Analytics Intent Engine**: Every swipe action (left/right/super-like) is logged to `analytics_events` table with full context (cuisine, price, location, time). Both party and crew swipe endpoints log analytics server-side with auth userId for reliable per-user stats. Frontend `useAnalytics` hook batches events for admin analytics dashboard. Stats endpoint (`GET /api/stats`) queries `analytics_events` by hashed auth userId for swipe/super-like counts. API endpoints: `GET /api/analytics/summary`, `GET /api/analytics/demand?cuisine=X`, `GET /api/analytics/restaurant/:id`, `POST /api/analytics/events`
+- **PWA Link Handling**: Join page (`/join?code=XXX`) shows a helpful hint banner when opened in a browser (not standalone PWA), telling users they can open their installed app and enter the code there or continue in the browser
 
 ### Build Process
 - **Development**: Vite dev server with HMR, Express backend via tsx

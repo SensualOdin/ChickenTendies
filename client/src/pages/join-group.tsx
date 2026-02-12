@@ -9,10 +9,10 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { joinGroupSchema, type JoinGroup } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
-import { ArrowLeft, Flame, Loader2, Ticket, User } from "lucide-react";
+import { ArrowLeft, Flame, Loader2, Ticket, User, Smartphone } from "lucide-react";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 
 export default function JoinGroupPage() {
   const [, setLocation] = useLocation();
@@ -22,6 +22,12 @@ export default function JoinGroupPage() {
   const urlParams = new URLSearchParams(searchString);
   const codeFromUrl = (urlParams.get("code") || "").toUpperCase().slice(0, 6);
   const [needsAuth, setNeedsAuth] = useState(false);
+
+  const isInBrowser = useMemo(() => {
+    const isStandalone = window.matchMedia("(display-mode: standalone)").matches
+      || (window.navigator as any).standalone === true;
+    return !isStandalone && !!codeFromUrl;
+  }, [codeFromUrl]);
 
   const form = useForm<JoinGroup>({
     resolver: zodResolver(joinGroupSchema),
@@ -187,6 +193,27 @@ export default function JoinGroupPage() {
       </header>
 
       <main className="px-4 md:px-6 py-8 max-w-md mx-auto safe-bottom">
+        {isInBrowser && (
+          <motion.div
+            initial={{ y: -10, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            className="mb-4"
+          >
+            <Card className="border-2 border-primary/30 bg-primary/5">
+              <CardContent className="p-4">
+                <div className="flex items-start gap-3">
+                  <Smartphone className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                  <div className="text-sm">
+                    <p className="font-medium" data-testid="text-pwa-hint">Already have ChickenTinders on your home screen?</p>
+                    <p className="text-muted-foreground mt-1">
+                      Open the app and enter code <span className="font-mono font-bold text-foreground">{codeFromUrl}</span> there to stay signed in. Or just continue here!
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
         <motion.div
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}

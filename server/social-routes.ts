@@ -12,12 +12,15 @@ import {
   pushSubscriptions,
   diningHistory,
   userAchievements,
-  achievementTypeEnum
+  achievementTypeEnum,
+  analyticsEvents
 } from "@shared/schema";
 import { eq, or, and, inArray, desc, sql } from "drizzle-orm";
 import { fetchRestaurantsFromYelp } from "./yelp";
 import type { GroupPreferences, Restaurant } from "@shared/schema";
 import { notifyUser, notifyUsers, sessionUserMap } from "./routes";
+import { createHash } from "crypto";
+import { logAnalyticsEvent } from "./analytics";
 import { storage } from "./storage";
 import { sendPushToUsers, getVapidPublicKey } from "./push";
 
@@ -736,6 +739,14 @@ export function registerSocialRoutes(app: Express): void {
         })
         .returning();
       
+      const action = superLiked ? "super_like" : liked ? "swipe_right" : "swipe_left";
+      logAnalyticsEvent({
+        userId,
+        sessionId,
+        restaurantId,
+        action,
+      }).catch(() => {});
+      
       if (liked) {
         const [session] = await db
           .select()
@@ -1202,16 +1213,30 @@ export function registerSocialRoutes(app: Express): void {
   app.get("/api/stats", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = getUserId(req);
+      const hashedId = createHash("sha256").update(userId).digest("hex").substring(0, 16);
       
-      const [swipeCount] = await db
+      const [analyticsSwipeCount] = await db
         .select({ count: sql<number>`count(*)` })
-        .from(sessionSwipes)
-        .where(eq(sessionSwipes.userId, userId));
+        .from(analyticsEvents)
+        .where(and(
+          eq(analyticsEvents.userId, hashedId),
+          or(
+            eq(analyticsEvents.action, "swipe_right"),
+            eq(analyticsEvents.action, "swipe_left"),
+            eq(analyticsEvents.action, "super_like")
+          )
+        ));
       
-      const [superLikeCount] = await db
+      const [analyticsSuperLikeCount] = await db
         .select({ count: sql<number>`count(*)` })
-        .from(sessionSwipes)
-        .where(and(eq(sessionSwipes.userId, userId), eq(sessionSwipes.superLiked, true)));
+        .from(analyticsEvents)
+        .where(and(
+          eq(analyticsEvents.userId, hashedId),
+          eq(analyticsEvents.action, "super_like")
+        ));
+      
+      const totalSwipes = Number(analyticsSwipeCount?.count || 0);
+      const superLikes = Number(analyticsSuperLikeCount?.count || 0);
       
       const userGroups = await db
         .select()
@@ -1257,8 +1282,8 @@ export function registerSocialRoutes(app: Express): void {
         .where(eq(userAchievements.userId, userId));
       
       res.json({
-        totalSwipes: Number(swipeCount?.count || 0),
-        superLikes: Number(superLikeCount?.count || 0),
+        totalSwipes,
+        superLikes,
         totalMatches: matchCount,
         placesVisited: historyCount,
         crewCount: userGroups.length,

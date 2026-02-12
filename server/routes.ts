@@ -10,7 +10,7 @@ import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
 import { isAuthenticated } from "./replit_integrations/auth";
 import { registerSocialRoutes } from "./social-routes";
 import { sendPushToGroupMembers, saveGroupPushSubscription, getVapidPublicKey } from "./push";
-import { logBatchAnalyticsEvents, getAnalyticsSummary, getCuisineDemand, getRestaurantAnalytics } from "./analytics";
+import { logAnalyticsEvent, logBatchAnalyticsEvents, getAnalyticsSummary, getCuisineDemand, getRestaurantAnalytics } from "./analytics";
 import { db } from "./db";
 import { authStorage } from "./replit_integrations/auth/storage";
 import { eq, and, inArray } from "drizzle-orm";
@@ -413,6 +413,17 @@ export async function registerRoutes(
       }
 
       const swipe = await storage.recordSwipe(req.params.id, memberId, restaurantId, liked);
+      
+      const authUserId = (req as any).user?.claims?.sub;
+      if (authUserId) {
+        const action = superLiked ? "super_like" : liked ? "swipe_right" : "swipe_left";
+        logAnalyticsEvent({
+          userId: authUserId,
+          sessionId: req.params.id,
+          restaurantId,
+          action,
+        }).catch(() => {});
+      }
       
       broadcast(req.params.id, { 
         type: "swipe_made", 
