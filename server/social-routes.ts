@@ -17,7 +17,8 @@ import {
 import { eq, or, and, inArray, desc, sql } from "drizzle-orm";
 import { fetchRestaurantsFromYelp } from "./yelp";
 import type { GroupPreferences, Restaurant } from "@shared/schema";
-import { notifyUser, notifyUsers } from "./routes";
+import { notifyUser, notifyUsers, sessionUserMap } from "./routes";
+import { storage } from "./storage";
 import { sendPushToUsers, getVapidPublicKey } from "./push";
 
 function getUserId(req: Request): string {
@@ -547,6 +548,24 @@ export function registerSocialRoutes(app: Express): void {
         return res.status(404).json({ message: "Crew not found" });
       }
       
+      const existingMemGroup = await storage.getGroup(groupId);
+      if (existingMemGroup) {
+        const { randomUUID } = await import("crypto");
+        await storage.updateGroup(groupId, {
+          ...existingMemGroup,
+          members: [],
+          preferences: null,
+          status: "waiting",
+          createdAt: Date.now(),
+          leaderToken: randomUUID(),
+        });
+      }
+      for (const [key] of sessionUserMap) {
+        if (key.startsWith(`${groupId}:`)) {
+          sessionUserMap.delete(key);
+        }
+      }
+
       const [session] = await db
         .insert(diningSessions)
         .values({

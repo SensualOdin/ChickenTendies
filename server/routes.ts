@@ -15,7 +15,7 @@ import { db } from "./db";
 import { authStorage } from "./replit_integrations/auth/storage";
 import { eq, and, inArray } from "drizzle-orm";
 
-const sessionUserMap: Map<string, string> = new Map();
+export const sessionUserMap: Map<string, string> = new Map();
 
 async function isAdminUser(req: any, res: any, next: any) {
   try {
@@ -216,24 +216,20 @@ export async function registerRoutes(
         : "Member";
 
       let memGroup = await storage.getGroup(groupId);
+      const isSessionCreator = activeSession.createdById === userId;
+      const hasNoMembers = memGroup && memGroup.members.length === 0;
 
-      if (!memGroup) {
-        const ownerUser = userMap.get(persistentGroup.ownerId);
-        const ownerName = ownerUser
-          ? [ownerUser.firstName, ownerUser.lastName].filter(Boolean).join(" ")
-            || ownerUser.email?.split("@")[0]
-            || "Host"
-          : "Host";
-
+      if (!memGroup || hasNoMembers) {
         const hostMemberId = randomUUID();
         const host: GroupMember = {
           id: hostMemberId,
-          name: ownerName,
+          name: displayName,
           isHost: true,
           joinedAt: Date.now(),
           doneSwiping: false,
         };
 
+        const leaderToken = randomUUID();
         memGroup = {
           id: groupId,
           code: persistentGroup.inviteCode,
@@ -242,11 +238,13 @@ export async function registerRoutes(
           preferences: activeSession.preferences as any,
           status: "waiting",
           createdAt: Date.now(),
-          leaderToken: randomUUID(),
+          leaderToken,
         };
         await storage.updateGroup(groupId, memGroup);
+        sessionUserMap.set(`${groupId}:${userId}`, hostMemberId);
 
-        sessionUserMap.set(`${groupId}:${persistentGroup.ownerId}`, hostMemberId);
+        res.json({ memberId: hostMemberId, group: memGroup, leaderToken });
+        return;
       }
 
       const existingMemberId = sessionUserMap.get(`${groupId}:${userId}`);
@@ -262,7 +260,7 @@ export async function registerRoutes(
       const newMember: GroupMember = {
         id: memberId,
         name: displayName,
-        isHost: false,
+        isHost: isSessionCreator && !memGroup.members.some(m => m.isHost),
         joinedAt: Date.now(),
         doneSwiping: false,
       };

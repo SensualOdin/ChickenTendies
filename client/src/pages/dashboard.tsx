@@ -151,19 +151,24 @@ export default function Dashboard() {
 
   const startSessionMutation = useMutation({
     mutationFn: async (crew: Crew) => {
-      // First create a dining session (this sends notifications to crew members)
       await apiRequest("POST", `/api/crews/${crew.id}/sessions`, {});
       
-      // Then create the swiping group
-      const response = await apiRequest("POST", "/api/groups", {
-        name: `${crew.name} Session`,
-        hostName: user?.firstName || user?.email?.split("@")[0] || "Host",
+      const response = await fetch(`/api/groups/${crew.id}/join-session`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
       });
+      if (!response.ok) {
+        throw new Error("Failed to join session");
+      }
       return response.json();
     },
     onSuccess: (data) => {
       localStorage.setItem("grubmatch-member-id", data.memberId);
       localStorage.setItem("grubmatch-group-id", data.group.id);
+      if (data.leaderToken) {
+        localStorage.setItem(`grubmatch-leader-token-${data.group.id}`, data.leaderToken);
+      }
       navigate(`/group/${data.group.id}/preferences`);
     },
     onError: () => {
