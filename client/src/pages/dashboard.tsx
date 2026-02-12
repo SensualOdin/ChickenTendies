@@ -20,7 +20,7 @@ import { useNotifications } from "@/hooks/use-notifications";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Users, Plus, ArrowRight, UserPlus, Check, X, UserMinus, Bell, BellRing, BellOff, Play, User, BarChart3, CheckCheck } from "lucide-react";
+import { Users, Plus, ArrowRight, UserPlus, Check, X, UserMinus, Bell, BellRing, BellOff, Play, User, BarChart3, CheckCheck, Settings } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import logoImage from "@assets/460272BC-3FCC-4927-8C2E-4C236353E7AB_1768880143398.png";
 import { useState, useRef, useEffect, useCallback } from "react";
@@ -569,16 +569,37 @@ export default function Dashboard() {
                 {crews.map((crew) => (
                   <Card key={crew.id} className="hover-elevate">
                     <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-                      <div>
-                        <CardTitle className="text-lg">{crew.name}</CardTitle>
-                        <CardDescription>{crew.memberCount} member{crew.memberCount !== 1 ? "s" : ""}</CardDescription>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="min-w-0">
+                          <CardTitle className="text-lg truncate">{crew.name}</CardTitle>
+                          <CardDescription>{crew.memberCount} member{crew.memberCount !== 1 ? "s" : ""}</CardDescription>
+                        </div>
+                        {crew.isOwner && <Badge variant="secondary">Owner</Badge>}
                       </div>
-                      {crew.isOwner && <Badge variant="secondary">Owner</Badge>}
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        data-testid={`button-manage-crew-${crew.id}`}
+                        onClick={() => navigate(`/crew/${crew.id}`)}
+                      >
+                        <Settings className="w-4 h-4" />
+                      </Button>
                     </CardHeader>
                     <CardContent className="flex gap-2 flex-wrap">
-                      {crew.hasActiveSession ? (
+                      <Button 
+                        size="sm" 
+                        className="flex-1" 
+                        data-testid={`button-start-session-${crew.id}`}
+                        onClick={() => startSessionMutation.mutate(crew)}
+                        disabled={startSessionMutation.isPending}
+                      >
+                        <Play className="w-4 h-4 mr-1" />
+                        {startSessionMutation.isPending ? "Starting..." : "New Session"}
+                      </Button>
+                      {crew.hasActiveSession && (
                         <Button 
-                          size="sm" 
+                          size="sm"
+                          variant="outline"
                           className="flex-1"
                           data-testid={`button-join-session-${crew.id}`}
                           onClick={() => joinCrewSession(crew.id)}
@@ -587,26 +608,7 @@ export default function Dashboard() {
                           <ArrowRight className="w-4 h-4 mr-1" />
                           {joiningCrewId === crew.id ? "Joining..." : "Join Session"}
                         </Button>
-                      ) : (
-                        <Button 
-                          size="sm" 
-                          className="flex-1" 
-                          data-testid={`button-start-session-${crew.id}`}
-                          onClick={() => startSessionMutation.mutate(crew)}
-                          disabled={startSessionMutation.isPending}
-                        >
-                          <Play className="w-4 h-4 mr-1" />
-                          {startSessionMutation.isPending ? "Starting..." : "Start Session"}
-                        </Button>
                       )}
-                      <Button 
-                        size="sm" 
-                        variant="outline" 
-                        data-testid={`button-manage-crew-${crew.id}`}
-                        onClick={() => navigate(`/crew/${crew.id}`)}
-                      >
-                        Manage
-                      </Button>
                     </CardContent>
                   </Card>
                 ))}

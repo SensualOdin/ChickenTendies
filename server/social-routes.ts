@@ -570,6 +570,16 @@ export function registerSocialRoutes(app: Express): void {
         return res.status(404).json({ message: "Crew not found" });
       }
       
+      await db
+        .update(diningSessions)
+        .set({ status: "completed", endedAt: new Date() })
+        .where(
+          and(
+            eq(diningSessions.groupId, groupId),
+            eq(diningSessions.status, "active")
+          )
+        );
+
       const existingMemGroup = await storage.getGroup(groupId);
       if (existingMemGroup) {
         const { randomUUID } = await import("crypto");
@@ -877,6 +887,72 @@ export function registerSocialRoutes(app: Express): void {
     } catch (error) {
       console.error("Error logging restaurant visit:", error);
       res.status(500).json({ message: "Failed to log visit" });
+    }
+  });
+
+  app.post("/api/crews/:id/complete-session", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      const groupId = req.params.id;
+      const { restaurantId, action } = req.body;
+
+      const [group] = await db
+        .select()
+        .from(persistentGroups)
+        .where(eq(persistentGroups.id, groupId));
+
+      if (!group) {
+        return res.status(404).json({ message: "Crew not found" });
+      }
+
+      const isMember = group.ownerId === userId || group.memberIds.includes(userId);
+      if (!isMember) {
+        return res.status(403).json({ message: "Not authorized" });
+      }
+
+      const [activeSession] = await db
+        .select()
+        .from(diningSessions)
+        .where(
+          and(
+            eq(diningSessions.groupId, groupId),
+            eq(diningSessions.status, "active")
+          )
+        )
+        .orderBy(desc(diningSessions.startedAt))
+        .limit(1);
+
+      if (!activeSession) {
+        return res.status(404).json({ message: "No active session found" });
+      }
+
+      const updateData: Record<string, unknown> = {
+        status: "completed",
+        endedAt: new Date(),
+      };
+
+      if (restaurantId) {
+        updateData.visitedRestaurantId = restaurantId;
+      }
+
+      const [updated] = await db
+        .update(diningSessions)
+        .set(updateData)
+        .where(eq(diningSessions.id, activeSession.id))
+        .returning();
+
+      const existingMemGroup = await storage.getGroup(groupId);
+      if (existingMemGroup) {
+        await storage.updateGroup(groupId, {
+          ...existingMemGroup,
+          status: "finished",
+        });
+      }
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Error completing session:", error);
+      res.status(500).json({ message: "Failed to complete session" });
     }
   });
 

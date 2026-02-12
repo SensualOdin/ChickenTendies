@@ -6,9 +6,11 @@ import { Badge } from "@/components/ui/badge";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Home, Flame, Loader2, Star, MapPin, ExternalLink, Heart, PartyPopper, Trophy, Sparkles, RefreshCw, CalendarPlus, Phone, Check, Truck } from "lucide-react";
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
 import type { Group, Restaurant } from "@shared/schema";
+
+type SessionAction = "directions" | "doordash" | "visited" | "reserve";
 
 function generateCalendarUrl(restaurant: Restaurant, groupName: string) {
   const today = new Date();
@@ -39,6 +41,7 @@ export default function MatchesPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [visitedRestaurantId, setVisitedRestaurantId] = useState<string | null>(null);
+  const [sessionCompleted, setSessionCompleted] = useState(false);
 
   const { data: group, isLoading: groupLoading } = useQuery<Group>({
     queryKey: ["/api/groups", params.id],
@@ -60,6 +63,19 @@ export default function MatchesPage() {
       setLocation(`/group/${params.id}/swipe`);
     },
   });
+
+  const completeSession = useCallback(async (restaurantId?: string, action?: SessionAction) => {
+    if (sessionCompleted || !params.id) return;
+    try {
+      await apiRequest("POST", `/api/crews/${params.id}/complete-session`, {
+        restaurantId,
+        action,
+      });
+      setSessionCompleted(true);
+      queryClient.invalidateQueries({ queryKey: ["/api/crews"] });
+    } catch {
+    }
+  }, [sessionCompleted, params.id]);
 
   const isLoading = groupLoading || matchesLoading;
 
@@ -180,6 +196,7 @@ export default function MatchesPage() {
                               ? `${restaurant.latitude},${restaurant.longitude}`
                               : encodeURIComponent(restaurant.address);
                             window.open(`https://www.google.com/maps/dir/?api=1&destination=${destination}`, '_blank');
+                            completeSession(restaurant.id, "directions");
                           }}
                         >
                           <MapPin className="w-3 h-3 mr-1" />
@@ -193,6 +210,7 @@ export default function MatchesPage() {
                           onClick={() => {
                             const query = encodeURIComponent(restaurant.name);
                             window.open(`https://www.doordash.com/search/store/${query}/`, '_blank');
+                            completeSession(restaurant.id, "doordash");
                           }}
                         >
                           <Truck className="w-3 h-3 mr-1" />
@@ -206,6 +224,7 @@ export default function MatchesPage() {
                             data-testid={`button-reserve-${restaurant.id}`}
                             onClick={() => {
                               window.open(restaurant.yelpUrl, '_blank');
+                              completeSession(restaurant.id, "reserve");
                             }}
                           >
                             <Phone className="w-3 h-3 mr-1" />
@@ -231,9 +250,10 @@ export default function MatchesPage() {
                           data-testid={`button-visited-${restaurant.id}`}
                           onClick={() => {
                             setVisitedRestaurantId(restaurant.id);
+                            completeSession(restaurant.id, "visited");
                             toast({ 
-                              title: "Logged!", 
-                              description: `Marked "${restaurant.name}" as your destination!` 
+                              title: "Session wrapped up!", 
+                              description: `Marked "${restaurant.name}" as visited. Start a new session anytime!` 
                             });
                           }}
                         >

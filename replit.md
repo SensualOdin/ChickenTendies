@@ -43,6 +43,7 @@ Preferred communication style: Simple, everyday language.
 - **Live Reactions**: Real-time emoji reactions during swiping visible to the whole group (WebSocket-powered)
 - **Final Vote Mode**: When indecisive, users can trigger a "Final Vote" with their liked restaurants and a countdown timer
 - **Smart Exclusions**: "Been here before" badges show on swipe cards for previously visited restaurants
+- **Session Lifecycle**: Sessions auto-complete when users take action on matches (directions, DoorDash, "We went here", reserve). Starting a new session also auto-completes any previous active session. Dashboard shows "New Session" + conditional "Join Session" buttons with settings cog for crew management.
 - **Visit Tracking**: "We Went Here" logging in dining sessions to track actual restaurant visits
 - **Reservation Integration**: Direct links to Yelp reservation pages from match cards
 - **Mobile-First PWA**: Full Progressive Web App with viewport-fit=cover, safe area insets for notched phones (iPhone Dynamic Island), responsive text/spacing with sm: breakpoints, 100dvh swipe page, 2-column mobile dashboard grid, hidden decorative elements on small screens
