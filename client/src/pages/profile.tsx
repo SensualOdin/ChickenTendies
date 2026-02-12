@@ -195,13 +195,14 @@ export default function ProfilePage() {
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h2 className="text-2xl font-bold" data-testid="text-display-name">
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-2xl font-bold truncate" data-testid="text-display-name">
                         {hasName ? displayName : (user.email || "User")}
                       </h2>
                       <Button
                         variant="ghost"
                         size="icon"
+                        className="shrink-0"
                         onClick={startEditing}
                         data-testid="button-edit-profile"
                       >
