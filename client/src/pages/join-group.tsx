@@ -170,7 +170,7 @@ export default function JoinGroupPage() {
     const code = form.getValues("code");
     sessionStorage.setItem("chickentinders-join-code", code);
     sessionStorage.setItem("chickentinders-pending-crew-join", "true");
-    window.location.href = "/api/login";
+    window.location.href = "/login";
   };
 
   return (

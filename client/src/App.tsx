@@ -15,6 +15,7 @@ import MatchesPage from "@/pages/matches";
 import ProfilePage from "@/pages/profile";
 import CrewManage from "@/pages/crew-manage";
 import AnalyticsPage from "@/pages/analytics";
+import LoginPage from "@/pages/login";
 import NotFound from "@/pages/not-found";
 import { PWAInstallPrompt } from "@/components/pwa-install-prompt";
 import { useEffect } from "react";
@@ -48,6 +49,7 @@ function Router() {
       <Route path="/profile" component={ProfilePage} />
       <Route path="/crew/:id" component={CrewManage} />
       <Route path="/analytics" component={AnalyticsPage} />
+      <Route path="/login" component={LoginPage} />
       <Route component={NotFound} />
     </Switch>
   );

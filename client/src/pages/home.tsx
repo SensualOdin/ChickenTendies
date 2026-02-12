@@ -66,12 +66,12 @@ export default function Home() {
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <a href="/api/login">
+            <Link href="/login">
               <Button variant="outline" className="flex items-center gap-2" data-testid="button-login">
                 <LogIn className="w-4 h-4" />
                 Sign In
               </Button>
-            </a>
+            </Link>
           )}
         </div>
       </header>

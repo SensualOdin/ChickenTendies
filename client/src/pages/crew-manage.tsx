@@ -279,7 +279,7 @@ export default function CrewManage() {
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Card className="p-8 text-center">
           <p className="mb-4">Please sign in to manage crews.</p>
-          <a href="/api/login">
+          <a href="/login">
             <Button data-testid="button-signin">Sign In</Button>
           </a>
         </Card>
