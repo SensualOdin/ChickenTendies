@@ -175,11 +175,19 @@ export default function MatchesPage() {
                           <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
                           <span className="font-medium text-foreground">{(restaurant.combinedRating ?? restaurant.rating).toFixed(1)}</span>
                           {restaurant.googleRating != null ? (
-                            <span className="text-xs">(Y:{restaurant.rating.toFixed(1)} G:{restaurant.googleRating.toFixed(1)})</span>
+                            <span className="text-xs text-muted-foreground">
+                              {restaurant.reviewCount + (restaurant.googleReviewCount ?? 0)} reviews
+                            </span>
                           ) : (
-                            <span>({restaurant.reviewCount})</span>
+                            <span className="text-xs text-muted-foreground">{restaurant.reviewCount} reviews</span>
                           )}
                         </div>
+                        {restaurant.googleRating != null && (
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <span>Yelp {restaurant.rating.toFixed(1)}</span>
+                            <span>Google {restaurant.googleRating.toFixed(1)}</span>
+                          </div>
+                        )}
                         <div className="flex items-center gap-1">
                           <MapPin className="w-4 h-4" />
                           <span>{restaurant.distance.toFixed(1)} mi</span>

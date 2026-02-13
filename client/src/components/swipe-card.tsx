@@ -163,10 +163,10 @@ export function SwipeCard({ restaurant, onSwipe, isTop, visitedBefore = false }:
               </span>
               {restaurant.googleRating != null ? (
                 <span className="text-white/70 text-xs">
-                  (Y:{restaurant.rating.toFixed(1)} G:{restaurant.googleRating.toFixed(1)})
+                  {restaurant.reviewCount + (restaurant.googleReviewCount ?? 0)} reviews
                 </span>
               ) : (
-                <span className="text-white/70">({restaurant.reviewCount})</span>
+                <span className="text-white/70 text-xs">{restaurant.reviewCount} reviews</span>
               )}
             </div>
             <div className="flex items-center gap-1">
@@ -180,6 +180,13 @@ export function SwipeCard({ restaurant, onSwipe, isTop, visitedBefore = false }:
               </div>
             )}
           </div>
+
+          {restaurant.googleRating != null && (
+            <div className="flex items-center gap-3 text-xs text-white/60 mb-1">
+              <span>Yelp {restaurant.rating.toFixed(1)}</span>
+              <span>Google {restaurant.googleRating.toFixed(1)}</span>
+            </div>
+          )}
 
           <p className="text-sm text-white/80 line-clamp-2">
             {restaurant.description}

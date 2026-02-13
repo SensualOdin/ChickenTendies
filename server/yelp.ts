@@ -269,7 +269,7 @@ export async function fetchRestaurantsFromYelp(preferences: GroupPreferences, of
         address: `${business.location.address1}, ${business.location.city}`,
         distance,
         dietaryOptions: [],
-        description: `${business.rating} star rated with ${business.review_count} reviews. ${business.categories.map(c => c.title).join(", ")}.`,
+        description: `${business.categories.map(c => c.title).join(", ")}`,
         yelpUrl: business.url,
         latitude: business.coordinates?.latitude,
         longitude: business.coordinates?.longitude,
