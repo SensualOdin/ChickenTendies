@@ -62,6 +62,7 @@ export const groupPreferencesSchema = z.object({
   dietaryRestrictions: z.array(z.enum(dietaryRestrictions)).default([]),
   cuisineTypes: z.array(z.enum(cuisineTypes)).default([]),
   priceRange: z.array(z.enum(priceRanges)).default(["$", "$$", "$$$"]),
+  minRating: z.number().min(0).max(5).optional().default(0),
   latitude: z.number().optional(),
   longitude: z.number().optional(),
   trySomethingNew: z.boolean().optional().default(false), // Hide cuisines already matched on

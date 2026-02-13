@@ -11,7 +11,7 @@ import { Slider } from "@/components/ui/slider";
 import { groupPreferencesSchema, type GroupPreferences, type Group, dietaryRestrictions, cuisineTypes, priceRanges } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Flame, Loader2, MapPin, Ruler, UtensilsCrossed, DollarSign, Leaf, Sparkles, Navigation } from "lucide-react";
+import { ArrowLeft, Flame, Loader2, MapPin, Ruler, UtensilsCrossed, DollarSign, Leaf, Sparkles, Navigation, Star } from "lucide-react";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
@@ -36,6 +36,7 @@ export default function Preferences() {
       dietaryRestrictions: [],
       cuisineTypes: [],
       priceRange: ["$", "$$", "$$$"],
+      minRating: 0,
       latitude: undefined,
       longitude: undefined,
       trySomethingNew: false,
@@ -53,6 +54,7 @@ export default function Preferences() {
         dietaryRestrictions: prefs.dietaryRestrictions || [],
         cuisineTypes: prefs.cuisineTypes || [],
         priceRange: prefs.priceRange || ["$", "$$", "$$$"],
+        minRating: prefs.minRating || 0,
         latitude: prefs.latitude,
         longitude: prefs.longitude,
         trySomethingNew: prefs.trySomethingNew || false,
@@ -162,6 +164,7 @@ export default function Preferences() {
   }
 
   const radius = form.watch("radius");
+  const minRating = form.watch("minRating");
 
   return (
     <div className="min-h-screen bg-background safe-top safe-x">
@@ -297,6 +300,53 @@ export default function Preferences() {
                               data-testid="slider-radius"
                             />
                           </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 text-sm font-semibold">
+                      <Star className="w-4 h-4 text-yellow-500" />
+                      Minimum Rating
+                    </div>
+                    
+                    <FormField
+                      control={form.control}
+                      name="minRating"
+                      render={({ field }) => (
+                        <FormItem>
+                          <div className="grid grid-cols-5 gap-2">
+                            {[
+                              { value: 0, label: "Any" },
+                              { value: 3, label: "3+" },
+                              { value: 3.5, label: "3.5+" },
+                              { value: 4, label: "4+" },
+                              { value: 4.5, label: "4.5+" },
+                            ].map((option) => (
+                              <button
+                                key={option.value}
+                                type="button"
+                                onClick={() => field.onChange(option.value)}
+                                className={`py-3 rounded-xl border-2 font-bold transition-all text-sm ${
+                                  (field.value || 0) === option.value
+                                    ? "border-yellow-500 bg-gradient-to-br from-yellow-500/20 to-orange-500/20 text-yellow-600 dark:text-yellow-400"
+                                    : "border-border hover:border-yellow-500/50"
+                                }`}
+                                data-testid={`button-rating-${option.value}`}
+                              >
+                                {option.value > 0 && <Star className="w-3 h-3 inline mr-0.5 fill-current" />}
+                                {option.label}
+                              </button>
+                            ))}
+                          </div>
+                          <FormDescription>
+                            {minRating && minRating > 0 
+                              ? `Only show restaurants rated ${minRating} stars or higher`
+                              : "Show restaurants of any rating"
+                            }
+                          </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}

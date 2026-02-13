@@ -284,15 +284,27 @@ export async function fetchRestaurantsFromYelp(preferences: GroupPreferences, of
     return [];
   }
 
-  // Filter out excluded cuisines if "try something new" is enabled
   let filteredRestaurants = restaurants;
+
+  // Strict radius filtering — remove restaurants beyond user's chosen distance
+  // Keep restaurants with distance=0 (unknown) since Yelp may not always provide distance
+  const maxDistance = preferences.radius;
+  filteredRestaurants = filteredRestaurants.filter(r => r.distance === 0 || r.distance <= maxDistance);
+
+  // Filter by minimum rating if set
+  if (preferences.minRating && preferences.minRating > 0) {
+    filteredRestaurants = filteredRestaurants.filter(r => r.rating >= preferences.minRating!);
+  }
+
+  // Filter out excluded cuisines if "try something new" is enabled
   if (preferences.excludeCuisines && preferences.excludeCuisines.length > 0) {
-    filteredRestaurants = restaurants.filter(r => 
+    filteredRestaurants = filteredRestaurants.filter(r => 
       !preferences.excludeCuisines!.includes(r.cuisine)
     );
   }
 
-  const shuffled = shuffleArray(filteredRestaurants);
+  // Sort by distance (closest first) so nearby restaurants appear earlier in the swipe deck
+  filteredRestaurants.sort((a, b) => a.distance - b.distance);
   
-  return shuffled.slice(0, 20);
+  return filteredRestaurants.slice(0, 20);
 }
