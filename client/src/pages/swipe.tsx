@@ -9,7 +9,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useGroupPushNotifications } from "@/hooks/use-push-notifications";
 import { useAnalytics } from "@/hooks/use-analytics";
-import { Flame, ChevronRight, PartyPopper, Bell, Timer, Vote, Trophy, Heart, ThumbsUp, Eye, Star, Utensils, BellRing, X } from "lucide-react";
+import { Flame, ChevronRight, PartyPopper, Bell, Timer, Vote, Trophy, Heart, ThumbsUp, Eye, Star, Utensils, BellRing, X, Home } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Group, Restaurant, WSMessage, ReactionType } from "@shared/schema";
 import confetti from "canvas-confetti";
@@ -519,7 +519,7 @@ export default function SwipePage() {
                   {matches.length > 0 
                     ? `Amazing! You've got ${matches.length} match${matches.length !== 1 ? "es" : ""} with your crew!`
                     : allDone 
-                      ? "Everyone's finished! Check out your matches below."
+                      ? "No matches this round — try expanding your preferences next time!"
                       : "Waiting for the rest of your crew..."
                   }
                 </p>
@@ -543,14 +543,22 @@ export default function SwipePage() {
                   </div>
                 )}
                 
-                {matches.length > 0 && (
-                  <Link href={`/group/${params.id}/matches`}>
-                    <Button size="lg" className="bg-gradient-to-r from-primary to-orange-500" data-testid="button-view-matches">
-                      See Your Matches!
-                      <ChevronRight className="w-5 h-5 ml-2" />
+                <div className="flex flex-col gap-3 items-center">
+                  {matches.length > 0 && (
+                    <Link href={`/group/${params.id}/matches`}>
+                      <Button size="lg" className="bg-gradient-to-r from-primary to-orange-500" data-testid="button-view-matches">
+                        See Your Matches!
+                        <ChevronRight className="w-5 h-5 ml-2" />
+                      </Button>
+                    </Link>
+                  )}
+                  <Link href="/">
+                    <Button size="lg" variant={matches.length > 0 ? "outline" : "default"} data-testid="button-back-home">
+                      <Home className="w-5 h-5 mr-2" />
+                      Back to Home
                     </Button>
                   </Link>
-                )}
+                </div>
               </CardContent>
             </Card>
           </motion.div>
