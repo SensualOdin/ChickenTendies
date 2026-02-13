@@ -1,5 +1,11 @@
+import { db } from "./db";
+import { googlePlacesCache } from "@shared/schema";
+import { eq, sql } from "drizzle-orm";
+
 const GOOGLE_PLACES_API_KEY = process.env.GOOGLE_PLACES_API_KEY;
 const GOOGLE_PLACES_URL = "https://places.googleapis.com/v1/places:searchText";
+
+const CACHE_TTL_HOURS = 24;
 
 interface GooglePlaceResult {
   rating?: number;
@@ -81,7 +87,49 @@ export async function lookupGooglePlace(
   }
 }
 
-const googleCache = new Map<string, GooglePlaceData>();
+async function getCachedGooglePlace(cacheKey: string): Promise<GooglePlaceData | null> {
+  try {
+    const [row] = await db.select().from(googlePlacesCache)
+      .where(eq(googlePlacesCache.cacheKey, cacheKey));
+
+    if (!row || !row.createdAt) return null;
+
+    const ageHours = (Date.now() - row.createdAt.getTime()) / (1000 * 60 * 60);
+    if (ageHours > CACHE_TTL_HOURS) {
+      await db.delete(googlePlacesCache).where(eq(googlePlacesCache.cacheKey, cacheKey));
+      return null;
+    }
+
+    return {
+      googleRating: row.googleRating,
+      googleReviewCount: row.googleReviewCount,
+      googleMapsUrl: row.googleMapsUrl,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function setCachedGooglePlace(cacheKey: string, data: GooglePlaceData): Promise<void> {
+  try {
+    await db.insert(googlePlacesCache).values({
+      cacheKey,
+      googleRating: data.googleRating,
+      googleReviewCount: data.googleReviewCount,
+      googleMapsUrl: data.googleMapsUrl,
+    }).onConflictDoUpdate({
+      target: googlePlacesCache.cacheKey,
+      set: {
+        googleRating: data.googleRating,
+        googleReviewCount: data.googleReviewCount,
+        googleMapsUrl: data.googleMapsUrl,
+        createdAt: sql`now()`,
+      },
+    });
+  } catch (error) {
+    console.error("Failed to cache Google Place data:", error);
+  }
+}
 
 export async function enrichRestaurantsWithGoogle(
   restaurants: Array<{
@@ -103,13 +151,14 @@ export async function enrichRestaurantsWithGoogle(
     const batch = restaurants.slice(i, i + BATCH_SIZE);
     const promises = batch.map(async (r) => {
       const cacheKey = `${r.name}|${r.address}`;
-      if (googleCache.has(cacheKey)) {
-        results.set(r.id, googleCache.get(cacheKey)!);
+      const cached = await getCachedGooglePlace(cacheKey);
+      if (cached) {
+        results.set(r.id, cached);
         return;
       }
       const data = await lookupGooglePlace(r.name, r.latitude, r.longitude, r.address);
       if (data.googleRating !== null) {
-        googleCache.set(cacheKey, data);
+        await setCachedGooglePlace(cacheKey, data);
       }
       results.set(r.id, data);
     });

@@ -763,7 +763,8 @@ export async function registerRoutes(
 
   app.get("/api/analytics/restaurant/:restaurantId", isAuthenticated, isAdminUser, async (req, res) => {
     try {
-      const result = await getRestaurantAnalytics(req.params.restaurantId);
+      const restaurantId = Array.isArray(req.params.restaurantId) ? req.params.restaurantId[0] : req.params.restaurantId;
+      const result = await getRestaurantAnalytics(restaurantId);
       if (!result) {
         res.json({ message: "No data available for this restaurant" });
         return;

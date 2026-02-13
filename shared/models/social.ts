@@ -188,3 +188,50 @@ export type InsertAnalyticsEvent = typeof analyticsEvents.$inferInsert;
 
 export const insertAnalyticsEventSchema = createInsertSchema(analyticsEvents).omit({ id: true, createdAt: true });
 export type InsertAnalyticsEventInput = z.infer<typeof insertAnalyticsEventSchema>;
+
+export const anonymousGroups = pgTable("anonymous_groups", {
+  id: varchar("id").primaryKey(),
+  code: varchar("code", { length: 6 }).notNull().unique(),
+  name: varchar("name", { length: 200 }).notNull(),
+  members: jsonb("members").notNull().default(sql`'[]'::jsonb`),
+  preferences: jsonb("preferences"),
+  status: varchar("status", { length: 20 }).notNull().default("waiting"),
+  leaderToken: varchar("leader_token"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type AnonymousGroup = typeof anonymousGroups.$inferSelect;
+
+export const anonymousGroupSwipes = pgTable("anonymous_group_swipes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  groupId: varchar("group_id").notNull().references(() => anonymousGroups.id, { onDelete: "cascade" }),
+  memberId: varchar("member_id").notNull(),
+  restaurantId: varchar("restaurant_id").notNull(),
+  liked: boolean("liked").notNull(),
+  swipedAt: timestamp("swiped_at").defaultNow(),
+}, (table) => [
+  index("anon_swipe_group_idx").on(table.groupId),
+  index("anon_swipe_group_restaurant_idx").on(table.groupId, table.restaurantId),
+]);
+
+export type AnonymousGroupSwipe = typeof anonymousGroupSwipes.$inferSelect;
+
+export const restaurantCache = pgTable("restaurant_cache", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  groupId: varchar("group_id").notNull().references(() => anonymousGroups.id, { onDelete: "cascade" }),
+  restaurants: jsonb("restaurants").notNull().default(sql`'[]'::jsonb`),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type RestaurantCacheEntry = typeof restaurantCache.$inferSelect;
+
+export const googlePlacesCache = pgTable("google_places_cache", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  cacheKey: varchar("cache_key", { length: 500 }).notNull().unique(),
+  googleRating: real("google_rating"),
+  googleReviewCount: integer("google_review_count"),
+  googleMapsUrl: text("google_maps_url"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("google_cache_key_idx").on(table.cacheKey),
+]);

@@ -35,12 +35,13 @@ Preferred communication style: Simple, everyday language.
 ### Key Design Patterns
 - **Shared Schema**: TypeScript types and Zod schemas are defined once in `shared/` and imported by both client and server
 - **Path Aliases**: `@/*` maps to client source, `@shared/*` maps to shared code
-- **In-Memory Storage**: Current implementation uses in-memory storage (see `server/storage.ts`) with restaurant caching
+- **Persistent Storage**: Anonymous party groups, swipes, and restaurant cache are stored in PostgreSQL (`anonymous_groups`, `anonymous_group_swipes`, `restaurant_cache` tables). `DbStorage` class in `server/storage.ts` implements `IStorage` interface with Drizzle ORM.
+- **Google Places Cache**: Google Places API results cached in `google_places_cache` table with 24-hour TTL, using upsert to prevent stale data
+- **Automatic Cleanup**: `server/cleanup.ts` runs hourly to delete anonymous groups older than 24 hours (cascading to swipes/cache) and expired Google Places cache entries
 - **Yelp Integration**: Real restaurant data fetched from Yelp Fusion API (see `server/yelp.ts`), with fallback to mock data
 - **WebSocket Sync**: Real-time updates broadcast group state changes to all connected members
 
 ### Key Features (Recent)
-- **Live Reactions**: Real-time emoji reactions during swiping visible to the whole group (WebSocket-powered)
 - **Final Vote Mode**: When indecisive, users can trigger a "Final Vote" with their liked restaurants and a countdown timer
 - **Smart Exclusions**: "Been here before" badges show on swipe cards for previously visited restaurants
 - **Session Lifecycle**: Sessions auto-complete when users take action on matches (directions, DoorDash, "We went here", reserve). Starting a new session also auto-completes any previous active session. Dashboard shows "New Session" + conditional "Join Session" buttons with settings cog for crew management.

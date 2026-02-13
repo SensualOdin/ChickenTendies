@@ -8,7 +8,10 @@ import type {
   InsertGroup,
   JoinGroup 
 } from "@shared/schema";
+import { anonymousGroups, anonymousGroupSwipes, restaurantCache } from "@shared/schema";
 import { fetchRestaurantsFromYelp } from "./yelp";
+import { db } from "./db";
+import { eq, and, sql } from "drizzle-orm";
 
 function generateCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -221,16 +224,23 @@ const mockRestaurants: Restaurant[] = [
   }
 ];
 
-export class MemStorage implements IStorage {
-  private groups: Map<string, Group>;
-  private swipes: Map<string, Swipe[]>;
-  private restaurantCache: Map<string, Restaurant[]>;
+function dbRowToGroup(row: typeof anonymousGroups.$inferSelect): Group {
+  return {
+    id: row.id,
+    code: row.code,
+    name: row.name,
+    members: (row.members as GroupMember[]) || [],
+    preferences: (row.preferences as GroupPreferences) || null,
+    status: row.status as Group["status"],
+    createdAt: row.createdAt ? row.createdAt.getTime() : Date.now(),
+    leaderToken: row.leaderToken || undefined,
+  };
+}
+
+export class DbStorage implements IStorage {
   private pendingRestaurantFetch: Map<string, Promise<Restaurant[]>>;
 
   constructor() {
-    this.groups = new Map();
-    this.swipes = new Map();
-    this.restaurantCache = new Map();
     this.pendingRestaurantFetch = new Map();
   }
 
@@ -238,6 +248,7 @@ export class MemStorage implements IStorage {
     const id = randomUUID();
     const memberId = randomUUID();
     const code = generateCode();
+    const leaderToken = randomUUID();
 
     const host: GroupMember = {
       id: memberId,
@@ -247,22 +258,17 @@ export class MemStorage implements IStorage {
       doneSwiping: false
     };
 
-    const leaderToken = randomUUID();
-    
-    const group: Group = {
+    const [row] = await db.insert(anonymousGroups).values({
       id,
       code,
       name: data.name,
       members: [host],
       preferences: null,
       status: "waiting",
-      createdAt: Date.now(),
-      leaderToken
-    };
+      leaderToken,
+    }).returning();
 
-    this.groups.set(id, group);
-    this.swipes.set(id, []);
-
+    const group = dbRowToGroup(row);
     return { group, memberId };
   }
 
@@ -279,103 +285,114 @@ export class MemStorage implements IStorage {
       doneSwiping: false
     };
 
-    group.members.push(member);
-    this.groups.set(group.id, group);
+    const updatedMembers = [...group.members, member];
+    await db.update(anonymousGroups)
+      .set({ members: updatedMembers })
+      .where(eq(anonymousGroups.id, group.id));
 
+    group.members = updatedMembers;
     return { group, memberId };
   }
 
   async getGroup(id: string): Promise<Group | undefined> {
-    return this.groups.get(id);
+    const [row] = await db.select().from(anonymousGroups).where(eq(anonymousGroups.id, id));
+    if (!row) return undefined;
+    return dbRowToGroup(row);
   }
 
   async getGroupByCode(code: string): Promise<Group | undefined> {
-    const groups = Array.from(this.groups.values());
-    for (const group of groups) {
-      if (group.code === code.toUpperCase()) {
-        return group;
-      }
-    }
-    return undefined;
+    const [row] = await db.select().from(anonymousGroups)
+      .where(eq(anonymousGroups.code, code.toUpperCase()));
+    if (!row) return undefined;
+    return dbRowToGroup(row);
   }
 
   async updateGroup(groupId: string, updatedGroup: Group): Promise<Group | undefined> {
-    this.groups.set(groupId, updatedGroup);
-    if (!this.swipes.has(groupId)) {
-      this.swipes.set(groupId, []);
-    }
-    return updatedGroup;
+    const [row] = await db.update(anonymousGroups)
+      .set({
+        name: updatedGroup.name,
+        members: updatedGroup.members,
+        preferences: updatedGroup.preferences,
+        status: updatedGroup.status,
+        leaderToken: updatedGroup.leaderToken,
+      })
+      .where(eq(anonymousGroups.id, groupId))
+      .returning();
+    if (!row) return undefined;
+    return dbRowToGroup(row);
   }
 
   async updateGroupPreferences(groupId: string, preferences: GroupPreferences): Promise<Group | undefined> {
-    const group = this.groups.get(groupId);
-    if (!group) return undefined;
-
-    group.preferences = preferences;
-    group.status = "swiping";
-    this.groups.set(groupId, group);
-
-    return group;
+    const [row] = await db.update(anonymousGroups)
+      .set({ preferences, status: "swiping" })
+      .where(eq(anonymousGroups.id, groupId))
+      .returning();
+    if (!row) return undefined;
+    return dbRowToGroup(row);
   }
 
   async updateGroupStatus(groupId: string, status: Group["status"]): Promise<Group | undefined> {
-    const group = this.groups.get(groupId);
-    if (!group) return undefined;
+    const existing = await this.getGroup(groupId);
+    if (!existing) return undefined;
 
-    group.status = status;
-    
-    // Reset doneSwiping for all members when a new swiping session starts
-    // Also clear restaurant cache and swipes so each session gets fresh random restaurants
+    const updates: Record<string, unknown> = { status };
+
     if (status === "swiping") {
-      group.members = group.members.map(m => ({ ...m, doneSwiping: false }));
-      this.restaurantCache.delete(groupId);
+      updates.members = existing.members.map(m => ({ ...m, doneSwiping: false }));
+      await db.delete(restaurantCache).where(eq(restaurantCache.groupId, groupId));
+      await db.delete(anonymousGroupSwipes).where(eq(anonymousGroupSwipes.groupId, groupId));
       this.pendingRestaurantFetch.delete(groupId);
-      this.swipes.delete(groupId);
     }
-    
-    this.groups.set(groupId, group);
 
-    return group;
+    const [row] = await db.update(anonymousGroups)
+      .set(updates)
+      .where(eq(anonymousGroups.id, groupId))
+      .returning();
+    if (!row) return undefined;
+    return dbRowToGroup(row);
   }
 
   async addMember(groupId: string, member: GroupMember): Promise<Group | undefined> {
-    const group = this.groups.get(groupId);
+    const group = await this.getGroup(groupId);
     if (!group) return undefined;
 
-    group.members.push(member);
-    this.groups.set(groupId, group);
-
-    return group;
+    const updatedMembers = [...group.members, member];
+    const [row] = await db.update(anonymousGroups)
+      .set({ members: updatedMembers })
+      .where(eq(anonymousGroups.id, groupId))
+      .returning();
+    if (!row) return undefined;
+    return dbRowToGroup(row);
   }
 
   async removeMember(groupId: string, memberId: string): Promise<Group | undefined> {
-    const group = this.groups.get(groupId);
+    const group = await this.getGroup(groupId);
     if (!group) return undefined;
 
-    group.members = group.members.filter(m => m.id !== memberId);
-    this.groups.set(groupId, group);
-
-    return group;
+    const updatedMembers = group.members.filter(m => m.id !== memberId);
+    const [row] = await db.update(anonymousGroups)
+      .set({ members: updatedMembers })
+      .where(eq(anonymousGroups.id, groupId))
+      .returning();
+    if (!row) return undefined;
+    return dbRowToGroup(row);
   }
 
   async getRestaurantsForGroup(groupId: string): Promise<Restaurant[]> {
-    const group = this.groups.get(groupId);
+    const group = await this.getGroup(groupId);
     if (!group || !group.preferences) return mockRestaurants;
 
-    // Return cached restaurants if available
-    const cached = this.restaurantCache.get(groupId);
-    if (cached && cached.length > 0) {
-      return cached;
+    const [cached] = await db.select().from(restaurantCache)
+      .where(eq(restaurantCache.groupId, groupId));
+    if (cached && Array.isArray(cached.restaurants) && (cached.restaurants as Restaurant[]).length > 0) {
+      return cached.restaurants as Restaurant[];
     }
 
-    // If a fetch is already in progress for this group, wait for it
-    // This prevents race conditions where multiple members trigger different random fetches
     const pendingFetch = this.pendingRestaurantFetch.get(groupId);
     if (pendingFetch) {
       return pendingFetch;
     }
 
-    // Create a new fetch promise and store it
     const fetchPromise = this.fetchAndCacheRestaurants(groupId, group);
     this.pendingRestaurantFetch.set(groupId, fetchPromise);
 
@@ -392,7 +409,7 @@ export class MemStorage implements IStorage {
       const yelpRestaurants = await fetchRestaurantsFromYelp(group.preferences!);
       
       if (yelpRestaurants.length > 0) {
-        this.restaurantCache.set(groupId, yelpRestaurants);
+        await this.cacheRestaurants(groupId, yelpRestaurants);
         return yelpRestaurants;
       }
     } catch (error) {
@@ -412,15 +429,30 @@ export class MemStorage implements IStorage {
     filtered = filtered.filter(r => r.distance <= group.preferences!.radius);
 
     const result = filtered.length > 0 ? filtered : mockRestaurants;
-    this.restaurantCache.set(groupId, result);
+    await this.cacheRestaurants(groupId, result);
     return result;
   }
 
+  private async cacheRestaurants(groupId: string, restaurants: Restaurant[]): Promise<void> {
+    const [existing] = await db.select().from(restaurantCache)
+      .where(eq(restaurantCache.groupId, groupId));
+
+    if (existing) {
+      await db.update(restaurantCache)
+        .set({ restaurants })
+        .where(eq(restaurantCache.groupId, groupId));
+    } else {
+      await db.insert(restaurantCache).values({ groupId, restaurants });
+    }
+  }
+
   async loadMoreRestaurants(groupId: string): Promise<Restaurant[]> {
-    const group = this.groups.get(groupId);
+    const group = await this.getGroup(groupId);
     if (!group || !group.preferences) return [];
 
-    const existingRestaurants = this.restaurantCache.get(groupId) || [];
+    const [cached] = await db.select().from(restaurantCache)
+      .where(eq(restaurantCache.groupId, groupId));
+    const existingRestaurants = (cached?.restaurants as Restaurant[]) || [];
     const existingIds = new Set(existingRestaurants.map(r => r.id));
     
     const newOffset = existingRestaurants.length + Math.floor(Math.random() * 20);
@@ -432,7 +464,7 @@ export class MemStorage implements IStorage {
       
       if (newRestaurants.length > 0) {
         const combined = [...existingRestaurants, ...newRestaurants];
-        this.restaurantCache.set(groupId, combined);
+        await this.cacheRestaurants(groupId, combined);
         return combined;
       }
     } catch (error) {
@@ -443,31 +475,45 @@ export class MemStorage implements IStorage {
   }
 
   async recordSwipe(groupId: string, memberId: string, restaurantId: string, liked: boolean): Promise<Swipe> {
-    const swipe: Swipe = {
-      id: randomUUID(),
+    const swipeId = randomUUID();
+
+    await db.insert(anonymousGroupSwipes).values({
+      id: swipeId,
+      groupId,
+      memberId,
+      restaurantId,
+      liked,
+    });
+
+    return {
+      id: swipeId,
       groupId,
       memberId,
       restaurantId,
       liked,
       swipedAt: Date.now()
     };
-
-    const groupSwipes = this.swipes.get(groupId) || [];
-    groupSwipes.push(swipe);
-    this.swipes.set(groupId, groupSwipes);
-
-    return swipe;
   }
 
   async getSwipesForGroup(groupId: string): Promise<Swipe[]> {
-    return this.swipes.get(groupId) || [];
+    const rows = await db.select().from(anonymousGroupSwipes)
+      .where(eq(anonymousGroupSwipes.groupId, groupId));
+
+    return rows.map(row => ({
+      id: row.id,
+      groupId: row.groupId,
+      memberId: row.memberId,
+      restaurantId: row.restaurantId,
+      liked: row.liked,
+      swipedAt: row.swipedAt ? row.swipedAt.getTime() : Date.now()
+    }));
   }
 
   async getMatchesForGroup(groupId: string): Promise<Restaurant[]> {
-    const group = this.groups.get(groupId);
+    const group = await this.getGroup(groupId);
     if (!group) return [];
 
-    const swipes = this.swipes.get(groupId) || [];
+    const swipes = await this.getSwipesForGroup(groupId);
     const restaurants = await this.getRestaurantsForGroup(groupId);
     const memberIds = group.members.map(m => m.id);
 
@@ -486,10 +532,10 @@ export class MemStorage implements IStorage {
   }
 
   async getMembersWhoHaventSwiped(groupId: string, restaurantId: string): Promise<GroupMember[]> {
-    const group = this.groups.get(groupId);
+    const group = await this.getGroup(groupId);
     if (!group) return [];
 
-    const swipes = this.swipes.get(groupId) || [];
+    const swipes = await this.getSwipesForGroup(groupId);
     const swipedMemberIds = new Set(
       swipes.filter(s => s.restaurantId === restaurantId).map(s => s.memberId)
     );
@@ -498,20 +544,27 @@ export class MemStorage implements IStorage {
   }
 
   async markMemberDoneSwiping(groupId: string, memberId: string): Promise<{ group: Group; member: GroupMember } | undefined> {
-    const group = this.groups.get(groupId);
+    const group = await this.getGroup(groupId);
     if (!group) return undefined;
 
     const memberIndex = group.members.findIndex(m => m.id === memberId);
     if (memberIndex === -1) return undefined;
 
-    group.members[memberIndex] = {
-      ...group.members[memberIndex],
+    const updatedMembers = [...group.members];
+    updatedMembers[memberIndex] = {
+      ...updatedMembers[memberIndex],
       doneSwiping: true
     };
 
-    this.groups.set(groupId, group);
-    return { group, member: group.members[memberIndex] };
+    await db.update(anonymousGroups)
+      .set({ members: updatedMembers })
+      .where(eq(anonymousGroups.id, groupId));
+
+    return { 
+      group: { ...group, members: updatedMembers }, 
+      member: updatedMembers[memberIndex] 
+    };
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DbStorage();
