@@ -1,35 +1,84 @@
-Findings — ALL RESOLVED
+# ChickenTinders — Improvement Tracker
 
-[RESOLVED] Critical: leaderToken is leaked to non-leaders, so host takeover is possible. routes.ts (line 64) sends full group state over WS sync, /api/groups/join returns full group (routes.ts (line 153)), and reclaim only needs that token (routes.ts (line 282)).
-→ Fixed: leaderToken stripped from all REST API responses (except initial create) and WebSocket sync broadcasts via stripLeaderToken() helper.
+## Resolved
 
-[RESOLVED] Critical: Group actions trust client-supplied memberId/hostMemberId without auth/session binding, enabling impersonation. See routes.ts (line 346), routes.ts (line 414), routes.ts (line 508), routes.ts (line 638), routes.ts (line 680).
-→ Fixed: Session identity binding via bindMemberToSession() on create/join, verifyMemberIdentity() on all action endpoints (swipe, done-swiping, nudge, reaction, remove-member, start-session, preferences, push-subscribe).
+1. **[Critical] Leader token leaked to non-leaders.**
+   leaderToken was sent in full group state over WS sync, REST join response, and reclaim endpoint.
+   → Fixed: Stripped from all API responses (except initial create) and WS broadcasts via `stripLeaderToken()`.
 
-[RESOLVED] Critical: WebSocket join has no membership validation; any caller with groupId + arbitrary memberId gets sync state. routes.ts (line 94).
-→ Fixed: WS connection now validates memberId belongs to group.members before allowing connection. WS is read-only (no message handlers), so session verification not required.
+2. **[Critical] Member impersonation via client-supplied memberId.**
+   Group actions trusted client-supplied memberId without session binding.
+   → Fixed: `bindMemberToSession()` on create/join, `verifyMemberIdentity()` on all action endpoints.
 
-[RESOLVED] High: Multiple crew/session endpoints are authenticated but missing membership authorization checks (IDOR risk). Examples: social-routes.ts (line 394), social-routes.ts (line 544), social-routes.ts (line 561), social-routes.ts (line 645), social-routes.ts (line 670), social-routes.ts (line 821), social-routes.ts (line 837), social-routes.ts (line 1129), social-routes.ts (line 1146).
-→ Fixed: requireCrewMembership() and requireSessionMembership() helpers enforce authorization on all crew/session endpoints.
+3. **[Critical] WebSocket join accepted any groupId + arbitrary memberId.**
+   No membership validation on WS connection.
+   → Fixed: WS connection validates memberId belongs to `group.members` before accepting.
 
-[RESOLVED] High: /api/sessions/visited-restaurants is broken by stale schema references (crewMembers, diningSessions.crewId). social-routes.ts (line 977), social-routes.ts (line 978), social-routes.ts (line 996). Client calls it on swipe load: swipe.tsx (line 60).
-→ Fixed: Replaced stale references with correct schema (persistentGroups.memberIds and diningSessions.groupId).
+4. **[High] Crew/session endpoints missing membership authorization (IDOR).**
+   Authenticated endpoints had no crew membership checks.
+   → Fixed: `requireCrewMembership()` and `requireSessionMembership()` on all crew/session endpoints.
 
-[RESOLVED] Medium: Friend-decline route mismatch. Client calls /reject at dashboard.tsx (line 146), server exposes /decline at social-routes.ts (line 201).
-→ Fixed: Server route renamed from /decline to /reject to match frontend.
+5. **[High] Visited-restaurants endpoint broken by stale schema references.**
+   Used `crewMembers` and `diningSessions.crewId` which no longer existed.
+   → Fixed: Replaced with `persistentGroups.memberIds` and `diningSessions.groupId`.
 
-[RESOLVED] Medium: Dashboard expects API shapes that backend does not return. Friend shape mismatch (dashboard.tsx (line 29), dashboard.tsx (line 251) vs social-routes.ts (line 39)) and crew shape mismatch (dashboard.tsx (line 39) vs social-routes.ts (line 285)).
-→ Fixed: Backend now returns enriched friend/crew objects matching frontend TypeScript interfaces.
+6. **[Medium] Friend-decline route mismatch.**
+   Client called `/reject`, server exposed `/decline`.
+   → Fixed: Server route renamed to `/reject`.
 
-[RESOLVED] Medium: Invalid group status value "finished" is written (social-routes.ts (line 959)) but schema only allows "waiting" | "configuring" | "swiping" | "completed" (schema.ts (line 82)).
-→ Fixed: Changed to "completed" to match schema enum.
+7. **[Medium] Dashboard expected API shapes backend didn't return.**
+   Friend and crew object shapes mismatched between frontend and backend.
+   → Fixed: Backend returns enriched objects matching frontend interfaces.
 
-[RESOLVED] Medium: Analytics can be double-counted/spoofed. Swipe is logged server-side (routes.ts (line 425)) and client-side (swipe.tsx (line 275)) via open batch endpoint (routes.ts (line 714)).
-→ Fixed: Removed client-side trackSwipe() call; analytics logged server-side only.
+8. **[Medium] Invalid group status "finished" written to DB.**
+   Schema only allows "waiting" | "configuring" | "swiping" | "completed".
+   → Fixed: Changed to "completed".
 
-[RESOLVED] Medium: API logging includes full JSON responses (index.ts (line 51)), which can log sensitive fields like leader tokens returned by group endpoints (routes.ts (line 131), routes.ts (line 153), routes.ts (line 246)).
-→ Fixed: Recursive redactSensitive() function strips leaderToken fields from all logged objects.
+9. **[Medium] Analytics double-counted/spoofable.**
+   Swipes logged both server-side and client-side via open batch endpoint.
+   → Fixed: Removed client-side `trackSwipe()`; analytics logged server-side only.
 
-Open Questions / Assumptions
-I assumed crew/session data should be visible only to crew members. If intentional, findings 4/5/7 need reclassification.
-→ Confirmed: Crew/session data is restricted to crew members only via authorization checks.
+10. **[Medium] API logging exposed sensitive fields.**
+    Full JSON responses logged including leaderToken.
+    → Fixed: `redactSensitive()` strips leaderToken from all logged objects.
+
+11. **[Critical] Anonymous groups stored in memory (MemStorage).**
+    Server restart wiped all active sessions.
+    → Fixed: Migrated to `DbStorage` backed by PostgreSQL. 24-hour TTL cleanup via `server/cleanup.ts`.
+
+12. **[Medium] No rate limiting on any endpoint.**
+    All API endpoints unprotected against abuse/DoS.
+    → Fixed: `express-rate-limit` with general (200/15min), create-group (10/15min), and swipe (60/min) limiters.
+
+13. **[Medium] Google Places API called without caching or throttling.**
+    Excessive external API calls on every request.
+    → Fixed: 24-hour Postgres cache, batch processing (5 concurrent), hourly stale cache cleanup.
+
+---
+
+## Still Open
+
+14. **[Medium] No CSRF protection on state-changing endpoints.**
+    No CSRF token validation middleware exists.
+    Risk is low due to mitigating factors: httpOnly session cookies, SameSite cookie default, JSON Content-Type requirement on POST/PATCH/DELETE.
+    Recommendation: Optional hardening. Add `csurf` or double-submit cookie pattern if pursuing SOC 2 or similar compliance.
+
+15. **[Medium] Geographic precision too high in analytics.**
+    `analyticsEvents` table stores `userLat`/`userLng` as varchar(20) with no rounding — sub-meter accuracy (~110m at 3 decimals, worse at 5-6).
+    IMPROVEMENTS.md previously marked this resolved, but **no rounding was implemented in code**.
+    Location: `shared/models/social.ts` (analyticsEvents schema) and `server/routes.ts` (where events are logged).
+    Recommendation: Round to 2 decimal places (~1.1km accuracy) before insert. Quick fix — add a helper function at the logging call site.
+
+16. **[Medium] No test coverage.**
+    Zero test files in the repository. Critical business logic is untested:
+    - Match algorithm (weighted voting, super-like threshold).
+    - Swipe recording and deduplication.
+    - WebSocket session lifecycle (join, sync, disconnect).
+    - Authorization helpers (`requireCrewMembership`, `verifyMemberIdentity`).
+    - Billing/payment flows (when implemented).
+    Recommendation: Set up Vitest (already in the Vite ecosystem), write tests for match algorithm and auth helpers first. Target critical paths before expanding coverage.
+
+17. **[Low] LeaderToken still stored in localStorage.**
+    While stripped from API responses, the token is still saved to localStorage on group creation for leader reconnection. Vulnerable to XSS if a script injection occurs.
+    Current mitigation: Token is invalidated if another host reclaims leadership.
+    Recommendation: Consider short-lived token expiration or migrating to httpOnly cookie storage for the leader token. Low priority given other mitigations in place.
