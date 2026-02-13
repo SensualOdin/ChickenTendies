@@ -34,12 +34,68 @@ function getUserClaims(req: Request): { sub: string; first_name?: string; last_n
 
 const sessionRestaurantCache: Map<string, Restaurant[]> = new Map();
 
+async function requireCrewMembership(userId: string, groupId: string, res: Response): Promise<boolean> {
+  const [group] = await db
+    .select()
+    .from(persistentGroups)
+    .where(eq(persistentGroups.id, groupId));
+
+  if (!group) {
+    res.status(404).json({ message: "Crew not found" });
+    return false;
+  }
+
+  if (group.ownerId !== userId && !(group.memberIds || []).includes(userId)) {
+    res.status(403).json({ message: "You are not a member of this crew" });
+    return false;
+  }
+
+  return true;
+}
+
+async function requireCrewOwner(userId: string, groupId: string, res: Response): Promise<boolean> {
+  const [group] = await db
+    .select()
+    .from(persistentGroups)
+    .where(eq(persistentGroups.id, groupId));
+
+  if (!group) {
+    res.status(404).json({ message: "Crew not found" });
+    return false;
+  }
+
+  if (group.ownerId !== userId) {
+    res.status(403).json({ message: "Only the crew owner can perform this action" });
+    return false;
+  }
+
+  return true;
+}
+
+async function requireSessionMembership(userId: string, sessionId: string, res: Response): Promise<{ groupId: string } | null> {
+  const [session] = await db
+    .select({ groupId: diningSessions.groupId })
+    .from(diningSessions)
+    .where(eq(diningSessions.id, sessionId));
+
+  if (!session) {
+    res.status(404).json({ message: "Session not found" });
+    return null;
+  }
+
+  if (!(await requireCrewMembership(userId, session.groupId, res))) {
+    return null;
+  }
+
+  return session;
+}
+
 export function registerSocialRoutes(app: Express): void {
   
   app.get("/api/friends", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = getUserId(req);
-      
+
       const friendshipList = await db
         .select()
         .from(friendships)
@@ -49,24 +105,46 @@ export function registerSocialRoutes(app: Express): void {
               eq(friendships.requesterId, userId),
               eq(friendships.addresseeId, userId)
             ),
-            eq(friendships.status, "accepted")
+            or(
+              eq(friendships.status, "accepted"),
+              eq(friendships.status, "pending")
+            )
           )
         );
-      
-      const friendIds = friendshipList.map(f => 
-        f.requesterId === userId ? f.addresseeId : f.requesterId
-      );
-      
-      if (friendIds.length === 0) {
+
+      if (friendshipList.length === 0) {
         return res.json([]);
       }
-      
-      const friends = await db
-        .select()
-        .from(users)
-        .where(inArray(users.id, friendIds));
-      
-      res.json(friends);
+
+      const allUserIds = new Set<string>();
+      for (const f of friendshipList) {
+        if (f.requesterId !== userId) allUserIds.add(f.requesterId);
+        if (f.addresseeId !== userId) allUserIds.add(f.addresseeId);
+      }
+
+      const userRows = allUserIds.size > 0
+        ? await db.select().from(users).where(inArray(users.id, [...allUserIds]))
+        : [];
+      const userMap = new Map(userRows.map(u => [u.id, u]));
+
+      const enrichedFriends = friendshipList.map(f => {
+        const isRequester = f.requesterId === userId;
+        const friendUserId = isRequester ? f.addresseeId : f.requesterId;
+        const friendUser = userMap.get(friendUserId);
+        return {
+          id: f.id,
+          friendId: friendUserId,
+          friendName: friendUser
+            ? [friendUser.firstName, friendUser.lastName].filter(Boolean).join(" ") || friendUser.email || ""
+            : "",
+          friendEmail: friendUser?.email || "",
+          friendImage: friendUser?.profileImageUrl || undefined,
+          status: f.status as "pending" | "accepted",
+          isRequester,
+        };
+      });
+
+      res.json(enrichedFriends);
     } catch (error) {
       console.error("Error fetching friends:", error);
       res.status(500).json({ message: "Failed to fetch friends" });
@@ -198,7 +276,7 @@ export function registerSocialRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/friends/:id/decline", isAuthenticated, async (req: Request, res: Response) => {
+  app.post("/api/friends/:id/reject", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = getUserId(req);
       const friendshipId = req.params.id;
@@ -283,7 +361,11 @@ export function registerSocialRoutes(app: Express): void {
       }
 
       const enrichedGroups = groups.map(g => ({
-        ...g,
+        id: g.id,
+        name: g.name,
+        createdAt: g.createdAt,
+        memberCount: (g.memberIds?.length || 0) + 1,
+        isOwner: g.ownerId === userId,
         hasActiveSession: activeSessionMap.has(g.id),
       }));
       
@@ -393,7 +475,9 @@ export function registerSocialRoutes(app: Express): void {
 
   app.get("/api/crews/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
+      const userId = getUserId(req);
       const groupId = req.params.id;
+      if (!(await requireCrewMembership(userId, groupId, res))) return;
       
       const [group] = await db
         .select()
@@ -543,7 +627,9 @@ export function registerSocialRoutes(app: Express): void {
 
   app.get("/api/crews/:id/sessions", isAuthenticated, async (req: Request, res: Response) => {
     try {
+      const userId = getUserId(req);
       const groupId = req.params.id;
+      if (!(await requireCrewMembership(userId, groupId, res))) return;
       
       const sessions = await db
         .select()
@@ -584,6 +670,7 @@ export function registerSocialRoutes(app: Express): void {
     try {
       const userId = getUserId(req);
       const groupId = req.params.id;
+      if (!(await requireCrewMembership(userId, groupId, res))) return;
       const { preferences } = req.body;
       
       const [group] = await db
@@ -666,6 +753,7 @@ export function registerSocialRoutes(app: Express): void {
 
   app.get("/api/sessions/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
+      const userId = getUserId(req);
       const sessionId = req.params.id;
       
       const [session] = await db
@@ -677,6 +765,8 @@ export function registerSocialRoutes(app: Express): void {
         return res.status(404).json({ message: "Session not found" });
       }
       
+      if (!(await requireCrewMembership(userId, session.groupId, res))) return;
+
       const [group] = await db
         .select()
         .from(persistentGroups)
@@ -691,7 +781,9 @@ export function registerSocialRoutes(app: Express): void {
 
   app.get("/api/sessions/:id/restaurants", isAuthenticated, async (req: Request, res: Response) => {
     try {
+      const userId = getUserId(req);
       const sessionId = req.params.id;
+      if (!(await requireSessionMembership(userId, sessionId, res))) return;
       
       let restaurants = sessionRestaurantCache.get(sessionId);
       
@@ -721,7 +813,9 @@ export function registerSocialRoutes(app: Express): void {
 
   app.get("/api/crews/:id/visited-restaurants", isAuthenticated, async (req: Request, res: Response) => {
     try {
+      const userId = getUserId(req);
       const groupId = req.params.id;
+      if (!(await requireCrewMembership(userId, groupId, res))) return;
       
       const sessions = await db
         .select({
@@ -748,6 +842,7 @@ export function registerSocialRoutes(app: Express): void {
     try {
       const userId = getUserId(req);
       const sessionId = req.params.id;
+      if (!(await requireSessionMembership(userId, sessionId, res))) return;
       const { restaurantId, liked, superLiked = false, restaurantData } = req.body;
       
       const [swipe] = await db
@@ -842,7 +937,9 @@ export function registerSocialRoutes(app: Express): void {
 
   app.get("/api/sessions/:id/swipes", isAuthenticated, async (req: Request, res: Response) => {
     try {
+      const userId = getUserId(req);
       const sessionId = req.params.id;
+      if (!(await requireSessionMembership(userId, sessionId, res))) return;
       
       const swipes = await db
         .select()
@@ -858,7 +955,9 @@ export function registerSocialRoutes(app: Express): void {
 
   app.get("/api/sessions/:id/matches", isAuthenticated, async (req: Request, res: Response) => {
     try {
+      const userId = getUserId(req);
       const sessionId = req.params.id;
+      if (!(await requireSessionMembership(userId, sessionId, res))) return;
       
       const matches = await db
         .select()
@@ -875,8 +974,9 @@ export function registerSocialRoutes(app: Express): void {
 
   app.post("/api/sessions/:id/visited", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const sessionId = req.params.id;
       const userId = getUserId(req);
+      const sessionId = req.params.id;
+      if (!(await requireSessionMembership(userId, sessionId, res))) return;
       const { restaurantId, restaurantData } = req.body;
       
       if (!restaurantId) {
@@ -927,6 +1027,7 @@ export function registerSocialRoutes(app: Express): void {
     try {
       const userId = getUserId(req);
       const groupId = req.params.id;
+      if (!(await requireCrewMembership(userId, groupId, res))) return;
       const { restaurantId, action } = req.body;
 
       const [group] = await db
@@ -978,7 +1079,7 @@ export function registerSocialRoutes(app: Express): void {
       if (existingMemGroup) {
         await storage.updateGroup(groupId, {
           ...existingMemGroup,
-          status: "finished",
+          status: "completed",
         });
       }
 
@@ -989,25 +1090,27 @@ export function registerSocialRoutes(app: Express): void {
     }
   });
 
-  // Get all visited restaurants for the current user across all their crews
   app.get("/api/sessions/visited-restaurants", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = getUserId(req);
-      
-      // Get all crews the user is a member of
-      const userCrewMemberships = await db
-        .select({ crewId: crewMembers.crewId })
-        .from(crewMembers)
-        .where(eq(crewMembers.userId, userId));
-      
-      const crewIds = userCrewMemberships.map(m => m.crewId);
-      
-      if (crewIds.length === 0) {
+
+      const groups = await db
+        .select({ id: persistentGroups.id })
+        .from(persistentGroups)
+        .where(
+          or(
+            eq(persistentGroups.ownerId, userId),
+            sql`${userId} = ANY(${persistentGroups.memberIds})`
+          )
+        );
+
+      const groupIds = groups.map(g => g.id);
+
+      if (groupIds.length === 0) {
         res.json({ restaurantIds: [] });
         return;
       }
-      
-      // Get all sessions for those crews that have visited restaurants
+
       const visitedSessions = await db
         .select({
           visitedRestaurantId: diningSessions.visitedRestaurantId,
@@ -1015,15 +1118,15 @@ export function registerSocialRoutes(app: Express): void {
         .from(diningSessions)
         .where(
           and(
-            inArray(diningSessions.crewId, crewIds),
+            inArray(diningSessions.groupId, groupIds),
             sql`${diningSessions.visitedRestaurantId} IS NOT NULL`
           )
         );
-      
+
       const restaurantIds = visitedSessions
         .map(s => s.visitedRestaurantId)
         .filter((id): id is string => id !== null);
-      
+
       res.json({ restaurantIds });
     } catch (error) {
       console.error("Error fetching visited restaurants:", error);
@@ -1150,7 +1253,9 @@ export function registerSocialRoutes(app: Express): void {
 
   app.get("/api/crews/:id/history", isAuthenticated, async (req: Request, res: Response) => {
     try {
+      const userId = getUserId(req);
       const groupId = req.params.id;
+      if (!(await requireCrewMembership(userId, groupId, res))) return;
       
       const history = await db
         .select()
@@ -1167,7 +1272,9 @@ export function registerSocialRoutes(app: Express): void {
 
   app.post("/api/crews/:id/history", isAuthenticated, async (req: Request, res: Response) => {
     try {
+      const userId = getUserId(req);
       const groupId = req.params.id;
+      if (!(await requireCrewMembership(userId, groupId, res))) return;
       const { sessionId, restaurantId, restaurantName, restaurantData, rating, notes } = req.body;
       
       const [entry] = await db

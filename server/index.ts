@@ -50,7 +50,20 @@ app.use((req, res, next) => {
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+        const redactSensitive = (obj: any): any => {
+          if (obj === null || typeof obj !== 'object') return obj;
+          if (Array.isArray(obj)) return obj.map(redactSensitive);
+          const result: any = {};
+          for (const key of Object.keys(obj)) {
+            if (key === 'leaderToken') {
+              result[key] = "[REDACTED]";
+            } else {
+              result[key] = redactSensitive(obj[key]);
+            }
+          }
+          return result;
+        };
+        logLine += ` :: ${JSON.stringify(redactSensitive(capturedJsonResponse))}`;
       }
 
       log(logLine);

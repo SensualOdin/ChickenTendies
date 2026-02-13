@@ -271,12 +271,6 @@ export default function SwipePage() {
     swipeMutation.mutate({ restaurantId: restaurant.id, liked, superLiked });
     saveSwipedId(restaurant.id);
 
-    const analyticsAction = superLiked ? "super_like" as const : liked ? "swipe_right" as const : "swipe_left" as const;
-    trackSwipe(restaurant, analyticsAction, {
-      lat: group?.preferences?.latitude,
-      lng: group?.preferences?.longitude,
-    });
-    
     if (liked) {
       setLikedRestaurants(prev => [...prev, restaurant]);
     }

@@ -86,6 +86,12 @@ export function notifyUser(_userId: string, _notification: { type: string; messa
 export function notifyUsers(_userIds: string[], _notification: { type: string; message: string; data?: any }) {
 }
 
+function stripLeaderToken(group: any) {
+  if (!group) return group;
+  const { leaderToken, ...safe } = group;
+  return safe;
+}
+
 async function sendSync(ws: WebSocket, groupId: string) {
   const group = await storage.getGroup(groupId);
   if (!group) return;
@@ -95,7 +101,7 @@ async function sendSync(ws: WebSocket, groupId: string) {
 
   const message: WSMessage = {
     type: "sync",
-    group,
+    group: stripLeaderToken(group),
     restaurants,
     matches
   };
@@ -124,6 +130,12 @@ export async function registerRoutes(
     const memberId = url.searchParams.get("memberId");
 
     if (!groupId || !memberId) {
+      ws.close();
+      return;
+    }
+
+    const group = await storage.getGroup(groupId);
+    if (!group || !group.members.some((m: any) => m.id === memberId)) {
       ws.close();
       return;
     }
@@ -177,7 +189,8 @@ export async function registerRoutes(
         broadcast(result.group.id, { type: "member_joined", member }, result.memberId);
       }
 
-      res.json(result);
+      const { leaderToken: _, ...groupWithoutToken } = result.group;
+      res.json({ ...result, group: groupWithoutToken });
     } catch (error) {
       res.status(400).json({ error: "Invalid request" });
     }
@@ -411,7 +424,7 @@ export async function registerRoutes(
       broadcast(req.params.id, { type: "preferences_updated", preferences: validatedPreferences });
       broadcast(req.params.id, { type: "status_changed", status: "swiping" });
 
-      res.json(updatedGroup);
+      res.json(stripLeaderToken(updatedGroup));
     } catch (error) {
       res.status(400).json({ error: "Invalid request" });
     }
@@ -709,7 +722,7 @@ export async function registerRoutes(
       memberName: targetMember.name
     });
 
-    res.json({ success: true, group: updatedGroup });
+    res.json({ success: true, group: stripLeaderToken(updatedGroup) });
   });
 
   // Update group preferences (host only, outside of session start)
@@ -741,7 +754,7 @@ export async function registerRoutes(
 
       broadcast(req.params.id, { type: "preferences_updated", preferences: validatedPreferences });
 
-      res.json({ success: true, group: updatedGroup });
+      res.json({ success: true, group: stripLeaderToken(updatedGroup) });
     } catch (error) {
       res.status(400).json({ error: "Invalid request" });
     }
