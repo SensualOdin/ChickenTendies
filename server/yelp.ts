@@ -284,26 +284,35 @@ export async function fetchRestaurantsFromYelp(preferences: GroupPreferences, of
     return [];
   }
 
-  let filteredRestaurants = restaurants;
+  console.log(`Yelp returned ${restaurants.length} restaurants for location "${preferences.zipCode}" (radius: ${preferences.radius}mi)`);
 
-  // Strict radius filtering — remove restaurants beyond user's chosen distance
-  // Keep restaurants with distance=0 (unknown) since Yelp may not always provide distance
-  const maxDistance = preferences.radius;
-  filteredRestaurants = filteredRestaurants.filter(r => r.distance === 0 || r.distance <= maxDistance);
-
-  // Filter by minimum rating if set
-  if (preferences.minRating && preferences.minRating > 0) {
-    filteredRestaurants = filteredRestaurants.filter(r => r.rating >= preferences.minRating!);
+  if (restaurants.length === 0) {
+    return [];
   }
 
-  // Filter out excluded cuisines if "try something new" is enabled
+  let filteredRestaurants = [...restaurants];
+
+  const maxDistance = preferences.radius;
+  filteredRestaurants = filteredRestaurants.filter(r => r.distance === 0 || r.distance <= maxDistance);
+  console.log(`After radius filter (${maxDistance}mi): ${filteredRestaurants.length} remaining`);
+
+  if (preferences.minRating && preferences.minRating > 0) {
+    filteredRestaurants = filteredRestaurants.filter(r => r.rating >= preferences.minRating!);
+    console.log(`After rating filter (>=${preferences.minRating}): ${filteredRestaurants.length} remaining`);
+  }
+
   if (preferences.excludeCuisines && preferences.excludeCuisines.length > 0) {
     filteredRestaurants = filteredRestaurants.filter(r => 
       !preferences.excludeCuisines!.includes(r.cuisine)
     );
+    console.log(`After cuisine exclusion filter: ${filteredRestaurants.length} remaining`);
   }
 
-  // Sort by distance (closest first) so nearby restaurants appear earlier in the swipe deck
+  if (filteredRestaurants.length === 0) {
+    console.log("All restaurants filtered out — returning unfiltered Yelp results instead of mock data");
+    filteredRestaurants = [...restaurants];
+  }
+
   filteredRestaurants.sort((a, b) => a.distance - b.distance);
   
   return filteredRestaurants.slice(0, 20);
