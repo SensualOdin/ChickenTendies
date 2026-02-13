@@ -92,6 +92,24 @@ function stripLeaderToken(group: any) {
   return safe;
 }
 
+function bindMemberToSession(req: any, groupId: string, memberId: string) {
+  if (!req.session) return;
+  if (!req.session.memberBindings) {
+    req.session.memberBindings = {};
+  }
+  req.session.memberBindings[groupId] = memberId;
+}
+
+function getSessionMemberId(req: any, groupId: string): string | null {
+  return req.session?.memberBindings?.[groupId] || null;
+}
+
+function verifyMemberIdentity(req: any, groupId: string, claimedMemberId: string): boolean {
+  const boundMemberId = getSessionMemberId(req, groupId);
+  if (!boundMemberId) return false;
+  return boundMemberId === claimedMemberId;
+}
+
 async function sendSync(ws: WebSocket, groupId: string) {
   const group = await storage.getGroup(groupId);
   if (!group) return;
@@ -162,7 +180,7 @@ export async function registerRoutes(
     try {
       const data = insertGroupSchema.parse(req.body);
       const result = await storage.createGroup(data);
-      // Return leaderToken separately so client can store it, but strip from group object
+      bindMemberToSession(req, result.group.id, result.memberId);
       const { leaderToken, ...groupWithoutToken } = result.group;
       res.json({ 
         group: groupWithoutToken, 
@@ -183,6 +201,8 @@ export async function registerRoutes(
         res.status(404).json({ error: "Group not found" });
         return;
       }
+
+      bindMemberToSession(req, result.group.id, result.memberId);
 
       const member = result.group.members.find(m => m.id === result.memberId);
       if (member) {
@@ -291,6 +311,7 @@ export async function registerRoutes(
         };
         await storage.updateGroup(groupId, memGroup);
         sessionUserMap.set(`${groupId}:${userId}`, hostMemberId);
+        bindMemberToSession(req, groupId, hostMemberId);
 
         res.json({ memberId: hostMemberId, group: memGroup, leaderToken });
         return;
@@ -300,6 +321,7 @@ export async function registerRoutes(
       if (existingMemberId) {
         const existingMember = memGroup.members.find(m => m.id === existingMemberId);
         if (existingMember) {
+          bindMemberToSession(req, groupId, existingMemberId);
           res.json({ memberId: existingMemberId, group: memGroup });
           return;
         }
@@ -317,6 +339,7 @@ export async function registerRoutes(
       memGroup.members.push(newMember);
       await storage.updateGroup(groupId, memGroup);
       sessionUserMap.set(`${groupId}:${userId}`, memberId);
+      bindMemberToSession(req, groupId, memberId);
 
       broadcast(groupId, { type: "member_joined", member: newMember }, memberId);
 
@@ -358,7 +381,7 @@ export async function registerRoutes(
         : null;
       
       if (existingMember) {
-        // Leader is still in the group, just return their memberId
+        bindMemberToSession(req, req.params.id, existingMember.id);
         const { leaderToken: _, ...groupWithoutToken } = group;
         res.json({ group: groupWithoutToken, memberId: existingMember.id, rejoined: true });
         return;
@@ -384,6 +407,7 @@ export async function registerRoutes(
       // Broadcast member joined
       broadcast(req.params.id, { type: "member_joined", member: newHost }, memberId);
       
+      bindMemberToSession(req, req.params.id, memberId);
       const { leaderToken: _, ...groupWithoutToken } = updatedGroup;
       res.json({ group: groupWithoutToken, memberId, rejoined: false });
     } catch (error) {
@@ -396,7 +420,11 @@ export async function registerRoutes(
     try {
       const { hostMemberId, preferences } = req.body;
       
-      // Validate preferences
+      if (!verifyMemberIdentity(req, req.params.id, hostMemberId)) {
+        res.status(403).json({ error: "Session identity mismatch" });
+        return;
+      }
+
       const validatedPreferences = groupPreferencesSchema.parse(preferences);
       
       const group = await storage.getGroup(req.params.id);
@@ -405,7 +433,6 @@ export async function registerRoutes(
         return;
       }
 
-      // Verify the requester is the host
       const hostMember = group.members.find(m => m.id === hostMemberId && m.isHost);
       if (!hostMember) {
         res.status(403).json({ error: "Only the host can start the session" });
@@ -469,6 +496,11 @@ export async function registerRoutes(
         return;
       }
 
+      if (!verifyMemberIdentity(req, req.params.id, memberId)) {
+        res.status(403).json({ error: "Session identity mismatch" });
+        return;
+      }
+
       const swipe = await storage.recordSwipe(req.params.id, memberId, restaurantId, liked);
       
       const authUserId = (req as any).user?.claims?.sub;
@@ -514,6 +546,11 @@ export async function registerRoutes(
   // Nudge members who haven't swiped yet
   app.post("/api/groups/:id/nudge", async (req, res) => {
     const { restaurantId, fromMemberId } = req.body;
+
+    if (!verifyMemberIdentity(req, req.params.id, fromMemberId)) {
+      res.status(403).json({ error: "Session identity mismatch" });
+      return;
+    }
     
     const group = await storage.getGroup(req.params.id);
     if (!group) {
@@ -557,6 +594,11 @@ export async function registerRoutes(
   app.post("/api/groups/:id/done-swiping", async (req, res) => {
     try {
       const { memberId } = doneSwipingSchema.parse(req.body);
+
+      if (!verifyMemberIdentity(req, req.params.id, memberId)) {
+        res.status(403).json({ error: "Session identity mismatch" });
+        return;
+      }
       
       const result = await storage.markMemberDoneSwiping(req.params.id, memberId);
       if (!result) {
@@ -616,8 +658,12 @@ export async function registerRoutes(
     try {
       const { memberId, subscription } = groupPushSubscribeSchema.parse(req.body);
       const groupId = req.params.id;
+
+      if (!verifyMemberIdentity(req, groupId, memberId)) {
+        res.status(403).json({ error: "Session identity mismatch" });
+        return;
+      }
       
-      // Verify group exists
       const group = await storage.getGroup(groupId);
       if (!group) {
         res.status(404).json({ error: "Group not found" });
@@ -655,6 +701,11 @@ export async function registerRoutes(
       }
       
       const { memberId, memberName, reaction, restaurantId } = parsed.data;
+
+      if (!verifyMemberIdentity(req, req.params.id, memberId)) {
+        res.status(403).json({ error: "Session identity mismatch" });
+        return;
+      }
       
       const group = await storage.getGroup(req.params.id);
       if (!group) {
@@ -687,6 +738,11 @@ export async function registerRoutes(
   app.delete("/api/groups/:id/members/:memberId", async (req, res) => {
     const { id: groupId, memberId: targetMemberId } = req.params;
     const { hostMemberId } = req.body;
+
+    if (!verifyMemberIdentity(req, groupId, hostMemberId)) {
+      res.status(403).json({ error: "Session identity mismatch" });
+      return;
+    }
 
     const group = await storage.getGroup(groupId);
     if (!group) {
@@ -729,8 +785,12 @@ export async function registerRoutes(
   app.patch("/api/groups/:id/preferences", async (req, res) => {
     try {
       const { hostMemberId, preferences } = req.body;
+
+      if (!verifyMemberIdentity(req, req.params.id, hostMemberId)) {
+        res.status(403).json({ error: "Session identity mismatch" });
+        return;
+      }
       
-      // Validate preferences
       const validatedPreferences = groupPreferencesSchema.parse(preferences);
       
       const group = await storage.getGroup(req.params.id);

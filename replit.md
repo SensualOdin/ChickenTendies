@@ -54,6 +54,7 @@ Preferred communication style: Simple, everyday language.
 - **Group Membership Validation**: GET `/api/groups/:id` accepts optional `memberId` query param; if provided, verifies the caller is a group member before returning data. WebSocket connections also validate memberId belongs to the group before allowing connection.
 - **Crew Authorization**: All `/api/crews/:id/*` and `/api/sessions/:id/*` endpoints enforce crew membership checks via `requireCrewMembership()` and `requireSessionMembership()` helpers, preventing unauthorized access (IDOR protection). Delete operations require owner role.
 - **leaderToken Security**: `leaderToken` is stripped from all REST API responses (except the initial create response to the host) and from WebSocket sync broadcasts. API response logging recursively redacts `leaderToken` fields.
+- **Session Identity Binding**: Anonymous party members are bound to their browser session via express-session. `bindMemberToSession()` stores `memberBindings[groupId] = memberId` in the session on create/join. All action endpoints (swipe, done-swiping, nudge, reaction, remove-member, start-session, preferences, push-subscribe) verify via `verifyMemberIdentity()` that the caller's session matches the claimed memberId, preventing impersonation attacks.
 - **Keyboard Swiping**: Arrow keys (Left=dislike, Right=like, Up=super-like) for desktop swiping with visible keyboard hints below swipe buttons (hidden on mobile)
 
 ### Build Process
