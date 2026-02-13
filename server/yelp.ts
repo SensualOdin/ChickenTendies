@@ -1,4 +1,5 @@
 import type { Restaurant, GroupPreferences, CuisineType } from "@shared/schema";
+import { enrichRestaurantsWithGoogle } from "./google-places";
 
 const YELP_API_KEY = process.env.YELP_API_KEY;
 const YELP_BASE_URL = "https://api.yelp.com/v3";
@@ -297,7 +298,10 @@ export async function fetchRestaurantsFromYelp(preferences: GroupPreferences, of
   console.log(`After radius filter (${maxDistance}mi): ${filteredRestaurants.length} remaining`);
 
   if (preferences.minRating && preferences.minRating > 0) {
-    filteredRestaurants = filteredRestaurants.filter(r => r.rating >= preferences.minRating!);
+    filteredRestaurants = filteredRestaurants.filter(r => {
+      const effectiveRating = r.combinedRating ?? r.rating;
+      return effectiveRating >= preferences.minRating!;
+    });
     console.log(`After rating filter (>=${preferences.minRating}): ${filteredRestaurants.length} remaining`);
   }
 
@@ -315,5 +319,34 @@ export async function fetchRestaurantsFromYelp(preferences: GroupPreferences, of
 
   filteredRestaurants.sort((a, b) => a.distance - b.distance);
   
-  return filteredRestaurants.slice(0, 20);
+  const sliced = filteredRestaurants.slice(0, 20);
+
+  try {
+    const googleData = await enrichRestaurantsWithGoogle(sliced);
+    for (const restaurant of sliced) {
+      const gData = googleData.get(restaurant.id);
+      if (gData) {
+        restaurant.googleRating = gData.googleRating;
+        restaurant.googleReviewCount = gData.googleReviewCount;
+        restaurant.googleMapsUrl = gData.googleMapsUrl;
+        if (gData.googleRating !== null) {
+          restaurant.combinedRating = parseFloat(
+            ((restaurant.rating + gData.googleRating) / 2).toFixed(1)
+          );
+        } else {
+          restaurant.combinedRating = restaurant.rating;
+        }
+      } else {
+        restaurant.combinedRating = restaurant.rating;
+      }
+    }
+    console.log(`Enriched ${sliced.length} restaurants with Google data (${googleData.size} matched)`);
+  } catch (error) {
+    console.error("Google enrichment failed, using Yelp ratings only:", error);
+    for (const restaurant of sliced) {
+      restaurant.combinedRating = restaurant.rating;
+    }
+  }
+
+  return sliced;
 }

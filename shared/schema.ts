@@ -105,6 +105,10 @@ export const restaurantSchema = z.object({
   phone: z.string().optional(),
   transactions: z.array(z.string()).default([]),
   highlights: z.array(z.string()).default([]),
+  googleRating: z.number().min(0).max(5).nullable().optional(),
+  googleReviewCount: z.number().nullable().optional(),
+  googleMapsUrl: z.string().nullable().optional(),
+  combinedRating: z.number().min(0).max(5).nullable().optional(),
 });
 
 export type Restaurant = z.infer<typeof restaurantSchema>;

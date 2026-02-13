@@ -156,10 +156,18 @@ export function SwipeCard({ restaurant, onSwipe, isTop, visitedBefore = false }:
           </h2>
 
           <div className="flex flex-wrap items-center gap-4 text-sm text-white/90 mb-2">
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1" data-testid="rating-display">
               <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-              <span className="font-bold">{restaurant.rating.toFixed(1)}</span>
-              <span className="text-white/70">({restaurant.reviewCount})</span>
+              <span className="font-bold">
+                {(restaurant.combinedRating ?? restaurant.rating).toFixed(1)}
+              </span>
+              {restaurant.googleRating != null ? (
+                <span className="text-white/70 text-xs">
+                  (Y:{restaurant.rating.toFixed(1)} G:{restaurant.googleRating.toFixed(1)})
+                </span>
+              ) : (
+                <span className="text-white/70">({restaurant.reviewCount})</span>
+              )}
             </div>
             <div className="flex items-center gap-1">
               <MapPin className="w-4 h-4" />

@@ -800,7 +800,7 @@ export default function SwipePage() {
                             </div>
                             <div className="text-sm flex items-center gap-1 text-yellow-500">
                               <Flame className="w-3 h-3" />
-                              <span>{restaurant.rating}</span>
+                              <span>{(restaurant.combinedRating ?? restaurant.rating).toFixed(1)}</span>
                             </div>
                           </div>
                           <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-sm font-bold text-primary">

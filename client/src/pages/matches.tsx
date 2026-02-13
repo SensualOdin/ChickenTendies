@@ -27,7 +27,7 @@ function generateCalendarUrl(restaurant: Restaurant, groupName: string) {
   const details = encodeURIComponent(
     `Restaurant: ${restaurant.name}\n` +
     `Cuisine: ${restaurant.cuisine}\n` +
-    `Rating: ${restaurant.rating.toFixed(1)} stars\n` +
+    `Rating: ${(restaurant.combinedRating ?? restaurant.rating).toFixed(1)} stars\n` +
     `Price: ${restaurant.priceRange}\n\n` +
     `Matched on ChickenTinders!`
   );
@@ -173,8 +173,12 @@ export default function MatchesPage() {
                       <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground mb-3">
                         <div className="flex items-center gap-1">
                           <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-                          <span className="font-medium text-foreground">{restaurant.rating.toFixed(1)}</span>
-                          <span>({restaurant.reviewCount})</span>
+                          <span className="font-medium text-foreground">{(restaurant.combinedRating ?? restaurant.rating).toFixed(1)}</span>
+                          {restaurant.googleRating != null ? (
+                            <span className="text-xs">(Y:{restaurant.rating.toFixed(1)} G:{restaurant.googleRating.toFixed(1)})</span>
+                          ) : (
+                            <span>({restaurant.reviewCount})</span>
+                          )}
                         </div>
                         <div className="flex items-center gap-1">
                           <MapPin className="w-4 h-4" />
