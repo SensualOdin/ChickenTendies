@@ -9,9 +9,9 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useGroupPushNotifications } from "@/hooks/use-push-notifications";
 import { useAnalytics } from "@/hooks/use-analytics";
-import { Flame, ChevronRight, PartyPopper, Bell, Timer, Vote, Trophy, Heart, ThumbsUp, Eye, Star, Utensils, BellRing, X, Home, RefreshCw } from "lucide-react";
+import { Flame, ChevronRight, PartyPopper, Bell, Timer, Vote, Trophy, BellRing, X, Home, RefreshCw } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import type { Group, Restaurant, WSMessage, ReactionType } from "@shared/schema";
+import type { Group, Restaurant, WSMessage } from "@shared/schema";
 import confetti from "canvas-confetti";
 
 export default function SwipePage() {
@@ -29,8 +29,6 @@ export default function SwipePage() {
   const [showFinalVote, setShowFinalVote] = useState(false);
   const [finalVoteTimer, setFinalVoteTimer] = useState(60);
   const [likedRestaurants, setLikedRestaurants] = useState<Restaurant[]>([]);
-  const [liveReactions, setLiveReactions] = useState<Array<{id: string; memberId: string; memberName: string; reaction: ReactionType; restaurantId: string}>>([]);
-  const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [visitedRestaurantIds, setVisitedRestaurantIds] = useState<Set<string>>(new Set());
   const [showNotificationPrompt, setShowNotificationPrompt] = useState(true);
 
@@ -180,14 +178,6 @@ export default function SwipePage() {
             description: "They're waiting for everyone else",
           });
         }
-      } else if (message.type === "live_reaction") {
-        // Add the reaction to display
-        const reactionId = `${message.memberId}-${Date.now()}`;
-        setLiveReactions(prev => [...prev, { ...message, id: reactionId }]);
-        // Remove reaction after animation
-        setTimeout(() => {
-          setLiveReactions(prev => prev.filter(r => r.id !== reactionId));
-        }, 2500);
       }
     };
 
@@ -271,34 +261,6 @@ export default function SwipePage() {
       }
     },
   });
-
-  const reactionMutation = useMutation({
-    mutationFn: async (reaction: ReactionType) => {
-      if (!currentRestaurant || !memberId) return;
-      const memberName = group?.members.find(m => m.id === memberId)?.name || "Someone";
-      const response = await apiRequest("POST", `/api/groups/${params.id}/reaction`, {
-        memberId,
-        memberName,
-        reaction,
-        restaurantId: currentRestaurant.id,
-      });
-      return response.json();
-    },
-  });
-
-  const sendReaction = (reaction: ReactionType) => {
-    reactionMutation.mutate(reaction);
-    setShowReactionPicker(false);
-  };
-
-  const reactionIcons: Record<ReactionType, { icon: typeof Flame; color: string }> = {
-    fire: { icon: Flame, color: "text-orange-500" },
-    heart: { icon: Heart, color: "text-pink-500" },
-    drool: { icon: Utensils, color: "text-yellow-500" },
-    thumbsup: { icon: ThumbsUp, color: "text-blue-500" },
-    eyes: { icon: Eye, color: "text-purple-500" },
-    star: { icon: Star, color: "text-yellow-400" },
-  };
 
   const handleSwipe = useCallback((action: SwipeAction) => {
     if (currentIndex >= restaurants.length) return;
@@ -617,79 +579,6 @@ export default function SwipePage() {
                 />
               )}
 
-              <AnimatePresence>
-                {liveReactions.filter(r => r.restaurantId === currentRestaurant?.id).map((reaction, index) => {
-                  const ReactionIcon = reactionIcons[reaction.reaction].icon;
-                  const colorClass = reactionIcons[reaction.reaction].color;
-                  return (
-                    <motion.div
-                      key={reaction.id}
-                      className="absolute pointer-events-none z-20"
-                      initial={{ 
-                        x: 50 + (index % 3) * 60, 
-                        y: 200 + (index % 2) * 40, 
-                        scale: 0, 
-                        opacity: 0 
-                      }}
-                      animate={{ 
-                        y: 50, 
-                        scale: 1, 
-                        opacity: 1 
-                      }}
-                      exit={{ 
-                        y: -50, 
-                        opacity: 0, 
-                        scale: 0.5 
-                      }}
-                      transition={{ duration: 0.6, ease: "easeOut" }}
-                    >
-                      <div className="flex items-center gap-1 bg-black/70 backdrop-blur-sm rounded-full px-3 py-1.5 shadow-lg">
-                        <ReactionIcon className={`w-5 h-5 ${colorClass}`} />
-                        <span className="text-white text-sm font-medium">{reaction.memberName}</span>
-                      </div>
-                    </motion.div>
-                  );
-                })}
-              </AnimatePresence>
-
-              <AnimatePresence>
-                {showReactionPicker && (
-                  <motion.div
-                    className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30"
-                    initial={{ y: 20, opacity: 0, scale: 0.9 }}
-                    animate={{ y: 0, opacity: 1, scale: 1 }}
-                    exit={{ y: 20, opacity: 0, scale: 0.9 }}
-                  >
-                    <div className="flex gap-2 bg-card/95 backdrop-blur-sm rounded-full px-3 py-2 shadow-xl border">
-                      {(Object.keys(reactionIcons) as ReactionType[]).map((reactionType) => {
-                        const { icon: Icon, color } = reactionIcons[reactionType];
-                        return (
-                          <Button
-                            key={reactionType}
-                            size="icon"
-                            variant="ghost"
-                            className="rounded-full"
-                            onClick={() => sendReaction(reactionType)}
-                            data-testid={`button-reaction-${reactionType}`}
-                          >
-                            <Icon className={`w-5 h-5 ${color}`} />
-                          </Button>
-                        );
-                      })}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              <Button
-                size="icon"
-                variant="ghost"
-                className="absolute bottom-4 right-4 z-20 rounded-full bg-background/80 backdrop-blur-sm shadow-lg"
-                onClick={() => setShowReactionPicker(!showReactionPicker)}
-                data-testid="button-toggle-reactions"
-              >
-                <Heart className={`w-5 h-5 ${showReactionPicker ? 'text-pink-500 fill-pink-500' : ''}`} />
-              </Button>
             </div>
 
             <div className="shrink-0 max-w-md mx-auto w-full">
