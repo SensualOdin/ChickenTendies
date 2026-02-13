@@ -2,7 +2,7 @@ import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Users, Utensils, Heart, ArrowRight, Sparkles, Flame, PartyPopper, LogIn, LogOut, LayoutDashboard, UserPlus, SlidersHorizontal, HandHeart, ChevronRight, Zap, Clock, ShieldCheck } from "lucide-react";
+import { Users, Utensils, Heart, ArrowRight, Sparkles, Flame, PartyPopper, LogIn, LogOut, LayoutDashboard, UserPlus, SlidersHorizontal, HandHeart, ChevronRight, Zap, Clock, ShieldCheck, Save, TrendingUp, History, Rocket } from "lucide-react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/hooks/use-auth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -65,6 +65,29 @@ const benefits = [
     icon: ShieldCheck,
     title: "Real restaurants near you",
     description: "We pull from real restaurant data based on your location and preferences.",
+  },
+];
+
+const signInPerks = [
+  {
+    icon: Save,
+    title: "Save your crew",
+    description: "Keep your group together session after session — no sharing codes every time.",
+  },
+  {
+    icon: TrendingUp,
+    title: "Track your streaks",
+    description: "See how many weeks in a row your crew has used the app. Keep the streak alive!",
+  },
+  {
+    icon: History,
+    title: "Restaurant history",
+    description: "Remember where you've been so you always discover somewhere new.",
+  },
+  {
+    icon: Rocket,
+    title: "One-tap return",
+    description: "Jump straight back into your crew's next session from your personal dashboard.",
   },
 ];
 
@@ -249,6 +272,52 @@ export default function Home() {
               ))}
             </div>
           </motion.section>
+
+          {!isAuthenticated && (
+            <motion.section 
+              className="py-10 md:py-14"
+              initial={{ y: 50, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.95 }}
+            >
+              <div className="text-center mb-8">
+                <h2 className="text-xl sm:text-2xl font-bold mb-2" data-testid="text-sign-in-heading">
+                  Want to get more out of it?
+                </h2>
+                <p className="text-sm text-muted-foreground max-w-md mx-auto" data-testid="text-sign-in-subtitle">
+                  Signing in is always optional, but here's what you unlock with a free account.
+                </p>
+              </div>
+              <div className="grid sm:grid-cols-2 gap-4">
+                {signInPerks.map((perk, i) => (
+                  <motion.div
+                    key={perk.title}
+                    initial={{ y: 30, opacity: 0 }}
+                    animate={{ y: 0, opacity: 1 }}
+                    transition={{ delay: 0.95 + i * 0.08 }}
+                  >
+                    <Card className="h-full" data-testid={`card-perk-${perk.title.toLowerCase().replace(/\s+/g, "-")}`}>
+                      <CardContent className="pt-5 pb-5 flex items-start gap-4">
+                        <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                          <perk.icon className="w-5 h-5 text-primary" />
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-bold mb-1" data-testid={`text-perk-title-${perk.title.toLowerCase().replace(/\s+/g, "-")}`}>{perk.title}</h3>
+                          <p className="text-sm text-muted-foreground" data-testid={`text-perk-desc-${perk.title.toLowerCase().replace(/\s+/g, "-")}`}>{perk.description}</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                ))}
+              </div>
+              <div className="text-center mt-6">
+                <Button variant="outline" size="lg" onClick={() => navigate("/api/login")} data-testid="button-sign-in-perks">
+                  <LogIn className="w-4 h-4 mr-2" />
+                  Sign In — It's Free
+                </Button>
+              </div>
+            </motion.section>
+          )}
 
           <motion.section 
             className="py-8"
