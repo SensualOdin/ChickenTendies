@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Home, Flame, Loader2, Star, MapPin, ExternalLink, Heart, PartyPopper, Trophy, Sparkles, RefreshCw, CalendarPlus, Phone, Check, Truck, Share2 } from "lucide-react";
+import { Home, Flame, Loader2, Star, MapPin, ExternalLink, Heart, PartyPopper, Trophy, Sparkles, RefreshCw, CalendarPlus, Phone, Check, Truck, Share2, Pizza } from "lucide-react";
 import { motion } from "framer-motion";
 import { useState, useCallback, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -191,18 +191,18 @@ export default function MatchesPage() {
           animate={{ y: 0, opacity: 1 }}
         >
           <motion.div 
-            className="text-6xl mb-4"
+            className="flex justify-center mb-4"
             animate={{ scale: [1, 1.1, 1], rotate: [0, 5, -5, 0] }}
             transition={{ duration: 2, repeat: Infinity }}
           >
-            🎊
+            <PartyPopper className="w-12 h-12 text-primary" />
           </motion.div>
           <h1 className="text-3xl font-extrabold mb-2">
             {matches?.length ? "Your Matches!" : "No Matches Yet"}
           </h1>
           <p className="text-muted-foreground">
             {matches?.length 
-              ? `The squad agreed on ${matches.length} spot${matches.length !== 1 ? "s" : ""}! Time to eat! 🍽️`
+              ? `The squad agreed on ${matches.length} spot${matches.length !== 1 ? "s" : ""}! Time to eat!`
               : "Keep swiping to find spots everyone loves!"
             }
           </p>
@@ -376,11 +376,11 @@ export default function MatchesPage() {
             <Card className="text-center py-12 border-2 border-dashed">
               <CardContent>
                 <motion.div 
-                  className="text-5xl mb-4"
+                  className="flex justify-center mb-4"
                   animate={{ y: [0, -10, 0] }}
                   transition={{ duration: 1.5, repeat: Infinity }}
                 >
-                  🍕
+                  <Pizza className="w-12 h-12 text-primary" />
                 </motion.div>
                 <h3 className="font-bold text-lg mb-2">No matches yet!</h3>
                 <p className="text-sm text-muted-foreground mb-6">
@@ -417,7 +417,7 @@ export default function MatchesPage() {
             transition={{ delay: 0.5 }}
           >
             <p className="text-sm text-muted-foreground mb-4">
-              Want more options? 👀
+              Want more options?
             </p>
             <Button 
               variant="outline" 

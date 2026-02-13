@@ -695,7 +695,7 @@ export default function CrewManage() {
                       <AlertDialogCancel>Cancel</AlertDialogCancel>
                       <AlertDialogAction
                         onClick={() => deleteCrewMutation.mutate()}
-                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        className="bg-destructive text-destructive-foreground"
                         data-testid="button-confirm-delete"
                       >
                         Delete
@@ -722,7 +722,7 @@ export default function CrewManage() {
                       <AlertDialogCancel>Cancel</AlertDialogCancel>
                       <AlertDialogAction
                         onClick={() => leaveCrewMutation.mutate()}
-                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        className="bg-destructive text-destructive-foreground"
                         data-testid="button-confirm-leave"
                       >
                         Leave

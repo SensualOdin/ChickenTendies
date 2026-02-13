@@ -1,7 +1,8 @@
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Users, Utensils, Heart, ArrowRight, Sparkles, Flame, Pizza, PartyPopper, LogIn, LogOut, User, LayoutDashboard } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Users, Utensils, Heart, ArrowRight, Sparkles, Flame, PartyPopper, LogIn, LogOut, LayoutDashboard, UserPlus, SlidersHorizontal, HandHeart, ChevronRight, Zap, Clock, ShieldCheck } from "lucide-react";
 import { motion } from "framer-motion";
 import { useAuth } from "@/hooks/use-auth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -13,6 +14,59 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+
+const steps = [
+  {
+    number: "1",
+    icon: UserPlus,
+    title: "Start a party",
+    description: "Create a group and share the code with your friends. No accounts needed.",
+    color: "text-primary",
+    bgColor: "from-primary/20 to-orange-500/20",
+  },
+  {
+    number: "2",
+    icon: SlidersHorizontal,
+    title: "Set your preferences",
+    description: "Pick your cuisines, dietary needs, price range, and location so you only see spots that work.",
+    color: "text-accent",
+    bgColor: "from-accent/20 to-emerald-500/20",
+  },
+  {
+    number: "3",
+    icon: HandHeart,
+    title: "Swipe on restaurants",
+    description: "Everyone swipes right on places they'd like. Swipe left to skip. Super-like your favorites.",
+    color: "text-orange-500",
+    bgColor: "from-orange-500/20 to-yellow-500/20",
+  },
+  {
+    number: "4",
+    icon: PartyPopper,
+    title: "Match & eat together",
+    description: "When everyone likes the same place, it's a match! Get directions, order delivery, or reserve a table.",
+    color: "text-yellow-600 dark:text-yellow-400",
+    bgColor: "from-yellow-500/20 to-primary/20",
+  },
+];
+
+const benefits = [
+  {
+    icon: Zap,
+    title: "Instant — no signup",
+    description: "Jump in immediately. Create an account later only if you want to save your crew.",
+  },
+  {
+    icon: Clock,
+    title: "Decides in minutes",
+    description: "No more endless group texts. Everyone swipes, the app finds where you all agree.",
+  },
+  {
+    icon: ShieldCheck,
+    title: "Real restaurants near you",
+    description: "We pull from real restaurant data based on your location and preferences.",
+  },
+];
 
 export default function Home() {
   const { user, isLoading, isAuthenticated, logout } = useAuth();
@@ -78,38 +132,16 @@ export default function Home() {
 
       <main className="px-4 md:px-6 pb-12 safe-bottom">
         <div className="max-w-4xl mx-auto">
-          <section className="text-center py-12 md:py-20 relative">
+          <section className="text-center py-10 md:py-16 relative">
             <motion.div 
-              className="absolute -top-10 left-1/4 text-4xl hidden sm:block"
-              animate={{ y: [0, -10, 0], rotate: [0, 10, 0] }}
-              transition={{ duration: 2, repeat: Infinity }}
-            >
-              🍗
-            </motion.div>
-            <motion.div 
-              className="absolute top-20 right-1/4 text-3xl hidden sm:block"
-              animate={{ y: [0, 10, 0], rotate: [0, -10, 0] }}
-              transition={{ duration: 2.5, repeat: Infinity, delay: 0.5 }}
-            >
-              🍕
-            </motion.div>
-            <motion.div 
-              className="absolute bottom-0 left-1/3 text-2xl hidden sm:block"
-              animate={{ y: [0, -8, 0] }}
-              transition={{ duration: 1.8, repeat: Infinity, delay: 0.3 }}
-            >
-              🌮
-            </motion.div>
-
-            <motion.div 
-              className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary/20 to-orange-500/20 rounded-full text-primary text-sm font-semibold mb-6 border border-primary/30"
               initial={{ y: 20, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               transition={{ delay: 0.2 }}
             >
-              <Sparkles className="w-4 h-4" />
-              <span>Swipe Together, Dine Together</span>
-              <Sparkles className="w-4 h-4" />
+              <Badge variant="secondary" className="mb-6 text-sm">
+                <Sparkles className="w-3.5 h-3.5 mr-1.5" />
+                100% free &middot; No signup required
+              </Badge>
             </motion.div>
 
             <motion.h1 
@@ -118,21 +150,28 @@ export default function Home() {
               animate={{ y: 0, opacity: 1 }}
               transition={{ delay: 0.3 }}
             >
-              Find food{" "}
+              Stop arguing about{" "}
               <span className="bg-gradient-to-r from-primary via-orange-500 to-yellow-500 bg-clip-text text-transparent">
-                everyone
-              </span>{" "}
-              is hungry for
+                where to eat
+              </span>
             </motion.h1>
 
             <motion.p 
-              className="text-base sm:text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-10"
+              className="text-base sm:text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-4"
               initial={{ y: 30, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               transition={{ delay: 0.4 }}
             >
-              Gather your crew, swipe through restaurants together, and boom — 
-              when everyone matches, you've got dinner plans! 🎉
+              Everyone swipes on restaurants. When the whole group agrees on a place, you've got dinner plans.
+            </motion.p>
+
+            <motion.p 
+              className="text-sm text-muted-foreground mb-10"
+              initial={{ y: 20, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              transition={{ delay: 0.45 }}
+            >
+              Works instantly in your browser. No app download, no account needed.
             </motion.p>
 
             <motion.div 
@@ -142,112 +181,100 @@ export default function Home() {
               transition={{ delay: 0.5 }}
             >
               <Link href="/create">
-                <Button size="lg" className="w-full sm:w-auto text-base sm:text-lg px-6 sm:px-8 bg-gradient-to-r from-primary to-orange-500 hover:from-primary/90 hover:to-orange-500/90 shadow-lg shadow-primary/30" data-testid="button-create-group">
-                  <PartyPopper className="w-5 h-5 mr-2" />
-                  Start a Party
+                <Button size="lg" className="w-full sm:w-auto bg-gradient-to-r from-primary to-orange-500 shadow-lg shadow-primary/30" data-testid="button-create-group">
+                  <Flame className="w-5 h-5 mr-2" />
+                  Start a Party — It's Free
                   <ArrowRight className="w-5 h-5 ml-2" />
                 </Button>
               </Link>
               <Link href="/join">
-                <Button size="lg" variant="outline" className="w-full sm:w-auto text-base sm:text-lg px-6 sm:px-8 border-2" data-testid="button-join-group">
-                  Join the Fun
+                <Button size="lg" variant="outline" className="w-full sm:w-auto" data-testid="button-join-group">
+                  I Have a Code
                 </Button>
               </Link>
             </motion.div>
           </section>
 
-          <section className="grid md:grid-cols-3 gap-6 py-12">
-            <motion.div
-              initial={{ y: 50, opacity: 0 }}
+          <section className="py-10 md:py-14">
+            <motion.h2
+              className="text-center text-xl sm:text-2xl font-bold mb-8"
+              initial={{ y: 30, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               transition={{ delay: 0.6 }}
             >
-              <Card className="hover-elevate h-full border-2 hover:border-primary/50 transition-all">
-                <CardContent className="pt-6">
-                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary/20 to-orange-500/20 flex items-center justify-center mb-4">
-                    <Users className="w-7 h-7 text-primary" />
-                  </div>
-                  <h3 className="text-lg font-bold mb-2">Squad Up! 👯</h3>
-                  <p className="text-muted-foreground">
-                    Create a group and share the secret code with your hungry friends. The more the merrier!
-                  </p>
-                </CardContent>
-              </Card>
-            </motion.div>
-
-            <motion.div
-              initial={{ y: 50, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.7 }}
-            >
-              <Card className="hover-elevate h-full border-2 hover:border-accent/50 transition-all">
-                <CardContent className="pt-6">
-                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-accent/20 to-emerald-500/20 flex items-center justify-center mb-4">
-                    <Pizza className="w-7 h-7 text-accent" />
-                  </div>
-                  <h3 className="text-lg font-bold mb-2">Set Your Vibes 🎯</h3>
-                  <p className="text-muted-foreground">
-                    Craving tacos? Allergic to nuts? Set your preferences and only see spots that work for everyone.
-                  </p>
-                </CardContent>
-              </Card>
-            </motion.div>
-
-            <motion.div
-              initial={{ y: 50, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.8 }}
-            >
-              <Card className="hover-elevate h-full border-2 hover:border-yellow-500/50 transition-all">
-                <CardContent className="pt-6">
-                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-yellow-500/20 to-orange-500/20 flex items-center justify-center mb-4">
-                    <Heart className="w-7 h-7 text-yellow-500 fill-yellow-500" />
-                  </div>
-                  <h3 className="text-lg font-bold mb-2">Swipe & Feast! 🔥</h3>
-                  <p className="text-muted-foreground">
-                    Swipe right on yummy spots. When everyone matches — it's decision time, baby!
-                  </p>
-                </CardContent>
-              </Card>
-            </motion.div>
+              How it works
+            </motion.h2>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+              {steps.map((step, i) => (
+                <motion.div
+                  key={step.number}
+                  initial={{ y: 50, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  transition={{ delay: 0.6 + i * 0.1 }}
+                >
+                  <Card className="h-full border-2 relative">
+                    <CardContent className="pt-6">
+                      <div className="flex items-center gap-3 mb-3">
+                        <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${step.bgColor} flex items-center justify-center shrink-0`}>
+                          <step.icon className={`w-5 h-5 ${step.color}`} />
+                        </div>
+                        <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Step {step.number}</span>
+                      </div>
+                      <h3 className="text-base font-bold mb-1.5">{step.title}</h3>
+                      <p className="text-sm text-muted-foreground">{step.description}</p>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              ))}
+            </div>
           </section>
 
           <motion.section 
-            className="py-12"
+            className="py-10 md:py-14"
             initial={{ y: 50, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.9 }}
           >
-            <Card className="overflow-hidden bg-gradient-to-br from-primary/10 via-background to-accent/10 border-2 border-primary/20">
-              <CardContent className="p-8 md:p-12 text-center relative">
-                <motion.div 
-                  className="absolute top-4 left-8 text-2xl hidden sm:block"
-                  animate={{ rotate: [0, 20, 0] }}
-                  transition={{ duration: 2, repeat: Infinity }}
-                >
-                  🎊
-                </motion.div>
-                <motion.div 
-                  className="absolute top-4 right-8 text-2xl hidden sm:block"
-                  animate={{ rotate: [0, -20, 0] }}
-                  transition={{ duration: 2, repeat: Infinity, delay: 0.5 }}
-                >
-                  🎉
-                </motion.div>
-                
-                <h2 className="text-2xl md:text-3xl font-extrabold mb-4">
-                  No more hangry debates! 😤➡️😋
+            <div className="grid sm:grid-cols-3 gap-6">
+              {benefits.map((benefit) => (
+                <div key={benefit.title} className="flex flex-col items-center text-center gap-3 py-4">
+                  <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
+                    <benefit.icon className="w-6 h-6 text-foreground" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-sm mb-1">{benefit.title}</p>
+                    <p className="text-sm text-muted-foreground">{benefit.description}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </motion.section>
+
+          <motion.section 
+            className="py-8"
+            initial={{ y: 50, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 1.0 }}
+          >
+            <Card className="overflow-visible bg-gradient-to-br from-primary/10 via-background to-accent/10 border-2 border-primary/20">
+              <CardContent className="p-8 md:p-12 text-center">
+                <h2 className="text-2xl md:text-3xl font-extrabold mb-3">
+                  Ready to find dinner?
                 </h2>
                 <p className="text-muted-foreground max-w-lg mx-auto mb-6">
-                  We've all been there — "I don't know, you pick!" 
-                  ChickenTinders makes choosing fun and gives everyone a vote!
+                  Create a party, share the code with your group, and start swiping. Takes about 30 seconds to set up.
                 </p>
-                <Link href="/create">
-                  <Button size="lg" className="bg-gradient-to-r from-primary to-orange-500 shadow-lg shadow-primary/30" data-testid="button-get-started">
-                    Let's Get Cooking!
-                    <Flame className="w-5 h-5 ml-2" />
-                  </Button>
-                </Link>
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                  <Link href="/create">
+                    <Button size="lg" className="bg-gradient-to-r from-primary to-orange-500 shadow-lg shadow-primary/30" data-testid="button-get-started">
+                      Start a Party
+                      <ChevronRight className="w-5 h-5 ml-1" />
+                    </Button>
+                  </Link>
+                  {!isAuthenticated && (
+                    <p className="text-xs text-muted-foreground">No signup needed</p>
+                  )}
+                </div>
               </CardContent>
             </Card>
           </motion.section>

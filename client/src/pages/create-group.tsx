@@ -41,7 +41,7 @@ export default function CreateGroup() {
     },
     onError: () => {
       toast({
-        title: "Oops! 😅",
+        title: "Oops!",
         description: "Something went wrong. Let's try that again!",
         variant: "destructive",
       });
@@ -80,11 +80,11 @@ export default function CreateGroup() {
           <Card className="border-2">
             <CardHeader className="text-center">
               <motion.div 
-                className="text-4xl mb-2"
+                className="flex justify-center mb-2"
                 animate={{ scale: [1, 1.1, 1] }}
                 transition={{ duration: 1.5, repeat: Infinity }}
               >
-                🎉
+                <PartyPopper className="w-8 h-8 text-primary" />
               </motion.div>
               <CardTitle className="text-2xl">Start a Food Party!</CardTitle>
               <CardDescription>
@@ -105,7 +105,7 @@ export default function CreateGroup() {
                         </FormLabel>
                         <FormControl>
                           <Input 
-                            placeholder="Friday Feast Squad 🍕" 
+                            placeholder="Friday Feast Squad" 
                             className="border-2"
                             {...field}
                             data-testid="input-group-name"
@@ -140,7 +140,7 @@ export default function CreateGroup() {
 
                   <Button 
                     type="submit" 
-                    className="w-full bg-gradient-to-r from-primary to-orange-500 hover:from-primary/90 hover:to-orange-500/90" 
+                    className="w-full bg-gradient-to-r from-primary to-orange-500" 
                     size="lg"
                     disabled={createMutation.isPending}
                     data-testid="button-submit-create"

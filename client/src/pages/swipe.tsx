@@ -9,10 +9,11 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useGroupPushNotifications } from "@/hooks/use-push-notifications";
 import { useAnalytics } from "@/hooks/use-analytics";
-import { Flame, ChevronRight, PartyPopper, Bell, Timer, Vote, Trophy, BellRing, X, Home, RefreshCw, ArrowLeft, ArrowRight, ArrowUp } from "lucide-react";
+import { Flame, ChevronRight, PartyPopper, Bell, Timer, Vote, Trophy, BellRing, X, Home, RefreshCw, ArrowLeft, ArrowRight, ArrowUp, Utensils, Heart, Sparkles } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Group, Restaurant, WSMessage } from "@shared/schema";
 import confetti from "canvas-confetti";
+import { SwipeWalkthrough } from "@/components/swipe-walkthrough";
 
 export default function SwipePage() {
   const params = useParams<{ id: string }>();
@@ -358,6 +359,7 @@ export default function SwipePage() {
 
   return (
     <div className="h-[100dvh] bg-background flex flex-col relative safe-top safe-x">
+      <SwipeWalkthrough />
       <AnimatePresence>
         {showMatchCelebration && latestMatch && (
           <motion.div
@@ -374,18 +376,22 @@ export default function SwipePage() {
               <motion.div
                 animate={{ scale: [1, 1.2, 1], rotate: [0, 10, -10, 0] }}
                 transition={{ duration: 0.5, repeat: 3 }}
-                className="text-8xl mb-6"
+                className="mb-6"
               >
-                🎉
+                <PartyPopper className="w-20 h-20 text-white mx-auto" />
               </motion.div>
               <h2 className="text-4xl font-extrabold text-white mb-2">IT'S A MATCH!</h2>
               <p className="text-xl text-white/80 mb-4">Everyone wants {latestMatch.name}!</p>
-              <div className="flex justify-center gap-2 text-4xl">
-                <motion.span animate={{ y: [0, -10, 0] }} transition={{ duration: 0.5, delay: 0 }}>🍗</motion.span>
-                <motion.span animate={{ y: [0, -10, 0] }} transition={{ duration: 0.5, delay: 0.1 }}>🍕</motion.span>
-                <motion.span animate={{ y: [0, -10, 0] }} transition={{ duration: 0.5, delay: 0.2 }}>🌮</motion.span>
-                <motion.span animate={{ y: [0, -10, 0] }} transition={{ duration: 0.5, delay: 0.3 }}>🍔</motion.span>
-                <motion.span animate={{ y: [0, -10, 0] }} transition={{ duration: 0.5, delay: 0.4 }}>🍣</motion.span>
+              <div className="flex justify-center gap-3">
+                <motion.div animate={{ y: [0, -10, 0] }} transition={{ duration: 0.5, delay: 0 }}>
+                  <Utensils className="w-8 h-8 text-white/70" />
+                </motion.div>
+                <motion.div animate={{ y: [0, -10, 0] }} transition={{ duration: 0.5, delay: 0.1 }}>
+                  <Heart className="w-8 h-8 text-white/70 fill-white/70" />
+                </motion.div>
+                <motion.div animate={{ y: [0, -10, 0] }} transition={{ duration: 0.5, delay: 0.2 }}>
+                  <Sparkles className="w-8 h-8 text-white/70" />
+                </motion.div>
               </div>
             </motion.div>
           </motion.div>
@@ -441,7 +447,7 @@ export default function SwipePage() {
           <div>
             <span className="font-bold block">{group.name}</span>
             <span className="text-xs text-muted-foreground">
-              {restaurants.length - currentIndex} spots left 🍽️
+              {restaurants.length - currentIndex} spots left
             </span>
           </div>
         </div>
@@ -481,7 +487,7 @@ export default function SwipePage() {
                   </motion.div>
                   <div>
                     <div className="font-bold text-sm">
-                      {matches.length} Match{matches.length !== 1 ? "es" : ""}! 🎉
+                      {matches.length} Match{matches.length !== 1 ? "es" : ""}!
                     </div>
                     <div className="text-xs text-muted-foreground">
                       Tap to see where everyone agrees!

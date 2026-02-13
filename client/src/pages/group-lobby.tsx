@@ -443,7 +443,7 @@ export default function GroupLobby() {
           {isHost ? (
             <Button 
               size="lg" 
-              className="w-full bg-gradient-to-r from-primary to-orange-500 hover:from-primary/90 hover:to-orange-500/90 shadow-lg shadow-primary/30"
+              className="w-full bg-gradient-to-r from-primary to-orange-500 shadow-lg shadow-primary/30"
               onClick={handleContinue}
               disabled={group.members.length < 1}
               data-testid="button-continue"

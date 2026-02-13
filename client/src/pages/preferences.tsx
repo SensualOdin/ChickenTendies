@@ -11,7 +11,7 @@ import { Slider } from "@/components/ui/slider";
 import { groupPreferencesSchema, type GroupPreferences, type Group, dietaryRestrictions, cuisineTypes, priceRanges } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Flame, Loader2, MapPin, Ruler, UtensilsCrossed, DollarSign, Leaf, Sparkles, Navigation, Star } from "lucide-react";
+import { ArrowLeft, Flame, Loader2, MapPin, Ruler, UtensilsCrossed, DollarSign, Leaf, Sparkles, Navigation, Star, Target } from "lucide-react";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
@@ -190,11 +190,11 @@ export default function Preferences() {
           <Card className="border-2">
             <CardHeader className="text-center border-b bg-gradient-to-r from-primary/5 to-orange-500/5">
               <motion.div 
-                className="text-4xl mb-2"
+                className="flex justify-center mb-2"
                 animate={{ rotate: [0, 10, -10, 0] }}
                 transition={{ duration: 2, repeat: Infinity }}
               >
-                🎯
+                <Target className="w-8 h-8 text-primary" />
               </motion.div>
               <CardTitle className="text-xl">Set the Vibes!</CardTitle>
               <CardDescription>
@@ -356,7 +356,7 @@ export default function Preferences() {
                   <div className="space-y-4">
                     <div className="flex items-center gap-2 text-sm font-semibold">
                       <DollarSign className="w-4 h-4 text-accent" />
-                      Budget Vibes 💸
+                      Budget Vibes
                     </div>
                     
                     <FormField
@@ -406,7 +406,7 @@ export default function Preferences() {
                   <div className="space-y-4">
                     <div className="flex items-center gap-2 text-sm font-semibold">
                       <Leaf className="w-4 h-4 text-accent" />
-                      Dietary Needs 🥗
+                      Dietary Needs
                     </div>
                     
                     <FormField
@@ -529,7 +529,7 @@ export default function Preferences() {
 
                   <Button 
                     type="submit" 
-                    className="w-full bg-gradient-to-r from-primary to-orange-500 hover:from-primary/90 hover:to-orange-500/90 shadow-lg shadow-primary/30" 
+                    className="w-full bg-gradient-to-r from-primary to-orange-500 shadow-lg shadow-primary/30" 
                     size="lg"
                     disabled={saveMutation.isPending}
                     data-testid="button-start-swiping"
@@ -541,8 +541,8 @@ export default function Preferences() {
                       </>
                     ) : (
                       <>
-                        <Sparkles className="w-4 h-4 mr-2" />
-                        Start Swiping! 🔥
+                        <Flame className="w-4 h-4 mr-2" />
+                        Start Swiping!
                       </>
                     )}
                   </Button>
