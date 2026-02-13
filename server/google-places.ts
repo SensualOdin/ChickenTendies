@@ -108,7 +108,9 @@ export async function enrichRestaurantsWithGoogle(
         return;
       }
       const data = await lookupGooglePlace(r.name, r.latitude, r.longitude, r.address);
-      googleCache.set(cacheKey, data);
+      if (data.googleRating !== null) {
+        googleCache.set(cacheKey, data);
+      }
       results.set(r.id, data);
     });
     await Promise.all(promises);
