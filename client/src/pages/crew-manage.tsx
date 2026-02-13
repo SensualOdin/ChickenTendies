@@ -135,12 +135,24 @@ export default function CrewManage() {
     }
   }, [navigate, toast]);
 
+  const [linkCopied, setLinkCopied] = useState(false);
+
   const copyInviteCode = () => {
     if (crew?.inviteCode) {
       navigator.clipboard.writeText(crew.inviteCode);
       setCopied(true);
       toast({ title: "Copied!", description: "Invite code copied to clipboard" });
       setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const copyInviteLink = () => {
+    if (crew?.inviteCode) {
+      const link = `${window.location.origin}/join?code=${crew.inviteCode}`;
+      navigator.clipboard.writeText(link);
+      setLinkCopied(true);
+      toast({ title: "Copied!", description: "Invite link copied to clipboard" });
+      setTimeout(() => setLinkCopied(false), 2000);
     }
   };
 
@@ -368,8 +380,17 @@ export default function CrewManage() {
                   </Button>
                 </div>
               </div>
+              <Button
+                variant={linkCopied ? "default" : "outline"}
+                className="w-full mt-3"
+                onClick={copyInviteLink}
+                data-testid="button-copy-invite-link"
+              >
+                {linkCopied ? <Check className="w-4 h-4 mr-2" /> : <Copy className="w-4 h-4 mr-2" />}
+                {linkCopied ? "Link Copied" : "Copy Invite Link"}
+              </Button>
               <p className="text-sm text-muted-foreground mt-3 text-center">
-                Share the code with friends or tap send to message them directly
+                Share the code or link with friends, or tap send to message them directly
               </p>
             </CardContent>
           </Card>

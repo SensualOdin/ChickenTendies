@@ -225,6 +225,21 @@ export const restaurantCache = pgTable("restaurant_cache", {
 
 export type RestaurantCacheEntry = typeof restaurantCache.$inferSelect;
 
+export const lifecycleEvents = pgTable("lifecycle_events", {
+  id: serial("id").primaryKey(),
+  eventName: varchar("event_name", { length: 100 }).notNull(),
+  userId: varchar("user_id"),
+  groupId: varchar("group_id"),
+  sessionId: varchar("session_id"),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("lifecycle_event_name_idx").on(table.eventName),
+  index("lifecycle_created_idx").on(table.createdAt),
+]);
+
+export type LifecycleEvent = typeof lifecycleEvents.$inferSelect;
+
 export const googlePlacesCache = pgTable("google_places_cache", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   cacheKey: varchar("cache_key", { length: 500 }).notNull().unique(),

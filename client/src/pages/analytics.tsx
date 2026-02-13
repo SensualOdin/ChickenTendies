@@ -4,9 +4,10 @@ import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, BarChart3, TrendingUp, MousePointerClick, Star, ThumbsDown, ThumbsUp, Clock, Calendar, Search, ShieldAlert } from "lucide-react";
+import { ArrowLeft, BarChart3, TrendingUp, TrendingDown, MousePointerClick, Star, ThumbsDown, ThumbsUp, Clock, Calendar, Search, ShieldAlert, ArrowRight, Users, Flame, Share2, UserPlus } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from "recharts";
 import { useState, useEffect } from "react";
 
@@ -59,12 +60,94 @@ interface RestaurantData {
   message?: string;
 }
 
+interface LifecycleMetrics {
+  crews_created: number;
+  first_sessions_completed: number;
+  invites_sent: number;
+  invites_accepted: number;
+  anonymous_conversion_prompted: number;
+  anonymous_conversion_completed: number;
+  match_result_shared: number;
+}
+
+interface LifecycleDashboardData {
+  thisWeek: LifecycleMetrics;
+  lastWeek: LifecycleMetrics;
+  last4Weeks: LifecycleMetrics;
+  weeklyTrend: Array<{ week: string; crews_created: number; sessions_completed: number; conversions: number }>;
+  conversionFunnel: { prompted: number; completed: number; rate: number };
+  inviteFunnel: { sent: number; accepted: number; rate: number };
+}
+
+function MetricCard({ label, thisWeek, lastWeek, icon: Icon }: { label: string; thisWeek: number; lastWeek: number; icon: React.ElementType }) {
+  const diff = thisWeek - lastWeek;
+  const isUp = diff > 0;
+  const isDown = diff < 0;
+
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex items-center gap-2 text-muted-foreground mb-1">
+          <Icon className="h-4 w-4" />
+          <span className="text-xs font-medium">{label}</span>
+        </div>
+        <div className="flex items-end gap-2">
+          <p className="text-2xl font-bold" data-testid={`text-growth-${label.toLowerCase().replace(/\s+/g, "-")}`}>{thisWeek}</p>
+          {(isUp || isDown) && (
+            <span className={`flex items-center text-xs font-medium ${isUp ? "text-green-600" : "text-red-500"}`}>
+              {isUp ? <TrendingUp className="h-3 w-3 mr-0.5" /> : <TrendingDown className="h-3 w-3 mr-0.5" />}
+              {Math.abs(diff)}
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground mt-1">Last week: {lastWeek}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+function FunnelCard({ title, topLabel, topValue, bottomLabel, bottomValue, rate, icon: Icon }: {
+  title: string;
+  topLabel: string;
+  topValue: number;
+  bottomLabel: string;
+  bottomValue: number;
+  rate: number;
+  icon: React.ElementType;
+}) {
+  return (
+    <Card>
+      <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Icon className="h-4 w-4" />
+          {title}
+        </CardTitle>
+        <Badge variant="secondary" data-testid={`badge-${title.toLowerCase().replace(/\s+/g, "-")}-rate`}>{rate}%</Badge>
+      </CardHeader>
+      <CardContent>
+        <div className="flex items-center gap-3">
+          <div className="flex-1 text-center p-3 rounded-md bg-muted/50">
+            <p className="text-xl font-bold">{topValue}</p>
+            <p className="text-xs text-muted-foreground">{topLabel}</p>
+          </div>
+          <ArrowRight className="h-5 w-5 text-muted-foreground shrink-0" />
+          <div className="flex-1 text-center p-3 rounded-md bg-muted/50">
+            <p className="text-xl font-bold">{bottomValue}</p>
+            <p className="text-xs text-muted-foreground">{bottomLabel}</p>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AnalyticsPage() {
   const { user, isLoading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
   const [days, setDays] = useState("30");
   const [cuisineSearch, setCuisineSearch] = useState("");
   const [restaurantSearch, setRestaurantSearch] = useState("");
+  const [activeTab, setActiveTab] = useState("swipes");
 
   const isAdmin = !!user?.isAdmin;
 
@@ -81,6 +164,11 @@ export default function AnalyticsPage() {
   const { data: restaurantData } = useQuery<RestaurantData>({
     queryKey: ["/api/analytics/restaurant", restaurantSearch],
     enabled: isAdmin && restaurantSearch.length > 0,
+  });
+
+  const { data: growthData, isLoading: growthLoading } = useQuery<LifecycleDashboardData>({
+    queryKey: ["/api/admin/lifecycle-dashboard"],
+    enabled: isAdmin,
   });
 
   useEffect(() => {
@@ -152,300 +240,444 @@ export default function AnalyticsPage() {
             <h1 className="text-lg font-bold">Analytics</h1>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <Select value={days} onValueChange={setDays}>
-              <SelectTrigger className="w-[130px]" data-testid="select-time-range">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="7">Last 7 days</SelectItem>
-                <SelectItem value="30">Last 30 days</SelectItem>
-                <SelectItem value="90">Last 90 days</SelectItem>
-                <SelectItem value="365">Last year</SelectItem>
-              </SelectContent>
-            </Select>
+            {activeTab === "swipes" && (
+              <Select value={days} onValueChange={setDays}>
+                <SelectTrigger className="w-[130px]" data-testid="select-time-range">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="7">Last 7 days</SelectItem>
+                  <SelectItem value="30">Last 30 days</SelectItem>
+                  <SelectItem value="90">Last 90 days</SelectItem>
+                  <SelectItem value="365">Last year</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
           </div>
         </div>
       </header>
 
       <main className="container mx-auto px-4 py-6 space-y-6 max-w-6xl">
-        {isLoading ? (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            {[...Array(4)].map((_, i) => (
-              <Card key={i}>
-                <CardContent className="p-4">
-                  <div className="h-16 animate-pulse bg-muted rounded" />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        ) : (
-          <>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                    <MousePointerClick className="h-4 w-4" />
-                    <span className="text-xs font-medium">Total Swipes</span>
-                  </div>
-                  <p className="text-2xl font-bold" data-testid="text-total-swipes">{totalSwipes.toLocaleString()}</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                    <ThumbsUp className="h-4 w-4" />
-                    <span className="text-xs font-medium">Right Swipes</span>
-                  </div>
-                  <p className="text-2xl font-bold text-green-600" data-testid="text-right-swipes">{rightSwipes.toLocaleString()}</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                    <Star className="h-4 w-4" />
-                    <span className="text-xs font-medium">Super Likes</span>
-                  </div>
-                  <p className="text-2xl font-bold text-yellow-500" data-testid="text-super-likes">{superLikes.toLocaleString()}</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-4">
-                  <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                    <TrendingUp className="h-4 w-4" />
-                    <span className="text-xs font-medium">Approval Rate</span>
-                  </div>
-                  <p className="text-2xl font-bold" data-testid="text-approval-rate">{approvalRate}%</p>
-                </CardContent>
-              </Card>
-            </div>
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList>
+            <TabsTrigger value="swipes" data-testid="tab-swipes">Swipes</TabsTrigger>
+            <TabsTrigger value="growth" data-testid="tab-growth">Growth</TabsTrigger>
+          </TabsList>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-                  <CardTitle className="text-base">Top Cuisines (Liked)</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {cuisineData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height={300}>
-                      <BarChart data={cuisineData} layout="vertical" margin={{ left: 80, right: 16 }}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis type="number" />
-                        <YAxis type="category" dataKey="name" width={75} tick={{ fontSize: 12 }} />
-                        <Tooltip />
-                        <Bar dataKey="value" name="Likes" radius={[0, 4, 4, 0]}>
-                          {cuisineData.map((entry, index) => (
-                            <Cell key={index} fill={entry.fill} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div className="flex items-center justify-center h-[300px] text-muted-foreground text-sm">
-                      No cuisine data yet
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+          <TabsContent value="swipes" className="space-y-6 mt-4">
+            {isLoading ? (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                {[...Array(4)].map((_, i) => (
+                  <Card key={i}>
+                    <CardContent className="p-4">
+                      <div className="h-16 animate-pulse bg-muted rounded" />
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                        <MousePointerClick className="h-4 w-4" />
+                        <span className="text-xs font-medium">Total Swipes</span>
+                      </div>
+                      <p className="text-2xl font-bold" data-testid="text-total-swipes">{totalSwipes.toLocaleString()}</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                        <ThumbsUp className="h-4 w-4" />
+                        <span className="text-xs font-medium">Right Swipes</span>
+                      </div>
+                      <p className="text-2xl font-bold text-green-600" data-testid="text-right-swipes">{rightSwipes.toLocaleString()}</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                        <Star className="h-4 w-4" />
+                        <span className="text-xs font-medium">Super Likes</span>
+                      </div>
+                      <p className="text-2xl font-bold text-yellow-500" data-testid="text-super-likes">{superLikes.toLocaleString()}</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                        <TrendingUp className="h-4 w-4" />
+                        <span className="text-xs font-medium">Approval Rate</span>
+                      </div>
+                      <p className="text-2xl font-bold" data-testid="text-approval-rate">{approvalRate}%</p>
+                    </CardContent>
+                  </Card>
+                </div>
 
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-                  <CardTitle className="text-base">Price Preferences</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {priceData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height={300}>
-                      <BarChart data={priceData}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="price" />
-                        <YAxis />
-                        <Tooltip />
-                        <Bar dataKey="liked" name="Liked" fill="hsl(142, 71%, 45%)" radius={[4, 4, 0, 0]} />
-                        <Bar dataKey="disliked" name="Disliked" fill="hsl(0, 72%, 51%)" radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div className="flex items-center justify-center h-[300px] text-muted-foreground text-sm">
-                      No price data yet
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+                      <CardTitle className="text-base">Top Cuisines (Liked)</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {cuisineData.length > 0 ? (
+                        <ResponsiveContainer width="100%" height={300}>
+                          <BarChart data={cuisineData} layout="vertical" margin={{ left: 80, right: 16 }}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis type="number" />
+                            <YAxis type="category" dataKey="name" width={75} tick={{ fontSize: 12 }} />
+                            <Tooltip />
+                            <Bar dataKey="value" name="Likes" radius={[0, 4, 4, 0]}>
+                              {cuisineData.map((entry, index) => (
+                                <Cell key={index} fill={entry.fill} />
+                              ))}
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <div className="flex items-center justify-center h-[300px] text-muted-foreground text-sm">
+                          No cuisine data yet
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
 
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Clock className="h-4 w-4" />
-                    Activity by Hour
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {hourlyData.some(h => h.count > 0) ? (
-                    <ResponsiveContainer width="100%" height={250}>
-                      <LineChart data={hourlyData}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="hour" tick={{ fontSize: 10 }} interval={2} />
-                        <YAxis />
-                        <Tooltip />
-                        <Line type="monotone" dataKey="count" name="Swipes" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div className="flex items-center justify-center h-[250px] text-muted-foreground text-sm">
-                      No hourly data yet
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+                      <CardTitle className="text-base">Price Preferences</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {priceData.length > 0 ? (
+                        <ResponsiveContainer width="100%" height={300}>
+                          <BarChart data={priceData}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="price" />
+                            <YAxis />
+                            <Tooltip />
+                            <Bar dataKey="liked" name="Liked" fill="hsl(142, 71%, 45%)" radius={[4, 4, 0, 0]} />
+                            <Bar dataKey="disliked" name="Disliked" fill="hsl(0, 72%, 51%)" radius={[4, 4, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <div className="flex items-center justify-center h-[300px] text-muted-foreground text-sm">
+                          No price data yet
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
 
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Calendar className="h-4 w-4" />
-                    Activity by Day
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {dailyData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height={250}>
-                      <BarChart data={dailyData}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="day" />
-                        <YAxis />
-                        <Tooltip />
-                        <Bar dataKey="count" name="Swipes" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  ) : (
-                    <div className="flex items-center justify-center h-[250px] text-muted-foreground text-sm">
-                      No daily data yet
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <Clock className="h-4 w-4" />
+                        Activity by Hour
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {hourlyData.some(h => h.count > 0) ? (
+                        <ResponsiveContainer width="100%" height={250}>
+                          <LineChart data={hourlyData}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="hour" tick={{ fontSize: 10 }} interval={2} />
+                            <YAxis />
+                            <Tooltip />
+                            <Line type="monotone" dataKey="count" name="Swipes" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <div className="flex items-center justify-center h-[250px] text-muted-foreground text-sm">
+                          No hourly data yet
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
 
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-                <CardTitle className="text-base">Top Restaurants</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {summary?.topRestaurants && summary.topRestaurants.length > 0 ? (
-                  <div className="space-y-3">
-                    {summary.topRestaurants.slice(0, 10).map((r, i) => {
-                      const total = Number(r.right_swipes) + Number(r.left_swipes) + Number(r.super_likes);
-                      const rate = total > 0 ? (((Number(r.right_swipes) + Number(r.super_likes)) / total) * 100).toFixed(0) : "0";
-                      return (
-                        <div key={r.restaurant_id} className="flex items-center justify-between gap-4 flex-wrap" data-testid={`row-restaurant-${i}`}>
-                          <div className="flex items-center gap-3 min-w-0">
-                            <span className="text-sm font-medium text-muted-foreground w-6 text-right">{i + 1}</span>
-                            <span className="text-sm font-medium truncate">{r.restaurant_name || r.restaurant_id}</span>
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <Calendar className="h-4 w-4" />
+                        Activity by Day
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {dailyData.length > 0 ? (
+                        <ResponsiveContainer width="100%" height={250}>
+                          <BarChart data={dailyData}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="day" />
+                            <YAxis />
+                            <Tooltip />
+                            <Bar dataKey="count" name="Swipes" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <div className="flex items-center justify-center h-[250px] text-muted-foreground text-sm">
+                          No daily data yet
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+                    <CardTitle className="text-base">Top Restaurants</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {summary?.topRestaurants && summary.topRestaurants.length > 0 ? (
+                      <div className="space-y-3">
+                        {summary.topRestaurants.slice(0, 10).map((r, i) => {
+                          const total = Number(r.right_swipes) + Number(r.left_swipes) + Number(r.super_likes);
+                          const rate = total > 0 ? (((Number(r.right_swipes) + Number(r.super_likes)) / total) * 100).toFixed(0) : "0";
+                          return (
+                            <div key={r.restaurant_id} className="flex items-center justify-between gap-4 flex-wrap" data-testid={`row-restaurant-${i}`}>
+                              <div className="flex items-center gap-3 min-w-0">
+                                <span className="text-sm font-medium text-muted-foreground w-6 text-right">{i + 1}</span>
+                                <span className="text-sm font-medium truncate">{r.restaurant_name || r.restaurant_id}</span>
+                              </div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <Badge variant="secondary" className="text-xs">
+                                  <ThumbsUp className="h-3 w-3 mr-1" />
+                                  {r.right_swipes}
+                                </Badge>
+                                <Badge variant="secondary" className="text-xs">
+                                  <Star className="h-3 w-3 mr-1" />
+                                  {r.super_likes}
+                                </Badge>
+                                <Badge variant="secondary" className="text-xs">
+                                  <ThumbsDown className="h-3 w-3 mr-1" />
+                                  {r.left_swipes}
+                                </Badge>
+                                <Badge variant="outline" className="text-xs font-medium">{rate}%</Badge>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground text-center py-8">No restaurant data yet</p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <Search className="h-4 w-4" />
+                        Cuisine Demand Lookup
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <Input
+                        placeholder="Enter cuisine type (e.g. Mexican, Sushi)"
+                        value={cuisineSearch}
+                        onChange={(e) => setCuisineSearch(e.target.value)}
+                        data-testid="input-cuisine-search"
+                      />
+                      {demandData && cuisineSearch && (
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="text-center p-4 rounded-md bg-muted/50">
+                            <p className="text-2xl font-bold" data-testid="text-demand-users">{Number(demandData.unique_users).toLocaleString()}</p>
+                            <p className="text-xs text-muted-foreground">Unique Users</p>
                           </div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <Badge variant="secondary" className="text-xs">
+                          <div className="text-center p-4 rounded-md bg-muted/50">
+                            <p className="text-2xl font-bold" data-testid="text-demand-swipes">{Number(demandData.total_swipes).toLocaleString()}</p>
+                            <p className="text-xs text-muted-foreground">Right Swipes</p>
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <Search className="h-4 w-4" />
+                        Restaurant Lookup
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <Input
+                        placeholder="Enter restaurant Yelp ID"
+                        value={restaurantSearch}
+                        onChange={(e) => setRestaurantSearch(e.target.value)}
+                        data-testid="input-restaurant-search"
+                      />
+                      {restaurantData && restaurantSearch && !("message" in restaurantData && restaurantData.message) && (
+                        <div className="space-y-3">
+                          <p className="font-medium">{restaurantData.restaurant_name}</p>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="text-center p-3 rounded-md bg-muted/50">
+                              <p className="text-xl font-bold">{Number(restaurantData.total_views).toLocaleString()}</p>
+                              <p className="text-xs text-muted-foreground">Views</p>
+                            </div>
+                            <div className="text-center p-3 rounded-md bg-muted/50">
+                              <p className="text-xl font-bold">{restaurantData.approval_rate}%</p>
+                              <p className="text-xs text-muted-foreground">Approval</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-center gap-3 flex-wrap">
+                            <Badge variant="secondary">
                               <ThumbsUp className="h-3 w-3 mr-1" />
-                              {r.right_swipes}
+                              {restaurantData.right_swipes} likes
                             </Badge>
-                            <Badge variant="secondary" className="text-xs">
+                            <Badge variant="secondary">
                               <Star className="h-3 w-3 mr-1" />
-                              {r.super_likes}
+                              {restaurantData.super_likes} super
                             </Badge>
-                            <Badge variant="secondary" className="text-xs">
+                            <Badge variant="secondary">
                               <ThumbsDown className="h-3 w-3 mr-1" />
-                              {r.left_swipes}
+                              {restaurantData.left_swipes} passes
                             </Badge>
-                            <Badge variant="outline" className="text-xs font-medium">{rate}%</Badge>
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground text-center py-8">No restaurant data yet</p>
-                )}
-              </CardContent>
-            </Card>
+                      )}
+                      {restaurantData && "message" in restaurantData && restaurantData.message && (
+                        <p className="text-sm text-muted-foreground text-center py-4">{restaurantData.message as string}</p>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              </>
+            )}
+          </TabsContent>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Search className="h-4 w-4" />
-                    Cuisine Demand Lookup
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <Input
-                    placeholder="Enter cuisine type (e.g. Mexican, Sushi)"
-                    value={cuisineSearch}
-                    onChange={(e) => setCuisineSearch(e.target.value)}
-                    data-testid="input-cuisine-search"
+          <TabsContent value="growth" className="space-y-6 mt-4">
+            {growthLoading ? (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                {[...Array(4)].map((_, i) => (
+                  <Card key={i}>
+                    <CardContent className="p-4">
+                      <div className="h-16 animate-pulse bg-muted rounded" />
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : growthData ? (
+              <>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <MetricCard
+                    label="Crews Created"
+                    thisWeek={growthData.thisWeek.crews_created}
+                    lastWeek={growthData.lastWeek.crews_created}
+                    icon={Users}
                   />
-                  {demandData && cuisineSearch && (
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="text-center p-4 rounded-md bg-muted/50">
-                        <p className="text-2xl font-bold" data-testid="text-demand-users">{Number(demandData.unique_users).toLocaleString()}</p>
-                        <p className="text-xs text-muted-foreground">Unique Users</p>
-                      </div>
-                      <div className="text-center p-4 rounded-md bg-muted/50">
-                        <p className="text-2xl font-bold" data-testid="text-demand-swipes">{Number(demandData.total_swipes).toLocaleString()}</p>
-                        <p className="text-xs text-muted-foreground">Right Swipes</p>
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+                  <MetricCard
+                    label="Sessions Completed"
+                    thisWeek={growthData.thisWeek.first_sessions_completed}
+                    lastWeek={growthData.lastWeek.first_sessions_completed}
+                    icon={Flame}
+                  />
+                  <MetricCard
+                    label="Invites Sent"
+                    thisWeek={growthData.thisWeek.invites_sent}
+                    lastWeek={growthData.lastWeek.invites_sent}
+                    icon={Share2}
+                  />
+                  <MetricCard
+                    label="Invites Accepted"
+                    thisWeek={growthData.thisWeek.invites_accepted}
+                    lastWeek={growthData.lastWeek.invites_accepted}
+                    icon={UserPlus}
+                  />
+                </div>
 
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Search className="h-4 w-4" />
-                    Restaurant Lookup
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <Input
-                    placeholder="Enter restaurant Yelp ID"
-                    value={restaurantSearch}
-                    onChange={(e) => setRestaurantSearch(e.target.value)}
-                    data-testid="input-restaurant-search"
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <FunnelCard
+                    title="Conversion Funnel"
+                    topLabel="Prompted"
+                    topValue={growthData.conversionFunnel.prompted}
+                    bottomLabel="Completed"
+                    bottomValue={growthData.conversionFunnel.completed}
+                    rate={growthData.conversionFunnel.rate}
+                    icon={TrendingUp}
                   />
-                  {restaurantData && restaurantSearch && !("message" in restaurantData && restaurantData.message) && (
-                    <div className="space-y-3">
-                      <p className="font-medium">{restaurantData.restaurant_name}</p>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="text-center p-3 rounded-md bg-muted/50">
-                          <p className="text-xl font-bold">{Number(restaurantData.total_views).toLocaleString()}</p>
-                          <p className="text-xs text-muted-foreground">Views</p>
-                        </div>
-                        <div className="text-center p-3 rounded-md bg-muted/50">
-                          <p className="text-xl font-bold">{restaurantData.approval_rate}%</p>
-                          <p className="text-xs text-muted-foreground">Approval</p>
-                        </div>
+                  <FunnelCard
+                    title="Invite Funnel"
+                    topLabel="Sent"
+                    topValue={growthData.inviteFunnel.sent}
+                    bottomLabel="Accepted"
+                    bottomValue={growthData.inviteFunnel.accepted}
+                    rate={growthData.inviteFunnel.rate}
+                    icon={UserPlus}
+                  />
+                </div>
+
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <TrendingUp className="h-4 w-4" />
+                      Weekly Trend
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {growthData.weeklyTrend.length > 0 ? (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm" data-testid="table-weekly-trend">
+                          <thead>
+                            <tr className="border-b">
+                              <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Week</th>
+                              <th className="text-right py-2 px-4 font-medium text-muted-foreground">Crews</th>
+                              <th className="text-right py-2 px-4 font-medium text-muted-foreground">Sessions</th>
+                              <th className="text-right py-2 pl-4 font-medium text-muted-foreground">Conversions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {growthData.weeklyTrend.map((row, i) => (
+                              <tr key={i} className="border-b last:border-0" data-testid={`row-trend-${i}`}>
+                                <td className="py-2 pr-4">{new Date(row.week).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</td>
+                                <td className="text-right py-2 px-4">{row.crews_created}</td>
+                                <td className="text-right py-2 px-4">{row.sessions_completed}</td>
+                                <td className="text-right py-2 pl-4">{row.conversions}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
-                      <div className="flex items-center justify-center gap-3 flex-wrap">
-                        <Badge variant="secondary">
-                          <ThumbsUp className="h-3 w-3 mr-1" />
-                          {restaurantData.right_swipes} likes
-                        </Badge>
-                        <Badge variant="secondary">
-                          <Star className="h-3 w-3 mr-1" />
-                          {restaurantData.super_likes} super
-                        </Badge>
-                        <Badge variant="secondary">
-                          <ThumbsDown className="h-3 w-3 mr-1" />
-                          {restaurantData.left_swipes} passes
-                        </Badge>
+                    ) : (
+                      <p className="text-sm text-muted-foreground text-center py-8">No trend data yet</p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                        <TrendingUp className="h-4 w-4" />
+                        <span className="text-xs font-medium">Conversions (4wk)</span>
                       </div>
-                    </div>
-                  )}
-                  {restaurantData && "message" in restaurantData && restaurantData.message && (
-                    <p className="text-sm text-muted-foreground text-center py-4">{restaurantData.message as string}</p>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          </>
-        )}
+                      <p className="text-2xl font-bold" data-testid="text-conversions-4wk">{growthData.last4Weeks.anonymous_conversion_completed}</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                        <Share2 className="h-4 w-4" />
+                        <span className="text-xs font-medium">Shares (4wk)</span>
+                      </div>
+                      <p className="text-2xl font-bold" data-testid="text-shares-4wk">{growthData.last4Weeks.match_result_shared}</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                        <Users className="h-4 w-4" />
+                        <span className="text-xs font-medium">Total Crews (4wk)</span>
+                      </div>
+                      <p className="text-2xl font-bold" data-testid="text-crews-4wk">{growthData.last4Weeks.crews_created}</p>
+                    </CardContent>
+                  </Card>
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-8">No growth data available</p>
+            )}
+          </TabsContent>
+        </Tabs>
       </main>
     </div>
   );

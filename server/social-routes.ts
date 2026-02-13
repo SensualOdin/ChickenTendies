@@ -1,5 +1,6 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { isAuthenticated } from "./replit_integrations/auth";
+import rateLimit from "express-rate-limit";
 import { db } from "./db";
 import { 
   friendships, 
@@ -15,7 +16,7 @@ import {
   achievementTypeEnum,
   analyticsEvents
 } from "@shared/schema";
-import { eq, or, and, inArray, desc, sql } from "drizzle-orm";
+import { eq, or, and, inArray, desc, sql, gte, count } from "drizzle-orm";
 import { fetchRestaurantsFromYelp } from "./yelp";
 import type { GroupPreferences, Restaurant } from "@shared/schema";
 import { notifyUser, notifyUsers, sessionUserMap } from "./routes";
@@ -23,6 +24,9 @@ import { createHash } from "crypto";
 import { logAnalyticsEvent } from "./analytics";
 import { storage } from "./storage";
 import { sendPushToUsers, getVapidPublicKey } from "./push";
+import { logLifecycleEvent } from "./lifecycle";
+import { lifecycleEvents } from "@shared/schema";
+import { getCrewStreak } from "./streaks";
 
 function getUserId(req: Request): string {
   return (req.user as any)?.claims?.sub || "";
@@ -91,7 +95,41 @@ async function requireSessionMembership(userId: string, sessionId: string, res: 
 }
 
 export function registerSocialRoutes(app: Express): void {
-  
+
+  app.get("/api/crews/preview/:inviteCode", async (req: Request, res: Response) => {
+    try {
+      const { inviteCode } = req.params;
+      const [group] = await db
+        .select()
+        .from(persistentGroups)
+        .where(eq(persistentGroups.inviteCode, inviteCode.toUpperCase().trim()));
+
+      if (!group) {
+        return res.status(404).json({ message: "Invalid invite code" });
+      }
+
+      const allMemberIds = [group.ownerId, ...group.memberIds];
+      const members = await db
+        .select({ firstName: users.firstName, profileImageUrl: users.profileImageUrl })
+        .from(users)
+        .where(inArray(users.id, allMemberIds));
+
+      logLifecycleEvent("invite_link_opened", { groupId: group.id, metadata: { inviteCode } });
+
+      res.json({
+        name: group.name,
+        memberCount: allMemberIds.length,
+        members: members.map(m => ({
+          firstName: m.firstName,
+          profileImageUrl: m.profileImageUrl,
+        })),
+      });
+    } catch (error) {
+      console.error("Error fetching crew preview:", error);
+      res.status(500).json({ message: "Failed to fetch crew info" });
+    }
+  });
+
   app.get("/api/friends", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = getUserId(req);
@@ -368,8 +406,15 @@ export function registerSocialRoutes(app: Express): void {
         isOwner: g.ownerId === userId,
         hasActiveSession: activeSessionMap.has(g.id),
       }));
+
+      const enrichedWithStreaks = await Promise.all(
+        enrichedGroups.map(async (g) => {
+          const { currentStreak } = await getCrewStreak(g.id);
+          return { ...g, streak: currentStreak };
+        })
+      );
       
-      res.json(enrichedGroups);
+      res.json(enrichedWithStreaks);
     } catch (error) {
       console.error("Error fetching crews:", error);
       res.status(500).json({ message: "Failed to fetch crews" });
@@ -416,6 +461,8 @@ export function registerSocialRoutes(app: Express): void {
         }
       }
       
+      logLifecycleEvent("crew_created", { userId, groupId: group.id, metadata: { crewName: name } });
+
       res.json(group);
     } catch (error) {
       console.error("Error creating crew:", error);
@@ -465,6 +512,8 @@ export function registerSocialRoutes(app: Express): void {
         message: `Someone joined "${group.name}" using the invite code`,
         data: { groupId: group.id, memberId: userId },
       });
+
+      logLifecycleEvent("invite_accepted", { userId, groupId: group.id, metadata: { inviteCode } });
       
       res.json(updated);
     } catch (error) {
@@ -494,7 +543,8 @@ export function registerSocialRoutes(app: Express): void {
         .from(users)
         .where(inArray(users.id, allMemberIds));
       
-      res.json({ ...group, members });
+      const { currentStreak } = await getCrewStreak(groupId);
+      res.json({ ...group, members, streak: currentStreak });
     } catch (error) {
       console.error("Error fetching crew:", error);
       res.status(500).json({ message: "Failed to fetch crew" });
@@ -540,6 +590,8 @@ export function registerSocialRoutes(app: Express): void {
         message: `You're now part of "${group.name}"`,
         data: { groupId: group.id },
       });
+
+      logLifecycleEvent("invite_sent", { userId, groupId: groupId, metadata: { invitedUserId: memberId } });
       
       res.json(updated);
     } catch (error) {
@@ -1075,6 +1127,14 @@ export function registerSocialRoutes(app: Express): void {
         .where(eq(diningSessions.id, activeSession.id))
         .returning();
 
+      const completedSessions = await db
+        .select({ id: diningSessions.id })
+        .from(diningSessions)
+        .where(and(eq(diningSessions.groupId, groupId), eq(diningSessions.status, "completed")));
+      if (completedSessions.length === 1) {
+        logLifecycleEvent("first_session_completed", { userId, groupId, sessionId: activeSession.id });
+      }
+
       const existingMemGroup = await storage.getGroup(groupId);
       if (existingMemGroup) {
         await storage.updateGroup(groupId, {
@@ -1421,6 +1481,202 @@ export function registerSocialRoutes(app: Express): void {
     } catch (error) {
       console.error("Error fetching stats:", error);
       res.status(500).json({ message: "Failed to fetch stats" });
+    }
+  });
+
+  app.get("/api/admin/lifecycle-dashboard", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      const [adminUser] = await db.select().from(users).where(eq(users.id, userId));
+      if (!adminUser?.isAdmin) {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      async function getEventCounts(since: Date, until?: Date) {
+        const conditions = [gte(lifecycleEvents.createdAt, since)];
+        if (until) {
+          conditions.push(sql`${lifecycleEvents.createdAt} < ${until}` as any);
+        }
+        const rows = await db
+          .select({
+            eventName: lifecycleEvents.eventName,
+            count: count(),
+          })
+          .from(lifecycleEvents)
+          .where(and(...conditions))
+          .groupBy(lifecycleEvents.eventName);
+
+        const result: Record<string, number> = {};
+        for (const row of rows) {
+          result[row.eventName] = Number(row.count);
+        }
+        return result;
+      }
+
+      function buildMetrics(counts: Record<string, number>) {
+        return {
+          crews_created: counts["crew_created"] || 0,
+          first_sessions_completed: counts["first_session_completed"] || 0,
+          invites_sent: counts["invite_sent"] || 0,
+          invites_accepted: counts["invite_accepted"] || 0,
+          anonymous_conversion_prompted: counts["anonymous_conversion_prompted"] || 0,
+          anonymous_conversion_completed: counts["anonymous_conversion_completed"] || 0,
+          match_result_shared: counts["match_result_shared"] || 0,
+        };
+      }
+
+      const now = new Date();
+      const thisWeekStart = new Date(now);
+      thisWeekStart.setDate(now.getDate() - now.getDay());
+      thisWeekStart.setHours(0, 0, 0, 0);
+
+      const lastWeekStart = new Date(thisWeekStart);
+      lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+
+      const fourWeeksAgo = new Date(thisWeekStart);
+      fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 28);
+
+      const [thisWeekCounts, lastWeekCounts, last4WeeksCounts] = await Promise.all([
+        getEventCounts(thisWeekStart),
+        getEventCounts(lastWeekStart, thisWeekStart),
+        getEventCounts(fourWeeksAgo),
+      ]);
+
+      const weeklyTrendRows = await db.execute(sql`
+        SELECT
+          date_trunc('week', created_at)::text as week,
+          COUNT(*) FILTER (WHERE event_name = 'crew_created') as crews_created,
+          COUNT(*) FILTER (WHERE event_name = 'first_session_completed') as sessions_completed,
+          COUNT(*) FILTER (WHERE event_name = 'anonymous_conversion_completed') as conversions
+        FROM lifecycle_events
+        WHERE created_at > NOW() - INTERVAL '4 weeks'
+        GROUP BY date_trunc('week', created_at)
+        ORDER BY week
+      `);
+
+      const weeklyTrend = (weeklyTrendRows.rows || []).map((row: any) => ({
+        week: row.week,
+        crews_created: Number(row.crews_created || 0),
+        sessions_completed: Number(row.sessions_completed || 0),
+        conversions: Number(row.conversions || 0),
+      }));
+
+      const allTimeCounts = await getEventCounts(new Date(0));
+      const prompted = allTimeCounts["anonymous_conversion_prompted"] || 0;
+      const completed = allTimeCounts["anonymous_conversion_completed"] || 0;
+      const sent = allTimeCounts["invite_sent"] || 0;
+      const accepted = allTimeCounts["invite_accepted"] || 0;
+
+      res.json({
+        thisWeek: buildMetrics(thisWeekCounts),
+        lastWeek: buildMetrics(lastWeekCounts),
+        last4Weeks: buildMetrics(last4WeeksCounts),
+        weeklyTrend,
+        conversionFunnel: {
+          prompted,
+          completed,
+          rate: prompted > 0 ? Math.round((completed / prompted) * 100) : 0,
+        },
+        inviteFunnel: {
+          sent,
+          accepted,
+          rate: sent > 0 ? Math.round((accepted / sent) * 100) : 0,
+        },
+      });
+    } catch (error) {
+      console.error("Error fetching lifecycle dashboard:", error);
+      res.status(500).json({ message: "Failed to fetch lifecycle dashboard" });
+    }
+  });
+
+  const allowedClientEvents = new Set([
+    "anonymous_conversion_prompted",
+    "match_result_shared",
+    "invite_link_opened",
+  ]);
+
+  const lifecycleEventLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many requests" },
+  });
+
+  app.post("/api/lifecycle-events", lifecycleEventLimiter, async (req: Request, res: Response) => {
+    try {
+      const { eventName, groupId, metadata } = req.body;
+
+      if (!eventName || typeof eventName !== "string") {
+        return res.status(400).json({ message: "eventName is required" });
+      }
+
+      if (!allowedClientEvents.has(eventName)) {
+        return res.status(400).json({ message: "Invalid event name" });
+      }
+
+      const userId = (req.user as any)?.claims?.sub || null;
+
+      await logLifecycleEvent(eventName, {
+        userId,
+        groupId: groupId || null,
+        metadata: metadata || null,
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error logging lifecycle event:", error);
+      res.status(500).json({ message: "Failed to log event" });
+    }
+  });
+
+  app.post("/api/groups/:id/convert-to-crew", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      const groupId = req.params.id;
+      const { crewName } = req.body;
+
+      const group = await storage.getGroup(groupId);
+      if (!group) {
+        return res.status(404).json({ message: "Group not found" });
+      }
+
+      const name = crewName || group.name;
+
+      const generateInviteCode = () => {
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        let code = '';
+        for (let i = 0; i < 6; i++) {
+          code += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+        return code;
+      };
+
+      const [crew] = await db
+        .insert(persistentGroups)
+        .values({
+          name,
+          ownerId: userId,
+          memberIds: [],
+          inviteCode: generateInviteCode(),
+        })
+        .returning();
+
+      await logLifecycleEvent("anonymous_conversion_completed", {
+        userId,
+        groupId,
+        metadata: {
+          crewId: crew.id,
+          crewName: name,
+          originalGroupName: group.name,
+          memberCount: group.members.length,
+        },
+      });
+
+      res.json(crew);
+    } catch (error) {
+      console.error("Error converting to crew:", error);
+      res.status(500).json({ message: "Failed to convert group to crew" });
     }
   });
 }

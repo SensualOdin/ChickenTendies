@@ -4,10 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Home, Flame, Loader2, Star, MapPin, ExternalLink, Heart, PartyPopper, Trophy, Sparkles, RefreshCw, CalendarPlus, Phone, Check, Truck } from "lucide-react";
+import { Home, Flame, Loader2, Star, MapPin, ExternalLink, Heart, PartyPopper, Trophy, Sparkles, RefreshCw, CalendarPlus, Phone, Check, Truck, Share2 } from "lucide-react";
 import { motion } from "framer-motion";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
+import { ConversionPrompt } from "@/components/conversion-prompt";
 import type { Group, Restaurant } from "@shared/schema";
 
 type SessionAction = "directions" | "doordash" | "visited" | "reserve";
@@ -42,6 +44,8 @@ export default function MatchesPage() {
   const { toast } = useToast();
   const [visitedRestaurantId, setVisitedRestaurantId] = useState<string | null>(null);
   const [sessionCompleted, setSessionCompleted] = useState(false);
+  const [showConversion, setShowConversion] = useState(false);
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
 
   const { data: group, isLoading: groupLoading } = useQuery<Group>({
     queryKey: ["/api/groups", params.id],
@@ -52,6 +56,14 @@ export default function MatchesPage() {
     queryKey: ["/api/groups", params.id, "matches"],
     enabled: !!params.id,
   });
+
+  useEffect(() => {
+    if (authLoading || isAuthenticated || !matches?.length) return;
+    const dismissed = sessionStorage.getItem(`chickentinders-conversion-dismissed-${params.id}`);
+    if (dismissed) return;
+    const timer = setTimeout(() => setShowConversion(true), 3000);
+    return () => clearTimeout(timer);
+  }, [authLoading, isAuthenticated, matches, params.id]);
 
   const loadMoreMutation = useMutation({
     mutationFn: async () => {
@@ -76,6 +88,45 @@ export default function MatchesPage() {
     } catch {
     }
   }, [sessionCompleted, params.id]);
+
+  const handleShare = useCallback(async (restaurant: Restaurant) => {
+    const rating = (restaurant.combinedRating ?? restaurant.rating).toFixed(1);
+    const shareText = `${restaurant.name} - ${rating} stars | ${restaurant.cuisine} | ${restaurant.priceRange}\nMatched on ChickenTinders!`;
+    const shareUrl = window.location.origin;
+    
+    try {
+      await apiRequest("POST", "/api/lifecycle-events", {
+        eventName: "match_result_shared",
+        groupId: params.id,
+        metadata: { restaurantId: restaurant.id, restaurantName: restaurant.name }
+      });
+    } catch {}
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `${restaurant.name} - ChickenTinders Match!`,
+          text: shareText,
+          url: shareUrl,
+        });
+      } catch (err) {
+      }
+    } else {
+      try {
+        await navigator.clipboard.writeText(`${shareText}\n${shareUrl}`);
+        toast({
+          title: "Copied to clipboard!",
+          description: "Share the link with your friends.",
+        });
+      } catch {
+        toast({
+          title: "Couldn't copy",
+          description: "Try manually copying the URL.",
+          variant: "destructive",
+        });
+      }
+    }
+  }, [params.id, toast]);
 
   const isLoading = groupLoading || matchesLoading;
 
@@ -257,6 +308,16 @@ export default function MatchesPage() {
                         </Button>
                         <Button 
                           size="sm" 
+                          variant="outline" 
+                          className="text-xs" 
+                          data-testid={`button-share-${restaurant.id}`}
+                          onClick={() => handleShare(restaurant)}
+                        >
+                          <Share2 className="w-3 h-3 mr-1" />
+                          Share
+                        </Button>
+                        <Button 
+                          size="sm" 
                           variant={visitedRestaurantId === restaurant.id ? "default" : "outline"}
                           className="text-xs" 
                           data-testid={`button-visited-${restaurant.id}`}
@@ -356,6 +417,18 @@ export default function MatchesPage() {
               )}
             </Button>
           </motion.div>
+        )}
+
+        {showConversion && group && matches && matches.length > 0 && (
+          <ConversionPrompt
+            groupId={params.id!}
+            groupName={group.name}
+            matchCount={matches.length}
+            onDismiss={() => {
+              setShowConversion(false);
+              sessionStorage.setItem(`chickentinders-conversion-dismissed-${params.id}`, "true");
+            }}
+          />
         )}
       </main>
     </div>

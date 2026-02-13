@@ -1,19 +1,26 @@
 import { useLocation, useSearch } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { joinGroupSchema, type JoinGroup } from "@shared/schema";
 import { getCsrfToken } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
-import { ArrowLeft, Flame, Loader2, Ticket, User, Smartphone } from "lucide-react";
+import { ArrowLeft, Flame, Loader2, Ticket, User, Smartphone, Users } from "lucide-react";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { useEffect, useState, useMemo } from "react";
+
+interface CrewPreview {
+  name: string;
+  memberCount: number;
+  members: { firstName: string | null; profileImageUrl: string | null }[];
+}
 
 export default function JoinGroupPage() {
   const [, setLocation] = useLocation();
@@ -23,6 +30,7 @@ export default function JoinGroupPage() {
   const urlParams = new URLSearchParams(searchString);
   const codeFromUrl = (urlParams.get("code") || "").toUpperCase().slice(0, 6);
   const [needsAuth, setNeedsAuth] = useState(false);
+  const [joiningCrew, setJoiningCrew] = useState(false);
 
   const isInBrowser = useMemo(() => {
     const isStandalone = window.matchMedia("(display-mode: standalone)").matches
@@ -38,11 +46,28 @@ export default function JoinGroupPage() {
     },
   });
 
+  const currentCode = form.watch("code");
+
   useEffect(() => {
     if (codeFromUrl) {
       form.setValue("code", codeFromUrl);
     }
   }, [codeFromUrl, form]);
+
+  const { data: crewPreview, isLoading: previewLoading } = useQuery<CrewPreview | null>({
+    queryKey: ["/api/crews/preview", currentCode?.length === 6 ? currentCode.toUpperCase() : ""],
+    queryFn: async () => {
+      const code = currentCode?.toUpperCase().trim();
+      if (!code || code.length !== 6) return null;
+      const res = await fetch(`/api/crews/preview/${code}`);
+      if (res.status === 404) return null;
+      if (!res.ok) return null;
+      return res.json();
+    },
+    enabled: (currentCode?.length || 0) === 6,
+    retry: false,
+    staleTime: 30000,
+  });
 
   useEffect(() => {
     if (!isAuthenticated || !codeFromUrl) return;
@@ -87,6 +112,56 @@ export default function JoinGroupPage() {
     };
     joinCrew();
   }, [isAuthenticated, codeFromUrl, toast, setLocation]);
+
+  const handleJoinCrew = async () => {
+    const code = currentCode?.toUpperCase().trim();
+    if (!code) return;
+
+    if (!isAuthenticated) {
+      sessionStorage.setItem("chickentinders-join-code", code);
+      sessionStorage.setItem("chickentinders-pending-crew-join", "true");
+      window.location.href = "/login";
+      return;
+    }
+
+    setJoiningCrew(true);
+    try {
+      const csrfToken = getCsrfToken();
+      const res = await fetch("/api/crews/join", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(csrfToken ? { "x-csrf-token": csrfToken } : {}) },
+        body: JSON.stringify({ inviteCode: code }),
+        credentials: "include",
+      });
+      if (res.ok) {
+        const crew = await res.json();
+        toast({
+          title: "You're in!",
+          description: `You joined the crew "${crew.name}"`,
+        });
+        setLocation("/dashboard");
+      } else {
+        const errorData = await res.json().catch(() => ({}));
+        if (errorData.message?.includes("already")) {
+          toast({ title: "Already a member", description: errorData.message });
+        } else {
+          toast({
+            title: "Couldn't join crew",
+            description: errorData.message || "The invite code may be invalid.",
+            variant: "destructive",
+          });
+        }
+      }
+    } catch {
+      toast({
+        title: "Something went wrong",
+        description: "Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setJoiningCrew(false);
+    }
+  };
 
   const joinMutation = useMutation({
     mutationFn: async (data: JoinGroup) => {
@@ -216,6 +291,83 @@ export default function JoinGroupPage() {
             </Card>
           </motion.div>
         )}
+
+        {crewPreview && (
+          <motion.div
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ duration: 0.4 }}
+            className="mb-4"
+          >
+            <Card className="border-2 border-primary/30">
+              <CardHeader className="text-center pb-3">
+                <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mx-auto mb-2">
+                  <Users className="w-6 h-6 text-primary" />
+                </div>
+                <CardTitle className="text-xl" data-testid="text-crew-preview-name">{crewPreview.name}</CardTitle>
+                <CardDescription>
+                  {crewPreview.memberCount} member{crewPreview.memberCount !== 1 ? "s" : ""}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex flex-wrap justify-center gap-3" data-testid="crew-preview-members">
+                  {crewPreview.members.map((member, i) => (
+                    <div key={i} className="flex flex-col items-center gap-1">
+                      <Avatar className="w-10 h-10">
+                        <AvatarImage src={member.profileImageUrl || undefined} />
+                        <AvatarFallback>
+                          {member.firstName?.[0]?.toUpperCase() || "?"}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span className="text-xs text-muted-foreground">
+                        {member.firstName || "Member"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                {isAuthenticated ? (
+                  <Button
+                    className="w-full bg-gradient-to-r from-primary to-orange-500"
+                    size="lg"
+                    onClick={handleJoinCrew}
+                    disabled={joiningCrew}
+                    data-testid="button-join-crew"
+                  >
+                    {joiningCrew ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Joining...
+                      </>
+                    ) : (
+                      "Join This Crew"
+                    )}
+                  </Button>
+                ) : (
+                  <Button
+                    className="w-full bg-gradient-to-r from-primary to-orange-500"
+                    size="lg"
+                    onClick={handleSignIn}
+                    data-testid="button-sign-in-to-join"
+                  >
+                    Sign In to Join
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+
+        {previewLoading && currentCode?.length === 6 && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="mb-4 flex justify-center py-4"
+          >
+            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          </motion.div>
+        )}
+
         <motion.div
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
@@ -230,9 +382,11 @@ export default function JoinGroupPage() {
               >
                 <Ticket className="w-10 h-10 mx-auto text-primary" />
               </motion.div>
-              <CardTitle className="text-2xl" data-testid="text-join-title">Join the Party!</CardTitle>
+              <CardTitle className="text-2xl" data-testid="text-join-title">
+                {crewPreview ? "Or Join a Party Instead" : "Join the Party!"}
+              </CardTitle>
               <CardDescription>
-                Got a secret code? Let's get you in!
+                {crewPreview ? "Enter a different code to join an anonymous party" : "Got a secret code? Let's get you in!"}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -310,7 +464,7 @@ export default function JoinGroupPage() {
 
                       <Button 
                         type="submit" 
-                        className="w-full bg-gradient-to-r from-primary to-orange-500 hover:from-primary/90 hover:to-orange-500/90" 
+                        className="w-full bg-gradient-to-r from-primary to-orange-500" 
                         size="lg"
                         disabled={joinMutation.isPending}
                         data-testid="button-submit-join"

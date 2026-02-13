@@ -4,6 +4,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { startCleanupScheduler } from "./cleanup";
+import { startScheduledNotifications } from "./scheduled-notifications";
 import { csrfProtection } from "./csrf";
 
 const app = express();
@@ -117,6 +118,7 @@ app.use((req, res, next) => {
     () => {
       log(`serving on port ${port}`);
       startCleanupScheduler();
+      startScheduledNotifications();
     },
   );
 })();

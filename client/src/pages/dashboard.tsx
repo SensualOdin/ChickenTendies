@@ -21,7 +21,7 @@ import { usePushNotifications } from "@/hooks/use-push-notifications";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest, getCsrfToken } from "@/lib/queryClient";
 import { storeLeaderToken } from "@/lib/leader-token";
-import { Users, Plus, ArrowRight, UserPlus, Check, X, UserMinus, Bell, BellRing, BellOff, Play, User, BarChart3, CheckCheck, Settings } from "lucide-react";
+import { Users, Plus, ArrowRight, UserPlus, Check, X, UserMinus, Bell, BellRing, BellOff, Play, User, BarChart3, CheckCheck, Settings, Flame } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import logoImage from "@assets/460272BC-3FCC-4927-8C2E-4C236353E7AB_1768880143398.png";
 import { useState, useRef, useEffect, useCallback } from "react";
@@ -44,6 +44,7 @@ interface Crew {
   memberCount: number;
   isOwner: boolean;
   hasActiveSession?: boolean;
+  streak?: number;
 }
 
 interface Notification {
@@ -577,6 +578,12 @@ export default function Dashboard() {
                           <CardTitle className="text-lg truncate">{crew.name}</CardTitle>
                           <CardDescription>{crew.memberCount} member{crew.memberCount !== 1 ? "s" : ""}</CardDescription>
                         </div>
+                        {crew.streak && crew.streak > 0 && (
+                          <Badge variant="outline" className="text-xs" data-testid={`badge-streak-${crew.id}`}>
+                            <Flame className="w-3 h-3 mr-1" />
+                            {crew.streak}-week streak
+                          </Badge>
+                        )}
                         {crew.isOwner && <Badge variant="secondary">Owner</Badge>}
                       </div>
                       <Button
