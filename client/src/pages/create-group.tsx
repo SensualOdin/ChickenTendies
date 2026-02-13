@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { insertGroupSchema, type InsertGroup } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
+import { storeLeaderToken } from "@/lib/leader-token";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Flame, Loader2, PartyPopper, Sparkles } from "lucide-react";
 import { Link } from "wouter";
@@ -33,9 +34,8 @@ export default function CreateGroup() {
     onSuccess: (data) => {
       localStorage.setItem("grubmatch-member-id", data.memberId);
       localStorage.setItem("grubmatch-group-id", data.group.id);
-      // Store leader token for group leadership recovery
       if (data.leaderToken) {
-        localStorage.setItem(`grubmatch-leader-token-${data.group.id}`, data.leaderToken);
+        storeLeaderToken(data.group.id, data.leaderToken);
       }
       setLocation(`/group/${data.group.id}`);
     },

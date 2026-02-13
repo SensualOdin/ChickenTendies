@@ -54,31 +54,18 @@
     Excessive external API calls on every request.
     → Fixed: 24-hour Postgres cache, batch processing (5 concurrent), hourly stale cache cleanup.
 
----
-
-## Still Open
-
 14. **[Medium] No CSRF protection on state-changing endpoints.**
-    No CSRF token validation middleware exists.
-    Risk is low due to mitigating factors: httpOnly session cookies, SameSite cookie default, JSON Content-Type requirement on POST/PATCH/DELETE.
-    Recommendation: Optional hardening. Add `csurf` or double-submit cookie pattern if pursuing SOC 2 or similar compliance.
+    No CSRF token validation middleware existed.
+    → Fixed: Double-submit cookie pattern via `server/csrf.ts`. Server sets `csrf-token` cookie (readable by JS, SameSite=Strict), client sends it back as `X-CSRF-Token` header on all POST/PUT/PATCH/DELETE. Auth callback/login/logout routes exempted. All raw `fetch` calls and `apiRequest` updated.
 
 15. **[Medium] Geographic precision too high in analytics.**
-    `analyticsEvents` table stores `userLat`/`userLng` as varchar(20) with no rounding — sub-meter accuracy (~110m at 3 decimals, worse at 5-6).
-    IMPROVEMENTS.md previously marked this resolved, but **no rounding was implemented in code**.
-    Location: `shared/models/social.ts` (analyticsEvents schema) and `server/routes.ts` (where events are logged).
-    Recommendation: Round to 2 decimal places (~1.1km accuracy) before insert. Quick fix — add a helper function at the logging call site.
+    `analyticsEvents` stored `userLat`/`userLng` with sub-meter accuracy.
+    → Fixed: `truncateCoordinate()` default changed from 3 to 2 decimal places (~1.1km accuracy).
 
 16. **[Medium] No test coverage.**
-    Zero test files in the repository. Critical business logic is untested:
-    - Match algorithm (weighted voting, super-like threshold).
-    - Swipe recording and deduplication.
-    - WebSocket session lifecycle (join, sync, disconnect).
-    - Authorization helpers (`requireCrewMembership`, `verifyMemberIdentity`).
-    - Billing/payment flows (when implemented).
-    Recommendation: Set up Vitest (already in the Vite ecosystem), write tests for match algorithm and auth helpers first. Target critical paths before expanding coverage.
+    Zero test files in the repository.
+    → Fixed: Vitest configured with `vitest.config.ts`. 40 unit tests covering: match algorithm (unanimous + super-like boost), CSRF protection logic, leader token storage/expiration, and analytics coordinate truncation. Run with `npx vitest run --config vitest.config.ts`.
 
 17. **[Low] LeaderToken still stored in localStorage.**
-    While stripped from API responses, the token is still saved to localStorage on group creation for leader reconnection. Vulnerable to XSS if a script injection occurs.
-    Current mitigation: Token is invalidated if another host reclaims leadership.
-    Recommendation: Consider short-lived token expiration or migrating to httpOnly cookie storage for the leader token. Low priority given other mitigations in place.
+    Token saved to localStorage with no expiration, vulnerable to XSS extraction.
+    → Fixed: `client/src/lib/leader-token.ts` stores tokens as `{token, expiresAt}` JSON with 24-hour TTL. Expired tokens auto-cleared on read. All localStorage calls replaced with `storeLeaderToken()`/`getLeaderToken()` helpers.

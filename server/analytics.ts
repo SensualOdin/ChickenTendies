@@ -21,7 +21,7 @@ export interface AnalyticsEventInput {
   userLng?: string | null;
 }
 
-function truncateCoordinate(coord: string | number | null | undefined, decimals = 3): string | null {
+export function truncateCoordinate(coord: string | number | null | undefined, decimals = 2): string | null {
   if (coord === null || coord === undefined) return null;
   const num = typeof coord === "string" ? parseFloat(coord) : coord;
   if (isNaN(num)) return null;

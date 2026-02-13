@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { joinGroupSchema, type JoinGroup } from "@shared/schema";
+import { getCsrfToken } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { ArrowLeft, Flame, Loader2, Ticket, User, Smartphone } from "lucide-react";
@@ -53,7 +54,7 @@ export default function JoinGroupPage() {
       try {
         const res = await fetch("/api/crews/join", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...(getCsrfToken() ? { "x-csrf-token": getCsrfToken()! } : {}) },
           body: JSON.stringify({ inviteCode: codeFromUrl }),
           credentials: "include",
         });
@@ -89,9 +90,10 @@ export default function JoinGroupPage() {
 
   const joinMutation = useMutation({
     mutationFn: async (data: JoinGroup) => {
+      const csrfToken = getCsrfToken();
       const partyResponse = await fetch("/api/groups/join", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(csrfToken ? { "x-csrf-token": csrfToken } : {}) },
         body: JSON.stringify(data),
         credentials: "include",
       });
@@ -107,7 +109,7 @@ export default function JoinGroupPage() {
 
       const crewResponse = await fetch("/api/crews/join", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(csrfToken ? { "x-csrf-token": csrfToken } : {}) },
         body: JSON.stringify({ inviteCode: data.code }),
         credentials: "include",
       });

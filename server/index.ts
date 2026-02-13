@@ -1,8 +1,10 @@
 import express, { type Request, Response, NextFunction } from "express";
+import cookieParser from "cookie-parser";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { startCleanupScheduler } from "./cleanup";
+import { csrfProtection } from "./csrf";
 
 const app = express();
 const httpServer = createServer(app);
@@ -22,6 +24,8 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
+app.use(cookieParser());
+app.use(csrfProtection);
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {

@@ -9,6 +9,7 @@ import { ArrowLeft, Flame, Copy, Check, Users, ArrowRight, Loader2, PartyPopper,
 import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { apiRequest } from "@/lib/queryClient";
+import { getLeaderToken } from "@/lib/leader-token";
 import type { Group, WSMessage, GroupMember } from "@shared/schema";
 
 export default function GroupLobby() {
@@ -23,7 +24,7 @@ export default function GroupLobby() {
 
   const memberId = localStorage.getItem("grubmatch-member-id");
   const isHost = group?.members.find((m) => m.id === memberId)?.isHost ?? false;
-  const storedLeaderToken = params.id ? localStorage.getItem(`grubmatch-leader-token-${params.id}`) : null;
+  const storedLeaderToken = params.id ? getLeaderToken(params.id) : null;
   
   // Check if user has a stored leader token for this group
   useEffect(() => {

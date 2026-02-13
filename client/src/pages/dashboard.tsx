@@ -19,7 +19,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { useNotifications } from "@/hooks/use-notifications";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, getCsrfToken } from "@/lib/queryClient";
+import { storeLeaderToken } from "@/lib/leader-token";
 import { Users, Plus, ArrowRight, UserPlus, Check, X, UserMinus, Bell, BellRing, BellOff, Play, User, BarChart3, CheckCheck, Settings } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import logoImage from "@assets/460272BC-3FCC-4927-8C2E-4C236353E7AB_1768880143398.png";
@@ -155,9 +156,10 @@ export default function Dashboard() {
     mutationFn: async (crew: Crew) => {
       await apiRequest("POST", `/api/crews/${crew.id}/sessions`, {});
       
+      const csrfToken = getCsrfToken();
       const response = await fetch(`/api/groups/${crew.id}/join-session`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(csrfToken ? { "x-csrf-token": csrfToken } : {}) },
         credentials: "include",
       });
       if (!response.ok) {
@@ -169,7 +171,7 @@ export default function Dashboard() {
       localStorage.setItem("grubmatch-member-id", data.memberId);
       localStorage.setItem("grubmatch-group-id", data.group.id);
       if (data.leaderToken) {
-        localStorage.setItem(`grubmatch-leader-token-${data.group.id}`, data.leaderToken);
+        storeLeaderToken(data.group.id, data.leaderToken);
       }
       navigate(`/group/${data.group.id}/preferences`);
     },
@@ -181,9 +183,10 @@ export default function Dashboard() {
   const joinCrewSession = useCallback(async (crewId: string) => {
     setJoiningCrewId(crewId);
     try {
+      const csrfToken2 = getCsrfToken();
       const response = await fetch(`/api/groups/${crewId}/join-session`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(csrfToken2 ? { "x-csrf-token": csrfToken2 } : {}) },
         credentials: "include",
       });
       if (response.ok) {
