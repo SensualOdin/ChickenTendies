@@ -26,10 +26,70 @@ import { storage } from "./storage";
 import { sendPushToUsers, getVapidPublicKey } from "./push";
 import { logLifecycleEvent } from "./lifecycle";
 import { lifecycleEvents } from "@shared/schema";
-import { getCrewStreak } from "./streaks";
+import { getCrewStreak, getBatchCrewStreaks } from "./streaks";
 
 function getUserId(req: Request): string {
   return (req.user as any)?.claims?.sub || "";
+}
+
+async function checkReturnSessionMilestones(userId: string, groupId: string) {
+  const firstEvents = await db
+    .select({ eventName: lifecycleEvents.eventName, createdAt: lifecycleEvents.createdAt })
+    .from(lifecycleEvents)
+    .where(
+      and(
+        eq(lifecycleEvents.userId, userId),
+        inArray(lifecycleEvents.eventName, ["crew_created", "first_session_completed"])
+      )
+    )
+    .orderBy(lifecycleEvents.createdAt)
+    .limit(1);
+
+  if (firstEvents.length === 0) return;
+
+  const firstDate = new Date(firstEvents[0].createdAt!);
+  const now = new Date();
+  const daysSince = Math.floor((now.getTime() - firstDate.getTime()) / (1000 * 60 * 60 * 24));
+
+  if (daysSince >= 7) {
+    const existing7 = await db
+      .select({ id: lifecycleEvents.id })
+      .from(lifecycleEvents)
+      .where(
+        and(
+          eq(lifecycleEvents.userId, userId),
+          eq(lifecycleEvents.eventName, "return_session_day_7")
+        )
+      )
+      .limit(1);
+    if (existing7.length === 0) {
+      await logLifecycleEvent("return_session_day_7", {
+        userId,
+        groupId,
+        metadata: { daysSince, firstEventName: firstEvents[0].eventName },
+      });
+    }
+  }
+
+  if (daysSince >= 28) {
+    const existing28 = await db
+      .select({ id: lifecycleEvents.id })
+      .from(lifecycleEvents)
+      .where(
+        and(
+          eq(lifecycleEvents.userId, userId),
+          eq(lifecycleEvents.eventName, "return_session_day_28")
+        )
+      )
+      .limit(1);
+    if (existing28.length === 0) {
+      await logLifecycleEvent("return_session_day_28", {
+        userId,
+        groupId,
+        metadata: { daysSince, firstEventName: firstEvents[0].eventName },
+      });
+    }
+  }
 }
 
 function getUserClaims(req: Request): { sub: string; first_name?: string; last_name?: string; email?: string } {
@@ -96,7 +156,15 @@ async function requireSessionMembership(userId: string, sessionId: string, res: 
 
 export function registerSocialRoutes(app: Express): void {
 
-  app.get("/api/crews/preview/:inviteCode", async (req: Request, res: Response) => {
+  const crewPreviewLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many requests" },
+  });
+
+  app.get("/api/crews/preview/:inviteCode", crewPreviewLimiter, async (req: Request, res: Response) => {
     try {
       const { inviteCode } = req.params;
       const [group] = await db
@@ -407,12 +475,14 @@ export function registerSocialRoutes(app: Express): void {
         hasActiveSession: activeSessionMap.has(g.id),
       }));
 
-      const enrichedWithStreaks = await Promise.all(
-        enrichedGroups.map(async (g) => {
-          const { currentStreak } = await getCrewStreak(g.id);
-          return { ...g, streak: currentStreak };
-        })
-      );
+      const streakMap = groupIds.length > 0
+        ? await getBatchCrewStreaks(groupIds)
+        : new Map<string, number>();
+
+      const enrichedWithStreaks = enrichedGroups.map((g) => ({
+        ...g,
+        streak: streakMap.get(g.id) || 0,
+      }));
       
       res.json(enrichedWithStreaks);
     } catch (error) {
@@ -771,6 +841,10 @@ export function registerSocialRoutes(app: Express): void {
           status: "active",
         })
         .returning();
+
+      checkReturnSessionMilestones(userId, groupId).catch(err =>
+        console.error("[Lifecycle] Error checking return milestones:", err)
+      );
       
       const memberIds = [group.ownerId, ...group.memberIds].filter(id => id !== userId);
       for (const memberId of memberIds) {
@@ -1639,6 +1713,15 @@ export function registerSocialRoutes(app: Express): void {
       const group = await storage.getGroup(groupId);
       if (!group) {
         return res.status(404).json({ message: "Group not found" });
+      }
+
+      const isMember = group.members.some((m: any) => m.id === userId || m.name === userId);
+      if (!isMember) {
+        const sess = req.session as any;
+        const boundMemberId = sess?.memberBindings?.[groupId];
+        if (!boundMemberId || !group.members.some((m: any) => m.id === boundMemberId)) {
+          return res.status(403).json({ message: "Not a member of this group" });
+        }
       }
 
       const name = crewName || group.name;

@@ -236,6 +236,7 @@ export const lifecycleEvents = pgTable("lifecycle_events", {
 }, (table) => [
   index("lifecycle_event_name_idx").on(table.eventName),
   index("lifecycle_created_idx").on(table.createdAt),
+  index("lifecycle_group_idx").on(table.groupId, table.eventName),
 ]);
 
 export type LifecycleEvent = typeof lifecycleEvents.$inferSelect;

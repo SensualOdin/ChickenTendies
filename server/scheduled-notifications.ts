@@ -28,10 +28,29 @@ async function wasSentToday(eventName: string, groupId: string): Promise<boolean
   return rows.length > 0;
 }
 
+function getEasternTime(): Date {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(new Date());
+  const get = (type: string) => parts.find(p => p.type === type)?.value || "0";
+  return new Date(
+    parseInt(get("year")),
+    parseInt(get("month")) - 1,
+    parseInt(get("day")),
+    parseInt(get("hour")),
+    parseInt(get("minute")),
+    parseInt(get("second"))
+  );
+}
+
 async function checkAndSendNotifications() {
-  const now = new Date();
-  const dayOfWeek = now.getDay();
-  const hour = now.getHours();
+  const eastern = getEasternTime();
+  const dayOfWeek = eastern.getDay();
+  const hour = eastern.getHours();
 
   if (dayOfWeek === 5 && hour === 17) {
     await sendFridayNudge();

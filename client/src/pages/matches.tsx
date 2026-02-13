@@ -61,8 +61,23 @@ export default function MatchesPage() {
     if (authLoading || isAuthenticated || !matches?.length) return;
     const dismissed = sessionStorage.getItem(`chickentinders-conversion-dismissed-${params.id}`);
     if (dismissed) return;
-    const timer = setTimeout(() => setShowConversion(true), 3000);
-    return () => clearTimeout(timer);
+
+    const handleInteraction = () => {
+      setShowConversion(true);
+      cleanup();
+    };
+    const cleanup = () => {
+      document.removeEventListener("click", handleInteraction);
+      document.removeEventListener("scroll", handleInteraction, true);
+    };
+    const timer = setTimeout(() => {
+      document.addEventListener("click", handleInteraction, { once: true });
+      document.addEventListener("scroll", handleInteraction, { once: true, capture: true });
+    }, 2000);
+    return () => {
+      clearTimeout(timer);
+      cleanup();
+    };
   }, [authLoading, isAuthenticated, matches, params.id]);
 
   const loadMoreMutation = useMutation({
@@ -91,18 +106,16 @@ export default function MatchesPage() {
 
   const handleShare = useCallback(async (restaurant: Restaurant) => {
     const rating = (restaurant.combinedRating ?? restaurant.rating).toFixed(1);
-    const shareText = `${restaurant.name} - ${rating} stars | ${restaurant.cuisine} | ${restaurant.priceRange}\nMatched on ChickenTinders!`;
-    const shareUrl = window.location.origin;
-    
-    try {
-      await apiRequest("POST", "/api/lifecycle-events", {
-        eventName: "match_result_shared",
-        groupId: params.id,
-        metadata: { restaurantId: restaurant.id, restaurantName: restaurant.name }
-      });
-    } catch {}
+    const inviteCode = (group as any)?.inviteCode;
+    const shareUrl = inviteCode
+      ? `${window.location.origin}/crew/join/${inviteCode}`
+      : window.location.origin;
+    const shareText = `We matched on ${restaurant.name} (${rating} stars, ${restaurant.cuisine}, ${restaurant.priceRange}) on ChickenTinders!${inviteCode ? " Join our crew:" : ""}`;
+
+    let shareMethod = "unknown";
 
     if (navigator.share) {
+      shareMethod = "native_share";
       try {
         await navigator.share({
           title: `${restaurant.name} - ChickenTinders Match!`,
@@ -112,6 +125,7 @@ export default function MatchesPage() {
       } catch (err) {
       }
     } else {
+      shareMethod = "clipboard";
       try {
         await navigator.clipboard.writeText(`${shareText}\n${shareUrl}`);
         toast({
@@ -126,7 +140,15 @@ export default function MatchesPage() {
         });
       }
     }
-  }, [params.id, toast]);
+
+    try {
+      await apiRequest("POST", "/api/lifecycle-events", {
+        eventName: "match_result_shared",
+        groupId: params.id,
+        metadata: { restaurantId: restaurant.id, restaurantName: restaurant.name, shareMethod },
+      });
+    } catch {}
+  }, [params.id, toast, group]);
 
   const isLoading = groupLoading || matchesLoading;
 
