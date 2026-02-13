@@ -9,7 +9,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useGroupPushNotifications } from "@/hooks/use-push-notifications";
 import { useAnalytics } from "@/hooks/use-analytics";
-import { Flame, ChevronRight, PartyPopper, Bell, Timer, Vote, Trophy, BellRing, X, Home, RefreshCw } from "lucide-react";
+import { Flame, ChevronRight, PartyPopper, Bell, Timer, Vote, Trophy, BellRing, X, Home, RefreshCw, ArrowLeft, ArrowRight, ArrowUp } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Group, Restaurant, WSMessage } from "@shared/schema";
 import confetti from "canvas-confetti";
@@ -313,6 +313,27 @@ export default function SwipePage() {
   const nextRestaurant = restaurants[currentIndex + 1];
   const isComplete = currentIndex >= restaurants.length && restaurants.length > 0;
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (isComplete || swipeMutation.isPending || showFinalVote || showMatchCelebration) return;
+      if (currentIndex >= restaurants.length) return;
+
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        handleSwipe("dislike");
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        handleSwipe("like");
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        handleSwipe("superlike");
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleSwipe, isComplete, swipeMutation.isPending, showFinalVote, showMatchCelebration, currentIndex, restaurants.length]);
+
   // Mark as done swiping when user finishes all restaurants
   useEffect(() => {
     if (isComplete && !doneMutation.isPending && memberId) {
@@ -586,6 +607,27 @@ export default function SwipePage() {
                 onSwipe={handleSwipe} 
                 disabled={swipeMutation.isPending || isComplete}
               />
+
+              <div className="hidden sm:flex items-center justify-center gap-4 mt-2 text-xs text-muted-foreground" data-testid="keyboard-hints">
+                <span className="flex items-center gap-1">
+                  <kbd className="px-1.5 py-0.5 rounded bg-muted border text-[10px] font-mono">
+                    <ArrowLeft className="w-3 h-3 inline" />
+                  </kbd>
+                  Nope
+                </span>
+                <span className="flex items-center gap-1">
+                  <kbd className="px-1.5 py-0.5 rounded bg-muted border text-[10px] font-mono">
+                    <ArrowUp className="w-3 h-3 inline" />
+                  </kbd>
+                  Super
+                </span>
+                <span className="flex items-center gap-1">
+                  <kbd className="px-1.5 py-0.5 rounded bg-muted border text-[10px] font-mono">
+                    <ArrowRight className="w-3 h-3 inline" />
+                  </kbd>
+                  Yum!
+                </span>
+              </div>
 
               <div className="flex justify-center gap-1 mt-3 sm:mt-6">
                 {restaurants.slice(0, 10).map((_, i) => (

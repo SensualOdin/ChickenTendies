@@ -14,6 +14,31 @@ import { logAnalyticsEvent, logBatchAnalyticsEvents, getAnalyticsSummary, getCui
 import { db } from "./db";
 import { authStorage } from "./replit_integrations/auth/storage";
 import { eq, and, inArray } from "drizzle-orm";
+import rateLimit from "express-rate-limit";
+
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests, please try again later" },
+});
+
+const createGroupLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many groups created, please try again later" },
+});
+
+const swipeLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Swiping too fast, slow down!" },
+});
 
 export const sessionUserMap: Map<string, string> = new Map();
 
@@ -89,6 +114,8 @@ export async function registerRoutes(
   registerAuthRoutes(app);
   registerSocialRoutes(app);
 
+  app.use("/api/", generalLimiter);
+
   const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
 
   wss.on("connection", async (ws, req) => {
@@ -119,7 +146,7 @@ export async function registerRoutes(
     });
   });
 
-  app.post("/api/groups", async (req, res) => {
+  app.post("/api/groups", createGroupLimiter, async (req, res) => {
     try {
       const data = insertGroupSchema.parse(req.body);
       const result = await storage.createGroup(data);
@@ -162,7 +189,16 @@ export async function registerRoutes(
       res.status(404).json({ error: "Group not found" });
       return;
     }
-    // Strip leaderToken from response for security
+
+    const memberId = req.query.memberId as string | undefined;
+    if (memberId) {
+      const isMember = group.members.some(m => m.id === memberId);
+      if (!isMember) {
+        res.status(403).json({ error: "You are not a member of this group" });
+        return;
+      }
+    }
+
     const { leaderToken, ...groupWithoutToken } = group;
     res.json(groupWithoutToken);
   });
@@ -411,7 +447,7 @@ export async function registerRoutes(
     res.json({ restaurants, loadedNew });
   });
 
-  app.post("/api/groups/:id/swipe", async (req, res) => {
+  app.post("/api/groups/:id/swipe", swipeLimiter, async (req, res) => {
     try {
       const { restaurantId, liked, memberId, superLiked } = req.body;
       

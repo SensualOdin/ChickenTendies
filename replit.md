@@ -50,6 +50,9 @@ Preferred communication style: Simple, everyday language.
 - **Mobile-First PWA**: Full Progressive Web App with viewport-fit=cover, safe area insets for notched phones (iPhone Dynamic Island), responsive text/spacing with sm: breakpoints, 100dvh swipe page, 2-column mobile dashboard grid, hidden decorative elements on small screens
 - **Analytics Intent Engine**: Every swipe action (left/right/super-like) is logged to `analytics_events` table with full context (cuisine, price, location, time). Both party and crew swipe endpoints log analytics server-side with auth userId for reliable per-user stats. Frontend `useAnalytics` hook batches events for admin analytics dashboard. Stats endpoint (`GET /api/stats`) queries `analytics_events` by hashed auth userId for swipe/super-like counts. API endpoints: `GET /api/analytics/summary`, `GET /api/analytics/demand?cuisine=X`, `GET /api/analytics/restaurant/:id`, `POST /api/analytics/events`
 - **PWA Link Handling**: Join page (`/join?code=XXX`) shows a helpful hint banner when opened in a browser (not standalone PWA), telling users they can open their installed app and enter the code there or continue in the browser
+- **Rate Limiting**: `express-rate-limit` protects all API endpoints (200 req/15min general, 10 req/15min for group creation, 60 req/min for swipes)
+- **Group Membership Validation**: GET `/api/groups/:id` accepts optional `memberId` query param; if provided, verifies the caller is a group member before returning data
+- **Keyboard Swiping**: Arrow keys (Left=dislike, Right=like, Up=super-like) for desktop swiping with visible keyboard hints below swipe buttons (hidden on mobile)
 
 ### Build Process
 - **Development**: Vite dev server with HMR, Express backend via tsx
