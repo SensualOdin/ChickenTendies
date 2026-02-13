@@ -9,7 +9,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useGroupPushNotifications } from "@/hooks/use-push-notifications";
 import { useAnalytics } from "@/hooks/use-analytics";
-import { Flame, ChevronRight, PartyPopper, Bell, Timer, Vote, Trophy, Heart, ThumbsUp, Eye, Star, Utensils, BellRing, X, Home } from "lucide-react";
+import { Flame, ChevronRight, PartyPopper, Bell, Timer, Vote, Trophy, Heart, ThumbsUp, Eye, Star, Utensils, BellRing, X, Home, RefreshCw } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Group, Restaurant, WSMessage, ReactionType } from "@shared/schema";
 import confetti from "canvas-confetti";
@@ -22,6 +22,7 @@ export default function SwipePage() {
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [matches, setMatches] = useState<Restaurant[]>([]);
+  const [exhausted, setExhausted] = useState(false);
   const [group, setGroup] = useState<Group | null>(null);
   const [showMatchCelebration, setShowMatchCelebration] = useState(false);
   const [latestMatch, setLatestMatch] = useState<Restaurant | null>(null);
@@ -224,8 +225,27 @@ export default function SwipePage() {
       return response.json();
     },
     onSuccess: () => {
-      // Invalidate group query to ensure UI is up to date
       queryClient.invalidateQueries({ queryKey: ["/api/groups", params.id] });
+    },
+  });
+
+  const loadMoreMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", `/api/groups/${params.id}/restaurants/load-more`);
+      return response.json() as Promise<{ restaurants: Restaurant[]; loadedNew: boolean }>;
+    },
+    onSuccess: (data) => {
+      if (!data.loadedNew) {
+        setExhausted(true);
+        toast({ title: "No more restaurants", description: "Try expanding your preferences for more options." });
+      } else {
+        setExhausted(false);
+        const swipedIds = getSwipedIds();
+        const unswiped = data.restaurants.filter((r: Restaurant) => !swipedIds.has(r.id));
+        setRestaurants(unswiped);
+        setCurrentIndex(0);
+        toast({ title: "More restaurants loaded!", description: `${unswiped.length} new places to check out.` });
+      }
     },
   });
 
@@ -518,9 +538,11 @@ export default function SwipePage() {
                 <p className="text-muted-foreground mb-4">
                   {matches.length > 0 
                     ? `Amazing! You've got ${matches.length} match${matches.length !== 1 ? "es" : ""} with your crew!`
-                    : allDone 
-                      ? "No matches this round — try expanding your preferences next time!"
-                      : "Waiting for the rest of your crew..."
+                    : exhausted
+                      ? "You've seen every option! Try expanding your preferences for more."
+                      : allDone 
+                        ? "No matches yet — load more places or head home!"
+                        : "Waiting for the rest of your crew..."
                   }
                 </p>
                 
@@ -552,8 +574,20 @@ export default function SwipePage() {
                       </Button>
                     </Link>
                   )}
+                  {!exhausted && (
+                    <Button 
+                      size="lg" 
+                      variant={matches.length > 0 ? "outline" : "default"}
+                      onClick={() => loadMoreMutation.mutate()}
+                      disabled={loadMoreMutation.isPending}
+                      data-testid="button-load-more"
+                    >
+                      <RefreshCw className={`w-5 h-5 mr-2 ${loadMoreMutation.isPending ? "animate-spin" : ""}`} />
+                      {loadMoreMutation.isPending ? "Loading..." : "Load 20 More Places"}
+                    </Button>
+                  )}
                   <Link href="/">
-                    <Button size="lg" variant={matches.length > 0 ? "outline" : "default"} data-testid="button-back-home">
+                    <Button size="lg" variant="outline" data-testid="button-back-home">
                       <Home className="w-5 h-5 mr-2" />
                       Back to Home
                     </Button>

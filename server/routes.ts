@@ -387,20 +387,28 @@ export async function registerRoutes(
   });
 
   app.post("/api/groups/:id/restaurants/load-more", async (req, res) => {
+    const existingCount = (await storage.getRestaurantsForGroup(req.params.id)).length;
     const restaurants = await storage.loadMoreRestaurants(req.params.id);
-    const group = await storage.getGroup(req.params.id);
-    const matches = await storage.getMatchesForGroup(req.params.id);
-    
-    if (group) {
-      broadcast(req.params.id, {
-        type: "sync",
-        group,
-        restaurants,
-        matches,
-      });
+    const newCount = restaurants.length;
+    const loadedNew = newCount > existingCount;
+
+    if (loadedNew) {
+      const group = await storage.getGroup(req.params.id);
+      if (group) {
+        for (const member of group.members) {
+          member.doneSwiping = false;
+        }
+        const matches = await storage.getMatchesForGroup(req.params.id);
+        broadcast(req.params.id, {
+          type: "sync",
+          group,
+          restaurants,
+          matches,
+        });
+      }
     }
     
-    res.json(restaurants);
+    res.json({ restaurants, loadedNew });
   });
 
   app.post("/api/groups/:id/swipe", async (req, res) => {
