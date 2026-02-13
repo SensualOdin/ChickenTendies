@@ -65,7 +65,7 @@ interface DiningSession {
   groupId: string;
   status?: string;
   createdById?: string;
-  matchedRestaurantId?: string;
+  matchCount: number;
   startedAt: string;
   endedAt?: string;
   visitedRestaurantId?: string;
@@ -565,7 +565,7 @@ export default function CrewManage() {
                               </p>
                             ) : (
                               <p className="text-sm text-muted-foreground">
-                                {session.matchedRestaurantId ? "Has matches - tap to log visit" : "No matches"}
+                                {session.matchCount > 0 ? `${session.matchCount} match${session.matchCount !== 1 ? "es" : ""} - tap to log visit` : "No matches"}
                               </p>
                             )}
                           </div>
@@ -589,7 +589,7 @@ export default function CrewManage() {
                               {session.visitedRestaurantId ? "Visited" : "Completed"}
                             </Badge>
                           )}
-                          {session.matchedRestaurantId && !session.visitedRestaurantId && (
+                          {session.matchCount > 0 && !session.visitedRestaurantId && (
                             expandedSessionId === session.id ? 
                               <ChevronUp className="w-4 h-4 text-muted-foreground" /> : 
                               <ChevronDown className="w-4 h-4 text-muted-foreground" />

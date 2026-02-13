@@ -550,8 +550,30 @@ export function registerSocialRoutes(app: Express): void {
         .from(diningSessions)
         .where(eq(diningSessions.groupId, groupId))
         .orderBy(desc(diningSessions.startedAt));
+
+      const sessionIds = sessions.map(s => s.id);
+      let matchCounts: Record<string, number> = {};
+      if (sessionIds.length > 0) {
+        const matchRows = await db
+          .select({
+            sessionId: sessionMatches.sessionId,
+            count: sql<number>`count(*)::int`,
+          })
+          .from(sessionMatches)
+          .where(inArray(sessionMatches.sessionId, sessionIds))
+          .groupBy(sessionMatches.sessionId);
+        
+        for (const row of matchRows) {
+          matchCounts[row.sessionId] = row.count;
+        }
+      }
+
+      const sessionsWithMatchCount = sessions.map(s => ({
+        ...s,
+        matchCount: matchCounts[s.id] || 0,
+      }));
       
-      res.json(sessions);
+      res.json(sessionsWithMatchCount);
     } catch (error) {
       console.error("Error fetching sessions:", error);
       res.status(500).json({ message: "Failed to fetch sessions" });
