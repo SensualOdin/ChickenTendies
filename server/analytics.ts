@@ -102,6 +102,9 @@ export async function getAnalyticsSummary(days = 30) {
       COUNT(*) FILTER (WHERE action = 'super_like') as super_likes
     FROM analytics_events
     WHERE created_at > ${sinceStr}::timestamp
+      AND restaurant_name IS NOT NULL
+      AND restaurant_name != ''
+      AND restaurant_name !~ '^[A-Za-z0-9_-]{15,}$'
     GROUP BY restaurant_id, restaurant_name
     ORDER BY right_swipes DESC
     LIMIT 20

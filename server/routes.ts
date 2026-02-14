@@ -11,6 +11,7 @@ import { isAuthenticated } from "./replit_integrations/auth";
 import { registerSocialRoutes } from "./social-routes";
 import { sendPushToGroupMembers, saveGroupPushSubscription, getVapidPublicKey } from "./push";
 import { logAnalyticsEvent, logBatchAnalyticsEvents, getAnalyticsSummary, getCuisineDemand, getRestaurantAnalytics } from "./analytics";
+import { analyticsEvents } from "@shared/models/social";
 import { db } from "./db";
 import { authStorage } from "./replit_integrations/auth/storage";
 import { eq, and, inArray } from "drizzle-orm";
@@ -867,6 +868,17 @@ export async function registerRoutes(
     } catch (error) {
       console.error("[Analytics] Demand error:", error);
       res.status(500).json({ error: "Failed to fetch demand" });
+    }
+  });
+
+  app.post("/api/admin/reset-analytics", isAuthenticated, isAdminUser, async (req, res) => {
+    try {
+      const deleted = await db.delete(analyticsEvents).returning({ id: analyticsEvents.id });
+      console.log(`[Admin] Analytics reset: ${deleted.length} events deleted by user ${(req.user as any)?.claims?.sub}`);
+      res.json({ success: true, deletedCount: deleted.length });
+    } catch (error) {
+      console.error("[Admin] Reset analytics error:", error);
+      res.status(500).json({ error: "Failed to reset analytics" });
     }
   });
 

@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,9 +7,11 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, BarChart3, TrendingUp, TrendingDown, MousePointerClick, Star, ThumbsDown, ThumbsUp, Clock, Calendar, Search, ShieldAlert, ArrowRight, Users, Flame, Share2, UserPlus } from "lucide-react";
+import { ArrowLeft, BarChart3, TrendingUp, TrendingDown, MousePointerClick, Star, ThumbsDown, ThumbsUp, Clock, Calendar, Search, ShieldAlert, ArrowRight, Users, Flame, Share2, UserPlus, Trash2 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from "recharts";
 import { useState, useEffect } from "react";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 const CHART_COLORS = [
   "hsl(var(--primary))",
@@ -150,6 +152,22 @@ export default function AnalyticsPage() {
   const [activeTab, setActiveTab] = useState("swipes");
 
   const isAdmin = !!user?.isAdmin;
+  const { toast } = useToast();
+
+  const resetMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/reset-analytics");
+      return res.json();
+    },
+    onSuccess: (data: { deletedCount: number }) => {
+      toast({ title: "Analytics reset", description: `Deleted ${data.deletedCount} events. Data is now clean.` });
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics/summary"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/lifecycle-dashboard"] });
+    },
+    onError: () => {
+      toast({ title: "Reset failed", description: "Could not reset analytics data.", variant: "destructive" });
+    },
+  });
 
   const { data: summary, isLoading } = useQuery<SummaryData>({
     queryKey: ["/api/analytics/summary", `?days=${days}`],
@@ -253,6 +271,19 @@ export default function AnalyticsPage() {
                 </SelectContent>
               </Select>
             )}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => {
+                if (confirm("Delete all analytics data? This cannot be undone.")) {
+                  resetMutation.mutate();
+                }
+              }}
+              disabled={resetMutation.isPending}
+              data-testid="button-reset-analytics"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
           </div>
         </div>
       </header>
