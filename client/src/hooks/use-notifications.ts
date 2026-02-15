@@ -1,7 +1,7 @@
 import { useEffect, useRef, createElement } from "react";
 import { useAuth } from "./use-auth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { getCsrfToken } from "@/lib/queryClient";
+import { getAuthHeaders, API_BASE } from "@/lib/queryClient";
 import { useToast } from "./use-toast";
 import { useLocation } from "wouter";
 import { ToastAction, type ToastActionElement } from "@/components/ui/toast";
@@ -60,10 +60,10 @@ export function useNotifications() {
             altText: "Join session",
             onClick: async () => {
               try {
-                const csrfToken = getCsrfToken();
-                const res = await fetch(`/api/groups/${groupId}/join-session`, {
+                const authHeaders = await getAuthHeaders();
+                const res = await fetch(`${API_BASE}/api/groups/${groupId}/join-session`, {
                   method: "POST",
-                  headers: { "Content-Type": "application/json", ...(csrfToken ? { "x-csrf-token": csrfToken } : {}) },
+                  headers: { "Content-Type": "application/json", ...authHeaders },
                   credentials: "include",
                 });
                 if (res.ok) {

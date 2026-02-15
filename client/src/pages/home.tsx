@@ -311,7 +311,7 @@ export default function Home() {
                 ))}
               </div>
               <div className="text-center mt-6">
-                <Button variant="outline" size="lg" onClick={() => navigate("/api/login")} data-testid="button-sign-in-perks">
+                <Button variant="outline" size="lg" onClick={() => navigate("/login")} data-testid="button-sign-in-perks">
                   <LogIn className="w-4 h-4 mr-2" />
                   Sign In — It's Free
                 </Button>

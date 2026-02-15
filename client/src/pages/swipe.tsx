@@ -109,8 +109,16 @@ export default function SwipePage() {
   useEffect(() => {
     if (!params.id || !memberId) return;
 
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const wsUrl = `${protocol}//${window.location.host}/ws?groupId=${params.id}&memberId=${memberId}`;
+    const apiUrl = import.meta.env.VITE_API_URL || "";
+    let wsUrl: string;
+    if (apiUrl) {
+      const url = new URL(apiUrl);
+      const wsProtocol = url.protocol === "https:" ? "wss:" : "ws:";
+      wsUrl = `${wsProtocol}//${url.host}/ws?groupId=${params.id}&memberId=${memberId}`;
+    } else {
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      wsUrl = `${protocol}//${window.location.host}/ws?groupId=${params.id}&memberId=${memberId}`;
+    }
     const socket = new WebSocket(wsUrl);
 
     socket.onmessage = (event) => {

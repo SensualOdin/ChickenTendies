@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest, getCsrfToken } from "@/lib/queryClient";
+import { apiRequest, getAuthHeaders, API_BASE } from "@/lib/queryClient";
 import { ArrowLeft, Crown, UserMinus, UserPlus, Trash2, LogOut, History, Users, Copy, Check, Share2, Send, ChevronDown, ChevronUp, MapPin, Utensils, Play, Zap } from "lucide-react";
 import { motion } from "framer-motion";
 import { useState, useCallback } from "react";
@@ -105,10 +105,10 @@ export default function CrewManage() {
   const joinSession = useCallback(async (groupId: string) => {
     setIsJoiningSession(true);
     try {
-      const csrfToken = getCsrfToken();
-      const res = await fetch(`/api/groups/${groupId}/join-session`, {
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch(`${API_BASE}/api/groups/${groupId}/join-session`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...(csrfToken ? { "x-csrf-token": csrfToken } : {}) },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         credentials: "include",
       });
       if (res.ok) {

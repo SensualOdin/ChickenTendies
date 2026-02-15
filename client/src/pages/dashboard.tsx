@@ -19,7 +19,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useNotifications } from "@/hooks/use-notifications";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest, getCsrfToken } from "@/lib/queryClient";
+import { apiRequest, getAuthHeaders, API_BASE } from "@/lib/queryClient";
 import { storeLeaderToken } from "@/lib/leader-token";
 import { Users, Plus, ArrowRight, UserPlus, Check, X, UserMinus, Bell, BellRing, BellOff, Play, User, BarChart3, CheckCheck, Settings, Flame } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -157,10 +157,10 @@ export default function Dashboard() {
     mutationFn: async (crew: Crew) => {
       await apiRequest("POST", `/api/crews/${crew.id}/sessions`, {});
       
-      const csrfToken = getCsrfToken();
-      const response = await fetch(`/api/groups/${crew.id}/join-session`, {
+      const authHeaders = await getAuthHeaders();
+      const response = await fetch(`${API_BASE}/api/groups/${crew.id}/join-session`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...(csrfToken ? { "x-csrf-token": csrfToken } : {}) },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         credentials: "include",
       });
       if (!response.ok) {
@@ -184,10 +184,10 @@ export default function Dashboard() {
   const joinCrewSession = useCallback(async (crewId: string) => {
     setJoiningCrewId(crewId);
     try {
-      const csrfToken2 = getCsrfToken();
-      const response = await fetch(`/api/groups/${crewId}/join-session`, {
+      const authHeaders = await getAuthHeaders();
+      const response = await fetch(`${API_BASE}/api/groups/${crewId}/join-session`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...(csrfToken2 ? { "x-csrf-token": csrfToken2 } : {}) },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         credentials: "include",
       });
       if (response.ok) {

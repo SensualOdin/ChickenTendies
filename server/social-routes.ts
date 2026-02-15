@@ -1,5 +1,5 @@
 import type { Express, Request, Response, NextFunction } from "express";
-import { isAuthenticated } from "./replit_integrations/auth";
+import { isAuthenticated } from "./auth";
 import rateLimit from "express-rate-limit";
 import { db } from "./db";
 import { 
@@ -29,7 +29,7 @@ import { lifecycleEvents } from "@shared/schema";
 import { getCrewStreak, getBatchCrewStreaks } from "./streaks";
 
 function getUserId(req: Request): string {
-  return (req.user as any)?.claims?.sub || "";
+  return (req as any).supabaseUser?.id || "";
 }
 
 async function checkReturnSessionMilestones(userId: string, groupId: string) {
@@ -93,7 +93,8 @@ async function checkReturnSessionMilestones(userId: string, groupId: string) {
 }
 
 function getUserClaims(req: Request): { sub: string; first_name?: string; last_name?: string; email?: string } {
-  return (req.user as any)?.claims || {};
+  const user = (req as any).supabaseUser;
+  return { sub: user?.id || "", email: user?.email };
 }
 
 const sessionRestaurantCache: Map<string, Restaurant[]> = new Map();
@@ -1689,7 +1690,7 @@ export function registerSocialRoutes(app: Express): void {
         return res.status(400).json({ message: "Invalid event name" });
       }
 
-      const userId = (req.user as any)?.claims?.sub || null;
+      const userId = (req as any).supabaseUser?.id || null;
 
       await logLifecycleEvent(eventName, {
         userId,

@@ -1,8 +1,20 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { supabase } from "./supabase";
 
+export const API_BASE = import.meta.env.VITE_API_URL || "";
+
+/** @deprecated CSRF is no longer used — auth is handled via JWT Bearer tokens */
 export function getCsrfToken(): string | null {
-  const match = document.cookie.match(/(^|;\s*)csrf-token=([^;]*)/);
-  return match ? decodeURIComponent(match[2]) : null;
+  return null;
+}
+
+export async function getAuthHeaders(): Promise<Record<string, string>> {
+  const headers: Record<string, string> = {};
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session?.access_token) {
+    headers["Authorization"] = `Bearer ${session.access_token}`;
+  }
+  return headers;
 }
 
 async function throwIfResNotOk(res: Response) {
@@ -17,16 +29,13 @@ export async function apiRequest(
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
-  const headers: Record<string, string> = {};
+  const authHeaders = await getAuthHeaders();
+  const headers: Record<string, string> = { ...authHeaders };
   if (data) {
     headers["Content-Type"] = "application/json";
   }
-  const csrfToken = getCsrfToken();
-  if (csrfToken) {
-    headers["x-csrf-token"] = csrfToken;
-  }
 
-  const res = await fetch(url, {
+  const res = await fetch(`${API_BASE}${url}`, {
     method,
     headers,
     body: data ? JSON.stringify(data) : undefined,
@@ -43,7 +52,10 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const res = await fetch(queryKey.join("/") as string, {
+    const authHeaders = await getAuthHeaders();
+    const url = `${API_BASE}${queryKey.join("/")}`;
+    const res = await fetch(url, {
+      headers: authHeaders,
       credentials: "include",
     });
 

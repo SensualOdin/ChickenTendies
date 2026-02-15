@@ -1,9 +1,18 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/lib/supabase";
 import type { User } from "@shared/models/auth";
+import { useEffect } from "react";
+
+const API_BASE = import.meta.env.VITE_API_URL || "";
 
 async function fetchUser(): Promise<User | null> {
-  const response = await fetch("/api/auth/user", {
-    credentials: "include",
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) return null;
+
+  const response = await fetch(`${API_BASE}/api/auth/user`, {
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+    },
   });
 
   if (response.status === 401) {
@@ -17,12 +26,9 @@ async function fetchUser(): Promise<User | null> {
   return response.json();
 }
 
-async function logout(): Promise<void> {
-  window.location.href = "/api/logout";
-}
-
 export function useAuth() {
   const queryClient = useQueryClient();
+
   const { data: user, isLoading } = useQuery<User | null>({
     queryKey: ["/api/auth/user"],
     queryFn: fetchUser,
@@ -30,8 +36,40 @@ export function useAuth() {
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
 
+  // Listen for Supabase auth state changes
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === "SIGNED_IN" && session) {
+        // Sync user to our database
+        const meta = session.user.user_metadata;
+        await fetch(`${API_BASE}/api/auth/sync`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({
+            firstName: meta?.full_name?.split(" ")[0] || meta?.name?.split(" ")[0] || null,
+            lastName: meta?.full_name?.split(" ").slice(1).join(" ") || null,
+            avatarUrl: meta?.avatar_url || null,
+          }),
+        }).catch(() => {});
+
+        queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      }
+
+      if (event === "SIGNED_OUT") {
+        queryClient.setQueryData(["/api/auth/user"], null);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [queryClient]);
+
   const logoutMutation = useMutation({
-    mutationFn: logout,
+    mutationFn: async () => {
+      await supabase.auth.signOut();
+    },
     onSuccess: () => {
       queryClient.setQueryData(["/api/auth/user"], null);
     },

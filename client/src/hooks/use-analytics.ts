@@ -1,5 +1,5 @@
 import { useCallback, useRef } from "react";
-import { getCsrfToken } from "@/lib/queryClient";
+import { getAuthHeaders, API_BASE } from "@/lib/queryClient";
 
 interface AnalyticsEvent {
   restaurantId: string;
@@ -28,10 +28,10 @@ export function useAnalytics(sessionId?: string, userId?: string) {
     queueRef.current = [];
 
     try {
-      const csrfToken = getCsrfToken();
-      await fetch("/api/analytics/events", {
+      const authHeaders = await getAuthHeaders();
+      await fetch(`${API_BASE}/api/analytics/events`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...(csrfToken ? { "x-csrf-token": csrfToken } : {}) },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify({ events }),
         credentials: "include",
       });

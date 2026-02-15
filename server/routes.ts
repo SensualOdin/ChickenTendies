@@ -1,19 +1,18 @@
-import type { Express } from "express";
+import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { z } from "zod";
-import { randomUUID } from "crypto";
+import { randomUUID, createHmac } from "crypto";
 import { storage } from "./storage";
 import { insertGroupSchema, joinGroupSchema, groupPreferencesSchema, persistentGroups, diningSessions, users } from "@shared/schema";
 import type { WSMessage, Group, Restaurant, GroupMember } from "@shared/schema";
-import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
-import { isAuthenticated } from "./replit_integrations/auth";
+import { isAuthenticated, registerAuthRoutes } from "./auth";
 import { registerSocialRoutes } from "./social-routes";
 import { sendPushToGroupMembers, saveGroupPushSubscription, getVapidPublicKey } from "./push";
 import { logAnalyticsEvent, logBatchAnalyticsEvents, getAnalyticsSummary, getCuisineDemand, getRestaurantAnalytics } from "./analytics";
 import { analyticsEvents } from "@shared/models/social";
 import { db } from "./db";
-import { authStorage } from "./replit_integrations/auth/storage";
+import { authStorage } from "./auth/storage";
 import { eq, and, inArray } from "drizzle-orm";
 import rateLimit from "express-rate-limit";
 
@@ -45,7 +44,7 @@ export const sessionUserMap: Map<string, string> = new Map();
 
 async function isAdminUser(req: any, res: any, next: any) {
   try {
-    const userId = req.user?.claims?.sub;
+    const userId = req.supabaseUser?.id;
     if (!userId) {
       res.status(401).json({ error: "Not authenticated" });
       return;
@@ -93,16 +92,52 @@ function stripLeaderToken(group: any) {
   return safe;
 }
 
-function bindMemberToSession(req: any, groupId: string, memberId: string) {
-  if (!req.session) return;
-  if (!req.session.memberBindings) {
-    req.session.memberBindings = {};
+// Signed cookie-based member binding (replaces express-session binding)
+const BINDING_SECRET = process.env.COOKIE_SECRET || "chickentinders-secret";
+
+function signValue(value: string): string {
+  const sig = createHmac("sha256", BINDING_SECRET).update(value).digest("base64url");
+  return `${value}.${sig}`;
+}
+
+function verifySignedValue(signed: string): string | null {
+  const lastDot = signed.lastIndexOf(".");
+  if (lastDot === -1) return null;
+  const value = signed.substring(0, lastDot);
+  const sig = signed.substring(lastDot + 1);
+  const expected = createHmac("sha256", BINDING_SECRET).update(value).digest("base64url");
+  if (sig !== expected) return null;
+  return value;
+}
+
+function getMemberBindings(req: Request): Record<string, string> {
+  const raw = req.cookies?.["member-bindings"];
+  if (!raw) return {};
+  const value = verifySignedValue(raw);
+  if (!value) return {};
+  try {
+    return JSON.parse(value);
+  } catch {
+    return {};
   }
-  req.session.memberBindings[groupId] = memberId;
+}
+
+function bindMemberToSession(req: any, res: any, groupId: string, memberId: string) {
+  const existing = getMemberBindings(req);
+  existing[groupId] = memberId;
+  const value = JSON.stringify(existing);
+  const signed = signValue(value);
+  res.cookie("member-bindings", signed, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: process.env.NODE_ENV === "production" ? "none" as const : "lax" as const,
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    path: "/",
+  });
 }
 
 function getSessionMemberId(req: any, groupId: string): string | null {
-  return req.session?.memberBindings?.[groupId] || null;
+  return getMemberBindings(req)[groupId] || null;
 }
 
 function verifyMemberIdentity(req: any, groupId: string, claimedMemberId: string): boolean {
@@ -134,8 +169,12 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  // Setup authentication before other routes
-  await setupAuth(app);
+  // Health check endpoint
+  app.get("/api/health", (_req, res) => {
+    res.json({ status: "ok", timestamp: Date.now() });
+  });
+
+  // Register auth and social routes
   registerAuthRoutes(app);
   registerSocialRoutes(app);
 
@@ -181,7 +220,7 @@ export async function registerRoutes(
     try {
       const data = insertGroupSchema.parse(req.body);
       const result = await storage.createGroup(data);
-      bindMemberToSession(req, result.group.id, result.memberId);
+      bindMemberToSession(req, res, result.group.id, result.memberId);
       const { leaderToken, ...groupWithoutToken } = result.group;
       res.json({ 
         group: groupWithoutToken, 
@@ -203,7 +242,7 @@ export async function registerRoutes(
         return;
       }
 
-      bindMemberToSession(req, result.group.id, result.memberId);
+      bindMemberToSession(req, res, result.group.id, result.memberId);
 
       const member = result.group.members.find(m => m.id === result.memberId);
       if (member) {
@@ -240,7 +279,7 @@ export async function registerRoutes(
   app.post("/api/groups/:id/join-session", isAuthenticated, async (req, res) => {
     try {
       const groupId = String(req.params.id);
-      const userId = (req.user as any)?.claims?.sub || "";
+      const userId = req.supabaseUser?.id || "";
 
       const [persistentGroup] = await db
         .select()
@@ -312,7 +351,7 @@ export async function registerRoutes(
         };
         await storage.updateGroup(groupId, memGroup);
         sessionUserMap.set(`${groupId}:${userId}`, hostMemberId);
-        bindMemberToSession(req, groupId, hostMemberId);
+        bindMemberToSession(req, res, groupId, hostMemberId);
 
         res.json({ memberId: hostMemberId, group: memGroup, leaderToken });
         return;
@@ -322,7 +361,7 @@ export async function registerRoutes(
       if (existingMemberId) {
         const existingMember = memGroup.members.find(m => m.id === existingMemberId);
         if (existingMember) {
-          bindMemberToSession(req, groupId, existingMemberId);
+          bindMemberToSession(req, res, groupId, existingMemberId);
           res.json({ memberId: existingMemberId, group: memGroup });
           return;
         }
@@ -340,7 +379,7 @@ export async function registerRoutes(
       memGroup.members.push(newMember);
       await storage.updateGroup(groupId, memGroup);
       sessionUserMap.set(`${groupId}:${userId}`, memberId);
-      bindMemberToSession(req, groupId, memberId);
+      bindMemberToSession(req, res, groupId, memberId);
 
       broadcast(groupId, { type: "member_joined", member: newMember }, memberId);
 
@@ -382,7 +421,7 @@ export async function registerRoutes(
         : null;
       
       if (existingMember) {
-        bindMemberToSession(req, req.params.id, existingMember.id);
+        bindMemberToSession(req, res, req.params.id, existingMember.id);
         const { leaderToken: _, ...groupWithoutToken } = group;
         res.json({ group: groupWithoutToken, memberId: existingMember.id, rejoined: true });
         return;
@@ -408,7 +447,7 @@ export async function registerRoutes(
       // Broadcast member joined
       broadcast(req.params.id, { type: "member_joined", member: newHost }, memberId);
       
-      bindMemberToSession(req, req.params.id, memberId);
+      bindMemberToSession(req, res, req.params.id, memberId);
       const { leaderToken: _, ...groupWithoutToken } = updatedGroup;
       res.json({ group: groupWithoutToken, memberId, rejoined: false });
     } catch (error) {
@@ -504,7 +543,7 @@ export async function registerRoutes(
 
       const swipe = await storage.recordSwipe(req.params.id, memberId, restaurantId, liked);
       
-      const authUserId = (req as any).user?.claims?.sub;
+      const authUserId = (req as any).supabaseUser?.id;
       if (authUserId) {
         const action = superLiked ? "super_like" : liked ? "swipe_right" : "swipe_left";
         logAnalyticsEvent({
@@ -874,7 +913,7 @@ export async function registerRoutes(
   app.post("/api/admin/reset-analytics", isAuthenticated, isAdminUser, async (req, res) => {
     try {
       const deleted = await db.delete(analyticsEvents).returning({ id: analyticsEvents.id });
-      console.log(`[Admin] Analytics reset: ${deleted.length} events deleted by user ${(req.user as any)?.claims?.sub}`);
+      console.log(`[Admin] Analytics reset: ${deleted.length} events deleted by user ${(req as any).supabaseUser?.id}`);
       res.json({ success: true, deletedCount: deleted.length });
     } catch (error) {
       console.error("[Admin] Reset analytics error:", error);

@@ -46,7 +46,7 @@ export function ConversionPrompt({ groupId, groupName, matchCount, onDismiss }: 
   const handleCreateAccount = () => {
     sessionStorage.setItem("chickentinders-convert-group", groupId);
     sessionStorage.setItem("chickentinders-convert-group-name", groupName);
-    window.location.href = "/api/login";
+    window.location.href = "/login";
   };
 
   return (
