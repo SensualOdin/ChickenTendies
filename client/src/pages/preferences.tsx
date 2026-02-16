@@ -295,15 +295,15 @@ export default function Preferences() {
                       Pick a Vibe
                       <span className="text-muted-foreground font-normal text-xs">(optional)</span>
                     </div>
-                    <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-hide">
+                    <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-hide snap-x snap-mandatory touch-pan-x">
                       {SESSION_THEMES.map((theme) => (
                         <button
                           key={theme.id}
                           type="button"
                           onClick={() => handleThemeSelect(theme)}
-                          className={`flex-shrink-0 flex flex-col items-center gap-1 p-3 rounded-xl border-2 transition-all min-w-[90px] ${selectedTheme === theme.id
-                              ? "border-primary bg-gradient-to-br from-primary/15 to-orange-500/15 shadow-md shadow-primary/10"
-                              : "border-border hover:border-primary/40 bg-card"
+                          className={`snap-start flex-shrink-0 flex flex-col items-center gap-1 p-3 rounded-xl border-2 transition-all min-w-[90px] ${selectedTheme === theme.id
+                            ? "border-primary bg-gradient-to-br from-primary/15 to-orange-500/15 shadow-md shadow-primary/10"
+                            : "border-border hover:border-primary/40 bg-card"
                             }`}
                           data-testid={`theme-${theme.id}`}
                         >
