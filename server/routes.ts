@@ -232,7 +232,12 @@ export async function registerRoutes(
         leaderToken
       });
     } catch (error) {
-      res.status(400).json({ error: "Invalid request" });
+      console.error("Error creating group:", error);
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: error.errors[0].message });
+      } else {
+        res.status(500).json({ error: "Failed to create group" });
+      }
     }
   });
 
