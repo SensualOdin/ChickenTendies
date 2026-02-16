@@ -9,7 +9,7 @@ services:
       - key: IS_PRODUCTION
         value: true
       - key: VITE_API_URL
-        value: /api
+        value: ""
       - key: NODE_ENV
         value: production
       - key: DATABASE_URL
