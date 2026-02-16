@@ -10,6 +10,7 @@ import type {
 } from "@shared/schema";
 import { anonymousGroups, anonymousGroupSwipes, restaurantCache } from "@shared/schema";
 import { fetchRestaurantsFromYelp } from "./yelp";
+import { findUnanimousMatches } from "./match-logic";
 import { db } from "./db";
 import { eq, and, sql } from "drizzle-orm";
 
@@ -517,18 +518,7 @@ export class DbStorage implements IStorage {
     const restaurants = await this.getRestaurantsForGroup(groupId);
     const memberIds = group.members.map(m => m.id);
 
-    const matches: Restaurant[] = [];
-
-    for (const restaurant of restaurants) {
-      const restaurantSwipes = swipes.filter(s => s.restaurantId === restaurant.id && s.liked);
-      const likedByMembers = new Set(restaurantSwipes.map(s => s.memberId));
-      
-      if (memberIds.every(id => likedByMembers.has(id))) {
-        matches.push(restaurant);
-      }
-    }
-
-    return matches;
+    return findUnanimousMatches(memberIds, restaurants, swipes);
   }
 
   async getMembersWhoHaventSwiped(groupId: string, restaurantId: string): Promise<GroupMember[]> {

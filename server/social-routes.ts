@@ -27,6 +27,7 @@ import { sendPushToUsers, getVapidPublicKey } from "./push";
 import { logLifecycleEvent } from "./lifecycle";
 import { lifecycleEvents } from "@shared/schema";
 import { getCrewStreak, getBatchCrewStreaks } from "./streaks";
+import { findMatchesWithSuperLikeBoost } from "./match-logic";
 
 function getUserId(req: Request): string {
   return (req as any).supabaseUser?.id || "";
@@ -996,34 +997,38 @@ export function registerSocialRoutes(app: Express): void {
           .select()
           .from(diningSessions)
           .where(eq(diningSessions.id, sessionId));
-        
+
         if (session) {
           const [group] = await db
             .select()
             .from(persistentGroups)
             .where(eq(persistentGroups.id, session.groupId));
-          
+
           if (group) {
             const allMemberIds = [group.ownerId, ...group.memberIds];
-            
-            const likesForRestaurant = await db
+
+            const allSwipes = await db
               .select()
               .from(sessionSwipes)
-              .where(
-                and(
-                  eq(sessionSwipes.sessionId, sessionId),
-                  eq(sessionSwipes.restaurantId, restaurantId),
-                  eq(sessionSwipes.liked, true)
-                )
-              );
-            
-            const likedByUsers = new Set(likesForRestaurant.map(s => s.userId));
-            const superLikeCount = likesForRestaurant.filter(s => s.superLiked).length;
-            
-            const allLiked = allMemberIds.every(id => likedByUsers.has(id));
-            const hasSuperLikeBoost = superLikeCount >= 1 && likedByUsers.size >= Math.ceil(allMemberIds.length * 0.6);
-            
-            if (allLiked || hasSuperLikeBoost) {
+              .where(eq(sessionSwipes.sessionId, sessionId));
+
+            const swipeRecords = allSwipes
+              .filter(s => s.liked)
+              .map(s => ({
+                memberId: s.userId,
+                restaurantId: s.restaurantId,
+                liked: s.liked,
+                superLiked: s.superLiked,
+              }));
+
+            // Only check the current restaurant for efficiency
+            const matchResults = findMatchesWithSuperLikeBoost(
+              allMemberIds,
+              [{ id: restaurantId }],
+              swipeRecords
+            );
+
+            if (matchResults.length > 0) {
               const existingMatch = await db
                 .select()
                 .from(sessionMatches)
@@ -1033,14 +1038,14 @@ export function registerSocialRoutes(app: Express): void {
                     eq(sessionMatches.restaurantId, restaurantId)
                   )
                 );
-              
+
               if (existingMatch.length === 0) {
                 await db.insert(sessionMatches).values({
                   sessionId,
                   restaurantId,
                   restaurantData: restaurantData || null,
                 });
-                
+
                 const restaurantInfo = restaurantData as { name?: string } | null;
                 await db.insert(diningHistory).values({
                   groupId: group.id,
