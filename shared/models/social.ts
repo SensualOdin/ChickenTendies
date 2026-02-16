@@ -14,7 +14,10 @@ export const friendships = pgTable("friendships", {
   status: varchar("status", { length: 20 }).notNull().default("pending"),
   createdAt: timestamp("created_at").defaultNow(),
   respondedAt: timestamp("responded_at"),
-});
+}, (table) => [
+  index("friendships_requester_idx").on(table.requesterId),
+  index("friendships_addressee_idx").on(table.addresseeId),
+]);
 
 export type Friendship = typeof friendships.$inferSelect;
 export type InsertFriendship = typeof friendships.$inferInsert;
@@ -27,7 +30,9 @@ export const persistentGroups = pgTable("persistent_groups", {
   inviteCode: varchar("invite_code", { length: 10 }).notNull().unique(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
+}, (table) => [
+  index("persistent_groups_owner_idx").on(table.ownerId),
+]);
 
 export type PersistentGroup = typeof persistentGroups.$inferSelect;
 export type InsertPersistentGroup = typeof persistentGroups.$inferInsert;
@@ -46,7 +51,9 @@ export const diningSessions = pgTable("dining_sessions", {
   visitedRestaurantId: varchar("visited_restaurant_id"),
   visitedRestaurantData: jsonb("visited_restaurant_data"),
   visitedAt: timestamp("visited_at"),
-});
+}, (table) => [
+  index("dining_sessions_group_status_idx").on(table.groupId, table.status),
+]);
 
 export type DiningSession = typeof diningSessions.$inferSelect;
 export type InsertDiningSession = typeof diningSessions.$inferInsert;
@@ -59,7 +66,9 @@ export const sessionSwipes = pgTable("session_swipes", {
   liked: boolean("liked").notNull(),
   superLiked: boolean("super_liked").notNull().default(false),
   swipedAt: timestamp("swiped_at").defaultNow(),
-});
+}, (table) => [
+  index("session_swipes_session_restaurant_idx").on(table.sessionId, table.restaurantId, table.liked),
+]);
 
 export type SessionSwipe = typeof sessionSwipes.$inferSelect;
 export type InsertSessionSwipe = typeof sessionSwipes.$inferInsert;
@@ -84,7 +93,9 @@ export const notifications = pgTable("notifications", {
   data: jsonb("data"),
   read: boolean("read").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index("notifications_user_created_idx").on(table.userId, table.createdAt),
+]);
 
 export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = typeof notifications.$inferInsert;
@@ -96,7 +107,9 @@ export const pushSubscriptions = pgTable("push_subscriptions", {
   p256dh: text("p256dh").notNull(),
   auth: text("auth").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (table) => [
+  index("push_subscriptions_user_idx").on(table.userId),
+]);
 
 export type PushSubscription = typeof pushSubscriptions.$inferSelect;
 export type InsertPushSubscription = typeof pushSubscriptions.$inferInsert;

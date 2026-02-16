@@ -982,8 +982,14 @@ export function registerSocialRoutes(app: Express): void {
           liked,
           superLiked,
         })
+        .onConflictDoNothing()
         .returning();
-      
+
+      if (!swipe) {
+        // Duplicate swipe, return success silently
+        return res.json({ id: "duplicate", sessionId, userId, restaurantId, liked, superLiked, swipedAt: new Date() });
+      }
+
       const action = superLiked ? "super_like" : liked ? "swipe_right" : "swipe_left";
       logAnalyticsEvent({
         userId,

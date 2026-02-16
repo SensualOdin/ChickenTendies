@@ -484,7 +484,7 @@ export class DbStorage implements IStorage {
       memberId,
       restaurantId,
       liked,
-    });
+    }).onConflictDoNothing();
 
     return {
       id: swipeId,
