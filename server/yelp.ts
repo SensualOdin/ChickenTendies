@@ -207,15 +207,28 @@ export async function fetchRestaurantsFromYelp(preferences: GroupPreferences, of
     ? preferences.cuisineTypes.map(c => cuisineToYelpCategory[c]).join(",")
     : "restaurants";
 
-  const sortOptions = ["rating", "review_count", "distance"];
-  const randomSort = sortOptions[Math.floor(Math.random() * sortOptions.length)];
-  const yelpOffset = offset > 0 ? offset : Math.floor(Math.random() * 30);
+  // Optimize sort order based on preferences
+  let sortBy = "best_match";
+  if (preferences.minRating && preferences.minRating >= 4.0) {
+    sortBy = "rating";
+  } else if (preferences.priceRange.length === 1 && preferences.priceRange[0] === "$") {
+    sortBy = "distance"; // Valid assumption: cheap usually means "quick/close"
+  } else {
+    // Randomize slightly for variety, but avoid "distance" as it pushes good places out
+    const sortOptions = ["best_match", "rating", "review_count"];
+    sortBy = sortOptions[Math.floor(Math.random() * sortOptions.length)];
+  }
+
+  // Only use random offset if we aren't strictly filtering (to avoid skipping the only few valid results)
+  // If user wants specific rating/price, start from 0 to capture best candidates.
+  const useRandomOffset = (!preferences.minRating || preferences.minRating < 3.5) && offset === 0;
+  const yelpOffset = offset > 0 ? offset : (useRandomOffset ? Math.floor(Math.random() * 20) : 0);
 
   const params = new URLSearchParams({
     categories: categories,
     radius: radiusMeters.toString(),
     limit: "50",
-    sort_by: randomSort,
+    sort_by: sortBy,
     offset: yelpOffset.toString()
   });
 
