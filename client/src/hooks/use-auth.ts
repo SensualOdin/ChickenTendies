@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import type { User } from "@shared/models/auth";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
@@ -28,8 +28,12 @@ async function fetchUser(): Promise<User | null> {
 
 export function useAuth() {
   const queryClient = useQueryClient();
+  // Add local loading state to handle the split second where Supabase is parsing the URL hash
+  const [isRestoringSession, setIsRestoringSession] = useState(
+    () => window.location.hash.includes("access_token")
+  );
 
-  const { data: user, isLoading } = useQuery<User | null>({
+  const { data: user, isLoading: isQueryLoading } = useQuery<User | null>({
     queryKey: ["/api/auth/user"],
     queryFn: fetchUser,
     retry: false,
@@ -39,6 +43,11 @@ export function useAuth() {
   // Listen for Supabase auth state changes
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      // If we were waiting for a session restore (OAuth redirect), finish it
+      if (isRestoringSession && (event === "SIGNED_IN" || event === "SIGNED_OUT")) {
+        setIsRestoringSession(false);
+      }
+
       if (event === "SIGNED_IN" && session) {
         // Sync user to our database
         const meta = session.user.user_metadata;
@@ -53,7 +62,7 @@ export function useAuth() {
             lastName: meta?.full_name?.split(" ").slice(1).join(" ") || null,
             avatarUrl: meta?.avatar_url || null,
           }),
-        }).catch(() => {});
+        }).catch(() => { });
 
         queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       }
@@ -64,7 +73,7 @@ export function useAuth() {
     });
 
     return () => subscription.unsubscribe();
-  }, [queryClient]);
+  }, [queryClient, isRestoringSession]);
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
@@ -77,7 +86,7 @@ export function useAuth() {
 
   return {
     user,
-    isLoading,
+    isLoading: isQueryLoading || isRestoringSession,
     isAuthenticated: !!user,
     logout: logoutMutation.mutate,
     isLoggingOut: logoutMutation.isPending,
