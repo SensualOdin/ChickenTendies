@@ -32,6 +32,7 @@ export default function SwipePage() {
   const [likedRestaurants, setLikedRestaurants] = useState<Restaurant[]>([]);
   const [visitedRestaurantIds, setVisitedRestaurantIds] = useState<Set<string>>(new Set());
   const [showNotificationPrompt, setShowNotificationPrompt] = useState(true);
+  const [wsConnected, setWsConnected] = useState(true);
 
   const memberId = localStorage.getItem("grubmatch-member-id");
   const { trackSwipe, flushNow } = useAnalytics(params.id, memberId || undefined);
@@ -109,91 +110,121 @@ export default function SwipePage() {
   useEffect(() => {
     if (!params.id || !memberId) return;
 
-    const apiUrl = import.meta.env.VITE_API_URL || "";
-    let wsUrl: string;
-    if (apiUrl) {
-      const url = new URL(apiUrl);
-      const wsProtocol = url.protocol === "https:" ? "wss:" : "ws:";
-      wsUrl = `${wsProtocol}//${url.host}/ws?groupId=${params.id}&memberId=${memberId}`;
-    } else {
-      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      wsUrl = `${protocol}//${window.location.host}/ws?groupId=${params.id}&memberId=${memberId}`;
-    }
-    const socket = new WebSocket(wsUrl);
+    let socket: WebSocket | null = null;
+    let reconnectTimeout: NodeJS.Timeout | null = null;
+    let reconnectAttempts = 0;
+    const maxReconnectAttempts = 10;
+    let isClosedIntentionally = false;
 
-    socket.onmessage = (event) => {
-      const message: WSMessage = JSON.parse(event.data);
-
-      if (message.type === "sync") {
-        setGroup(message.group);
-        const swipedIds = getSwipedIds();
-        const unswipedRestaurants = message.restaurants.filter((r: Restaurant) => !swipedIds.has(r.id));
-        setRestaurants(unswipedRestaurants);
-        setMatches(message.matches);
-      } else if (message.type === "match_found") {
-        setMatches((prev) => [...prev, message.restaurant]);
-        setLatestMatch(message.restaurant);
-        setShowMatchCelebration(true);
-        // Fire confetti celebration!
-        const duration = 3000;
-        const end = Date.now() + duration;
-        const colors = ['#ff6b6b', '#feca57', '#48dbfb', '#ff9ff3', '#54a0ff'];
-
-        const frame = () => {
-          confetti({
-            particleCount: 3,
-            angle: 60,
-            spread: 55,
-            origin: { x: 0, y: 0.7 },
-            colors,
-          });
-          confetti({
-            particleCount: 3,
-            angle: 120,
-            spread: 55,
-            origin: { x: 1, y: 0.7 },
-            colors,
-          });
-          if (Date.now() < end) {
-            requestAnimationFrame(frame);
-          }
-        };
-        frame();
-
-        setTimeout(() => setShowMatchCelebration(false), 3000);
-      } else if (message.type === "nudge") {
-        // Only show nudge if current user is in the target list
-        if (!message.targetMemberIds || message.targetMemberIds.includes(memberId)) {
-          toast({
-            title: `${message.fromMemberName} is hungry!`,
-            description: `They're waiting for you to swipe on ${message.restaurantName}`,
-          });
-        }
-      } else if (message.type === "member_done_swiping") {
-        // Update group state to reflect member completion
-        setGroup((prev) => {
-          if (!prev) return null;
-          return {
-            ...prev,
-            members: prev.members.map(m =>
-              m.id === message.memberId ? { ...m, doneSwiping: true } : m
-            ),
-          };
-        });
-        // Only show toast if it's not the current user
-        if (message.memberId !== memberId) {
-          toast({
-            title: `${message.memberName} finished swiping!`,
-            description: "They're waiting for everyone else",
-          });
-        }
+    const connect = () => {
+      const apiUrl = import.meta.env.VITE_API_URL || "";
+      let wsUrl: string;
+      if (apiUrl) {
+        const url = new URL(apiUrl);
+        const wsProtocol = url.protocol === "https:" ? "wss:" : "ws:";
+        wsUrl = `${wsProtocol}//${url.host}/ws?groupId=${params.id}&memberId=${memberId}`;
+      } else {
+        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+        wsUrl = `${protocol}//${window.location.host}/ws?groupId=${params.id}&memberId=${memberId}`;
       }
+      socket = new WebSocket(wsUrl);
+
+      socket.onopen = () => {
+        console.log("Swipe WebSocket connected");
+        reconnectAttempts = 0;
+        setWsConnected(true);
+      };
+
+      socket.onmessage = (event) => {
+        const message: WSMessage = JSON.parse(event.data);
+
+        if (message.type === "sync") {
+          setGroup(message.group);
+          const swipedIds = getSwipedIds();
+          const unswipedRestaurants = message.restaurants.filter((r: Restaurant) => !swipedIds.has(r.id));
+          setRestaurants(unswipedRestaurants);
+          setMatches(message.matches);
+        } else if (message.type === "match_found") {
+          setMatches((prev) => [...prev, message.restaurant]);
+          setLatestMatch(message.restaurant);
+          setShowMatchCelebration(true);
+          const duration = 3000;
+          const end = Date.now() + duration;
+          const colors = ['#ff6b6b', '#feca57', '#48dbfb', '#ff9ff3', '#54a0ff'];
+
+          const frame = () => {
+            confetti({
+              particleCount: 3,
+              angle: 60,
+              spread: 55,
+              origin: { x: 0, y: 0.7 },
+              colors,
+            });
+            confetti({
+              particleCount: 3,
+              angle: 120,
+              spread: 55,
+              origin: { x: 1, y: 0.7 },
+              colors,
+            });
+            if (Date.now() < end) {
+              requestAnimationFrame(frame);
+            }
+          };
+          frame();
+
+          setTimeout(() => setShowMatchCelebration(false), 3000);
+        } else if (message.type === "nudge") {
+          if (!message.targetMemberIds || message.targetMemberIds.includes(memberId)) {
+            toast({
+              title: `${message.fromMemberName} is hungry!`,
+              description: `They're waiting for you to swipe on ${message.restaurantName}`,
+            });
+          }
+        } else if (message.type === "member_done_swiping") {
+          setGroup((prev) => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              members: prev.members.map(m =>
+                m.id === message.memberId ? { ...m, doneSwiping: true } : m
+              ),
+            };
+          });
+          if (message.memberId !== memberId) {
+            toast({
+              title: `${message.memberName} finished swiping!`,
+              description: "They're waiting for everyone else",
+            });
+          }
+        }
+      };
+
+      socket.onclose = () => {
+        setWsConnected(false);
+        if (isClosedIntentionally) return;
+
+        if (reconnectAttempts < maxReconnectAttempts) {
+          reconnectAttempts++;
+          const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
+          console.log(`Swipe WebSocket closed, reconnecting in ${delay}ms (attempt ${reconnectAttempts})`);
+          reconnectTimeout = setTimeout(connect, delay);
+        }
+      };
+
+      socket.onerror = (error) => {
+        console.error("Swipe WebSocket error:", error);
+      };
+
+      setWs(socket);
     };
 
-    setWs(socket);
+    connect();
 
     return () => {
-      socket.close();
+      isClosedIntentionally = true;
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (socket) socket.close();
     };
   }, [params.id, memberId]);
 
@@ -459,6 +490,22 @@ export default function SwipePage() {
           </div>
         </motion.div>
       )}
+
+      <AnimatePresence>
+        {!wsConnected && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="bg-yellow-500/10 border-b border-yellow-500/30 px-4 py-2"
+          >
+            <div className="flex items-center justify-center gap-2 text-sm text-yellow-600 dark:text-yellow-400">
+              <span className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />
+              Reconnecting...
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <header className="flex items-center justify-between p-4 md:p-6 shrink-0">
         <div className="flex items-center gap-3">
