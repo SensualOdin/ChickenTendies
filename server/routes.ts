@@ -81,6 +81,9 @@ function broadcast(groupId: string, message: WSMessage, excludeMemberId?: string
   }
 }
 
+// TODO: Implement real-time notification delivery (e.g., via WebSocket or SSE)
+// These are intentional no-ops until a notification transport is implemented.
+// They are called from social-routes.ts for friend requests, session starts, etc.
 export function notifyUser(_userId: string, _notification: { type: string; message: string; data?: any }) {
 }
 
