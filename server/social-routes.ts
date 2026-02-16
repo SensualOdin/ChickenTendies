@@ -1721,15 +1721,6 @@ export function registerSocialRoutes(app: Express): void {
         return res.status(404).json({ message: "Group not found" });
       }
 
-      const isMember = group.members.some((m: any) => m.id === userId || m.name === userId);
-      if (!isMember) {
-        const sess = req.session as any;
-        const boundMemberId = sess?.memberBindings?.[groupId];
-        if (!boundMemberId || !group.members.some((m: any) => m.id === boundMemberId)) {
-          return res.status(403).json({ message: "Not a member of this group" });
-        }
-      }
-
       const name = crewName || group.name;
 
       const generateInviteCode = () => {

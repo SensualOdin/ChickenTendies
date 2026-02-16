@@ -456,7 +456,7 @@ export class DbStorage implements IStorage {
     const existingRestaurants = (cached?.restaurants as Restaurant[]) || [];
     const existingIds = new Set(existingRestaurants.map(r => r.id));
     
-    const newOffset = existingRestaurants.length + Math.floor(Math.random() * 20);
+    const newOffset = existingRestaurants.length;
     
     try {
       const yelpRestaurants = await fetchRestaurantsFromYelp(group.preferences, newOffset);
