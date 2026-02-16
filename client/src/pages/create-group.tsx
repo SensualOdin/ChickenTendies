@@ -39,10 +39,10 @@ export default function CreateGroup() {
       }
       setLocation(`/group/${data.group.id}`);
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({
         title: "Oops!",
-        description: "Something went wrong. Let's try that again!",
+        description: error.message || "Something went wrong. Let's try that again!",
         variant: "destructive",
       });
     },
@@ -79,7 +79,7 @@ export default function CreateGroup() {
         >
           <Card className="border-2">
             <CardHeader className="text-center">
-              <motion.div 
+              <motion.div
                 className="flex justify-center mb-2"
                 animate={{ scale: [1, 1.1, 1] }}
                 transition={{ duration: 1.5, repeat: Infinity }}
@@ -104,8 +104,8 @@ export default function CreateGroup() {
                           Party Name
                         </FormLabel>
                         <FormControl>
-                          <Input 
-                            placeholder="Friday Feast Squad" 
+                          <Input
+                            placeholder="Friday Feast Squad"
                             className="border-2"
                             {...field}
                             data-testid="input-group-name"
@@ -126,8 +126,8 @@ export default function CreateGroup() {
                           Your Name
                         </FormLabel>
                         <FormControl>
-                          <Input 
-                            placeholder="What should we call you?" 
+                          <Input
+                            placeholder="What should we call you?"
                             className="border-2"
                             {...field}
                             data-testid="input-host-name"
@@ -138,9 +138,9 @@ export default function CreateGroup() {
                     )}
                   />
 
-                  <Button 
-                    type="submit" 
-                    className="w-full bg-gradient-to-r from-primary to-orange-500" 
+                  <Button
+                    type="submit"
+                    className="w-full bg-gradient-to-r from-primary to-orange-500"
                     size="lg"
                     disabled={createMutation.isPending}
                     data-testid="button-submit-create"
