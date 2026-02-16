@@ -2,7 +2,7 @@ import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import { z } from "zod";
-import { randomUUID, createHmac } from "crypto";
+import { randomUUID, createHmac, timingSafeEqual } from "crypto";
 import { storage } from "./storage";
 import { insertGroupSchema, joinGroupSchema, groupPreferencesSchema, persistentGroups, diningSessions, users } from "@shared/schema";
 import type { WSMessage, Group, Restaurant, GroupMember } from "@shared/schema";
@@ -111,7 +111,10 @@ function verifySignedValue(signed: string): string | null {
   const value = signed.substring(0, lastDot);
   const sig = signed.substring(lastDot + 1);
   const expected = createHmac("sha256", bindingSecret).update(value).digest("base64url");
-  if (sig !== expected) return null;
+  const sigBuf = Buffer.from(sig);
+  const expectedBuf = Buffer.from(expected);
+  if (sigBuf.length !== expectedBuf.length) return null;
+  if (!timingSafeEqual(sigBuf, expectedBuf)) return null;
   return value;
 }
 
@@ -179,11 +182,11 @@ export async function registerRoutes(
     res.json({ status: "ok", timestamp: Date.now() });
   });
 
-  // Register auth and social routes
+  // Apply rate limiter BEFORE registering routes so all /api/ routes are covered
+  app.use("/api/", generalLimiter);
+
   registerAuthRoutes(app);
   registerSocialRoutes(app);
-
-  app.use("/api/", generalLimiter);
 
   const wss = new WebSocketServer({ noServer: true });
   // Export for external wiring — upgrade handler is set up in index.ts
