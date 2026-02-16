@@ -20,3 +20,17 @@ services:
         sync: false
       - key: COOKIE_SECRET
         sync: false
+      - key: CHECK_FOR_THIS_STRING
+        value: "true"
+      - key: FRONTEND_URL
+        sync: false
+      - key: YELP_API_KEY
+        sync: false
+      - key: GOOGLE_PLACES_API_KEY
+        sync: false
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VITE_VAPID_PUBLIC_KEY
+        sync: false
