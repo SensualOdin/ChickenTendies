@@ -172,8 +172,6 @@ export default function SwipePage() {
             }
           };
           frame();
-
-          setTimeout(() => setShowMatchCelebration(false), 3000);
         } else if (message.type === "nudge") {
           if (!message.targetMemberIds || message.targetMemberIds.includes(memberId)) {
             toast({
@@ -419,31 +417,43 @@ export default function SwipePage() {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.8 }}
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+            onClick={() => setShowMatchCelebration(false)}
           >
             <motion.div
-              className="text-center p-8"
+              className="text-center p-8 max-w-sm"
               initial={{ y: 50 }}
               animate={{ y: 0 }}
+              onClick={(e) => e.stopPropagation()}
             >
               <motion.div
                 animate={{ scale: [1, 1.2, 1], rotate: [0, 10, -10, 0] }}
                 transition={{ duration: 0.5, repeat: 3 }}
-                className="mb-6"
+                className="mb-4"
               >
-                <PartyPopper className="w-20 h-20 text-white mx-auto" />
+                <PartyPopper className="w-16 h-16 text-white mx-auto" />
               </motion.div>
-              <h2 className="text-4xl font-extrabold text-white mb-2">IT'S A MATCH!</h2>
-              <p className="text-xl text-white/80 mb-4">Everyone wants {latestMatch.name}!</p>
-              <div className="flex justify-center gap-3">
-                <motion.div animate={{ y: [0, -10, 0] }} transition={{ duration: 0.5, delay: 0 }}>
-                  <Utensils className="w-8 h-8 text-white/70" />
-                </motion.div>
-                <motion.div animate={{ y: [0, -10, 0] }} transition={{ duration: 0.5, delay: 0.1 }}>
-                  <Heart className="w-8 h-8 text-white/70 fill-white/70" />
-                </motion.div>
-                <motion.div animate={{ y: [0, -10, 0] }} transition={{ duration: 0.5, delay: 0.2 }}>
-                  <Sparkles className="w-8 h-8 text-white/70" />
-                </motion.div>
+              <h2 className="text-3xl font-extrabold text-white mb-1">IT'S A MATCH!</h2>
+              <p className="text-lg text-white/80 mb-6">Everyone wants {latestMatch.name}!</p>
+
+              <div className="flex flex-col gap-3">
+                <Link href={`/group/${params.id}/matches`}>
+                  <Button
+                    size="lg"
+                    className="w-full bg-gradient-to-r from-primary to-orange-500"
+                    onClick={() => setShowMatchCelebration(false)}
+                  >
+                    <PartyPopper className="w-5 h-5 mr-2" />
+                    See Matches ({matches.length})
+                  </Button>
+                </Link>
+                <Button
+                  size="lg"
+                  variant="ghost"
+                  className="w-full text-white/70 hover:text-white hover:bg-white/10"
+                  onClick={() => setShowMatchCelebration(false)}
+                >
+                  Keep Swiping
+                </Button>
               </div>
             </motion.div>
           </motion.div>
