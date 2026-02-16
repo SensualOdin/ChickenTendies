@@ -12,19 +12,11 @@ services:
         value: /api
       - key: NODE_ENV
         value: production
-      - fromGroup: database_url
-      - fromGroup: supabase_creds
-
-envVarGroups:
-  - name: supabase_creds
-    envVars:
+      - key: DATABASE_URL
+        sync: false
       - key: VITE_SUPABASE_URL
         sync: false
       - key: VITE_SUPABASE_ANON_KEY
         sync: false
-  - name: database_url
-    envVars:
-      - key: DATABASE_URL
-        sync: false
       - key: COOKIE_SECRET
-        generate: true
+        sync: false
