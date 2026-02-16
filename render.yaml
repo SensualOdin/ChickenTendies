@@ -12,9 +12,8 @@ services:
         value: /api
       - key: NODE_ENV
         value: production
-    fromGroup:
-      - database_url
-      - supabase_creds
+      - fromGroup: database_url
+      - fromGroup: supabase_creds
 
 envVarGroups:
   - name: supabase_creds
