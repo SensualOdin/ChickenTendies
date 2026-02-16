@@ -361,7 +361,9 @@ export async function fetchRestaurantsFromYelp(preferences: GroupPreferences, of
     filteredRestaurants = [...restaurants];
   }
 
-  filteredRestaurants.sort((a, b) => a.distance - b.distance);
+  // Shuffle the results to provide variety in dense areas (where >20 matches exist)
+  // In sparse areas (<20 matches), this just randomizes the order.
+  filteredRestaurants = shuffleArray(filteredRestaurants);
 
   const sliced = filteredRestaurants.slice(0, 20);
 
