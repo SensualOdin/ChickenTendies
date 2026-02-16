@@ -597,6 +597,23 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/groups/:id/undo-swipe", async (req: Request, res: Response) => {
+    try {
+      const groupId = req.params.id;
+      const { memberId, restaurantId } = req.body;
+
+      if (!memberId || !restaurantId) {
+        return res.status(400).json({ message: "memberId and restaurantId required" });
+      }
+
+      await storage.deleteSwipe(groupId, memberId, restaurantId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error undoing swipe:", error);
+      res.status(500).json({ message: "Failed to undo swipe" });
+    }
+  });
+
   app.get("/api/groups/:id/matches", async (req, res) => {
     const matches = await storage.getMatchesForGroup(req.params.id);
     res.json(matches);

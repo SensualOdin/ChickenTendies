@@ -9,7 +9,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useGroupPushNotifications } from "@/hooks/use-push-notifications";
 import { useAnalytics } from "@/hooks/use-analytics";
-import { Flame, ChevronRight, PartyPopper, Bell, Timer, Vote, Trophy, BellRing, X, Home, RefreshCw, ArrowLeft, ArrowRight, ArrowUp, Utensils, Heart, Sparkles } from "lucide-react";
+import { Flame, ChevronRight, PartyPopper, Bell, Timer, Vote, Trophy, BellRing, X, Home, RefreshCw, ArrowLeft, ArrowRight, ArrowUp, Utensils, Heart, Sparkles, Undo2 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Group, Restaurant, WSMessage } from "@shared/schema";
 import confetti from "canvas-confetti";
@@ -30,6 +30,7 @@ export default function SwipePage() {
   const [showFinalVote, setShowFinalVote] = useState(false);
   const [finalVoteTimer, setFinalVoteTimer] = useState(60);
   const [likedRestaurants, setLikedRestaurants] = useState<Restaurant[]>([]);
+  const [lastSwipe, setLastSwipe] = useState<{ restaurant: Restaurant; index: number } | null>(null);
   const [visitedRestaurantIds, setVisitedRestaurantIds] = useState<Set<string>>(new Set());
   const [showNotificationPrompt, setShowNotificationPrompt] = useState(true);
   const [wsConnected, setWsConnected] = useState(true);
@@ -277,6 +278,16 @@ export default function SwipePage() {
     },
   });
 
+  const undoMutation = useMutation({
+    mutationFn: async (restaurantId: string) => {
+      const response = await apiRequest("POST", `/api/groups/${params.id}/undo-swipe`, {
+        memberId,
+        restaurantId,
+      });
+      return response.json();
+    },
+  });
+
   const nudgeMutation = useMutation({
     mutationFn: async (restaurantId: string) => {
       const response = await apiRequest("POST", `/api/groups/${params.id}/nudge`, {
@@ -326,8 +337,27 @@ export default function SwipePage() {
       setLikedRestaurants(prev => [...prev, restaurant]);
     }
 
+    setLastSwipe({ restaurant, index: currentIndex });
     setCurrentIndex((prev) => prev + 1);
   }, [currentIndex, restaurants, swipeMutation, params.id, trackSwipe, group]);
+
+  const handleUndo = useCallback(() => {
+    if (!lastSwipe) return;
+
+    const swiped = getSwipedIds();
+    swiped.delete(lastSwipe.restaurant.id);
+    localStorage.setItem(`swiped-${params.id}`, JSON.stringify(Array.from(swiped)));
+
+    setLikedRestaurants(prev => prev.filter(r => r.id !== lastSwipe.restaurant.id));
+    setCurrentIndex(lastSwipe.index);
+    undoMutation.mutate(lastSwipe.restaurant.id);
+    setLastSwipe(null);
+
+    toast({
+      title: "Undo!",
+      description: `Back to ${lastSwipe.restaurant.name}`,
+    });
+  }, [lastSwipe, params.id, undoMutation, toast]);
 
   useEffect(() => {
     if (!showFinalVote || finalVoteTimer <= 0) return;
@@ -681,6 +711,28 @@ export default function SwipePage() {
             </div>
 
             <div className="shrink-0 max-w-md mx-auto w-full">
+              <AnimatePresence>
+                {lastSwipe && !isComplete && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 10 }}
+                    className="flex justify-center mb-2"
+                  >
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleUndo}
+                      disabled={undoMutation.isPending}
+                      className="text-muted-foreground"
+                      data-testid="button-undo"
+                    >
+                      <Undo2 className="w-4 h-4 mr-1" />
+                      Undo
+                    </Button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
               <SwipeButtons
                 onSwipe={handleSwipe}
                 disabled={swipeMutation.isPending || isComplete}

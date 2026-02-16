@@ -40,6 +40,7 @@ export interface IStorage {
   getMatchesForGroup(groupId: string): Promise<Restaurant[]>;
   getMembersWhoHaventSwiped(groupId: string, restaurantId: string): Promise<GroupMember[]>;
   markMemberDoneSwiping(groupId: string, memberId: string): Promise<{ group: Group; member: GroupMember } | undefined>;
+  deleteSwipe(groupId: string, memberId: string, restaurantId: string): Promise<void>;
 }
 
 const mockRestaurants: Restaurant[] = [
@@ -555,10 +556,20 @@ export class DbStorage implements IStorage {
       .set({ members: updatedMembers })
       .where(eq(anonymousGroups.id, groupId));
 
-    return { 
-      group: { ...group, members: updatedMembers }, 
-      member: updatedMembers[memberIndex] 
+    return {
+      group: { ...group, members: updatedMembers },
+      member: updatedMembers[memberIndex]
     };
+  }
+
+  async deleteSwipe(groupId: string, memberId: string, restaurantId: string): Promise<void> {
+    await db.delete(anonymousGroupSwipes).where(
+      and(
+        eq(anonymousGroupSwipes.groupId, groupId),
+        eq(anonymousGroupSwipes.memberId, memberId),
+        eq(anonymousGroupSwipes.restaurantId, restaurantId),
+      )
+    );
   }
 }
 
