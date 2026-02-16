@@ -487,17 +487,27 @@ export default function GroupLobby() {
             </div>
           ) : (
             <Card className="bg-gradient-to-r from-muted/50 to-muted/30 border-2 border-dashed">
-              <CardContent className="py-6 text-center">
-                <motion.div
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-                  className="inline-block mb-3"
-                >
-                  <Loader2 className="w-6 h-6 text-primary" />
-                </motion.div>
-                <p className="text-sm text-muted-foreground">
-                  Hang tight! The host is getting things ready...
-                </p>
+              <CardContent className="py-6 space-y-4">
+                <div className="text-center">
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                    className="inline-block mb-3"
+                  >
+                    <Loader2 className="w-6 h-6 text-primary" />
+                  </motion.div>
+                  <p className="text-sm font-medium">
+                    Waiting for {group.members.find(m => m.isHost)?.name || "the host"} to start...
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    They're setting up food preferences for the group
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+                  <Clock className="w-3 h-3" />
+                  <span>{group.members.length} member{group.members.length !== 1 ? "s" : ""} in the lobby</span>
+                </div>
               </CardContent>
             </Card>
           )}
