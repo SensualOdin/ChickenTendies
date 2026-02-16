@@ -478,21 +478,26 @@ export class DbStorage implements IStorage {
   async recordSwipe(groupId: string, memberId: string, restaurantId: string, liked: boolean): Promise<Swipe> {
     const swipeId = randomUUID();
 
-    await db.insert(anonymousGroupSwipes).values({
+    const [result] = await db.insert(anonymousGroupSwipes).values({
       id: swipeId,
       groupId,
       memberId,
       restaurantId,
       liked,
-    }).onConflictDoNothing();
+    }).onConflictDoNothing().returning();
+
+    if (!result) {
+      // Duplicate swipe — return existing data
+      return { id: "duplicate", groupId, memberId, restaurantId, liked, swipedAt: Date.now() };
+    }
 
     return {
-      id: swipeId,
-      groupId,
-      memberId,
-      restaurantId,
-      liked,
-      swipedAt: Date.now()
+      id: result.id,
+      groupId: result.groupId,
+      memberId: result.memberId,
+      restaurantId: result.restaurantId,
+      liked: result.liked,
+      swipedAt: result.swipedAt ? result.swipedAt.getTime() : Date.now()
     };
   }
 
