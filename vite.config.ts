@@ -17,9 +17,9 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
-    proxy: {
-      "/api": "http://localhost:5000",
-      "/ws": { target: "ws://localhost:5000", ws: true },
-    },
+    // proxy: {
+    //   "/api": "http://localhost:5001",
+    //   "/ws": { target: "ws://localhost:5001", ws: true },
+    // },
   },
 });

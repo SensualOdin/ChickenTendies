@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express, { type Request, Response, NextFunction } from "express";
 import cookieParser from "cookie-parser";
 import cors from "cors";
@@ -124,12 +125,24 @@ app.use((req, res, next) => {
     await setupVite(httpServer, app);
   }
 
+  // Register WebSocket upgrade handler AFTER Vite so Vite's HMR
+  // handler is already attached and handles /vite-hmr upgrades first
+  const { appWss } = await import("./routes");
+  if (appWss) {
+    httpServer.on("upgrade", (request, socket, head) => {
+      if (request.url?.startsWith("/ws")) {
+        appWss.handleUpgrade(request, socket, head, (ws) => {
+          appWss.emit("connection", ws, request);
+        });
+      }
+    });
+  }
+
   const port = parseInt(process.env.PORT || "5000", 10);
   httpServer.listen(
     {
       port,
       host: "0.0.0.0",
-      reusePort: true,
     },
     () => {
       log(`serving on port ${port}`);

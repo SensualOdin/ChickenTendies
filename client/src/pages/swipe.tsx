@@ -35,22 +35,22 @@ export default function SwipePage() {
 
   const memberId = localStorage.getItem("grubmatch-member-id");
   const { trackSwipe, flushNow } = useAnalytics(params.id, memberId || undefined);
-  
-  const { 
-    isPushSupported, 
-    permission, 
-    isSubscribed, 
-    isLoading: notificationLoading, 
-    subscribe: subscribeToNotifications 
-  } = useGroupPushNotifications({ 
-    groupId: params.id || "", 
-    memberId: memberId || "" 
+
+  const {
+    isPushSupported,
+    permission,
+    isSubscribed,
+    isLoading: notificationLoading,
+    subscribe: subscribeToNotifications
+  } = useGroupPushNotifications({
+    groupId: params.id || "",
+    memberId: memberId || ""
   });
-  
-  const shouldShowNotificationPrompt = 
-    showNotificationPrompt && 
-    isPushSupported && 
-    permission !== "granted" && 
+
+  const shouldShowNotificationPrompt =
+    showNotificationPrompt &&
+    isPushSupported &&
+    permission !== "granted" &&
     permission !== "denied" &&
     !isSubscribed;
 
@@ -123,7 +123,7 @@ export default function SwipePage() {
 
     socket.onmessage = (event) => {
       const message: WSMessage = JSON.parse(event.data);
-      
+
       if (message.type === "sync") {
         setGroup(message.group);
         const swipedIds = getSwipedIds();
@@ -138,7 +138,7 @@ export default function SwipePage() {
         const duration = 3000;
         const end = Date.now() + duration;
         const colors = ['#ff6b6b', '#feca57', '#48dbfb', '#ff9ff3', '#54a0ff'];
-        
+
         const frame = () => {
           confetti({
             particleCount: 3,
@@ -159,7 +159,7 @@ export default function SwipePage() {
           }
         };
         frame();
-        
+
         setTimeout(() => setShowMatchCelebration(false), 3000);
       } else if (message.type === "nudge") {
         // Only show nudge if current user is in the target list
@@ -175,7 +175,7 @@ export default function SwipePage() {
           if (!prev) return null;
           return {
             ...prev,
-            members: prev.members.map(m => 
+            members: prev.members.map(m =>
               m.id === message.memberId ? { ...m, doneSwiping: true } : m
             ),
           };
@@ -273,27 +273,40 @@ export default function SwipePage() {
 
   const handleSwipe = useCallback((action: SwipeAction) => {
     if (currentIndex >= restaurants.length) return;
-    
+
     const restaurant = restaurants[currentIndex];
     const liked = action === "like" || action === "superlike";
     const superLiked = action === "superlike";
     swipeMutation.mutate({ restaurantId: restaurant.id, liked, superLiked });
     saveSwipedId(restaurant.id);
 
+    // Log analytics event
+    const analyticsAction = superLiked ? "super_like" : liked ? "swipe_right" : "swipe_left";
+    trackSwipe(
+      {
+        id: restaurant.id,
+        name: restaurant.name,
+        cuisine: restaurant.cuisine,
+        priceRange: restaurant.priceRange,
+        distance: restaurant.distance,
+      },
+      analyticsAction
+    );
+
     if (liked) {
       setLikedRestaurants(prev => [...prev, restaurant]);
     }
-    
+
     setCurrentIndex((prev) => prev + 1);
   }, [currentIndex, restaurants, swipeMutation, params.id, trackSwipe, group]);
 
   useEffect(() => {
     if (!showFinalVote || finalVoteTimer <= 0) return;
-    
+
     const timer = setInterval(() => {
       setFinalVoteTimer(prev => prev - 1);
     }, 1000);
-    
+
     return () => clearInterval(timer);
   }, [showFinalVote, finalVoteTimer]);
 
@@ -376,7 +389,7 @@ export default function SwipePage() {
             exit={{ opacity: 0, scale: 0.8 }}
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
           >
-            <motion.div 
+            <motion.div
               className="text-center p-8"
               initial={{ y: 50 }}
               animate={{ y: 0 }}
@@ -477,7 +490,7 @@ export default function SwipePage() {
       </header>
 
       {matches.length > 0 && (
-        <motion.div 
+        <motion.div
           className="px-4 md:px-6 shrink-0"
           initial={{ y: -20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
@@ -486,7 +499,7 @@ export default function SwipePage() {
             <Card className="bg-gradient-to-r from-accent/20 to-primary/10 border-2 border-accent/50 hover-elevate cursor-pointer">
               <CardContent className="py-3 px-4 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <motion.div 
+                  <motion.div
                     className="w-10 h-10 rounded-full bg-accent/30 flex items-center justify-center"
                     animate={{ scale: [1, 1.1, 1] }}
                     transition={{ duration: 1, repeat: Infinity }}
@@ -511,14 +524,14 @@ export default function SwipePage() {
 
       <main className="flex-1 px-4 md:px-6 py-3 sm:py-6 flex flex-col safe-bottom">
         {isComplete ? (
-          <motion.div 
+          <motion.div
             className="flex-1 flex items-center justify-center"
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
           >
             <Card className="w-full max-w-md text-center border-2">
               <CardContent className="py-12">
-                <motion.div 
+                <motion.div
                   className="text-6xl mb-6"
                   animate={{ rotate: [0, 10, -10, 0] }}
                   transition={{ duration: 2, repeat: Infinity }}
@@ -527,16 +540,16 @@ export default function SwipePage() {
                 </motion.div>
                 <h2 className="text-2xl font-extrabold mb-2">You're Done!</h2>
                 <p className="text-muted-foreground mb-4">
-                  {matches.length > 0 
+                  {matches.length > 0
                     ? `Amazing! You've got ${matches.length} match${matches.length !== 1 ? "es" : ""} with your crew!`
                     : exhausted
                       ? "You've seen every option! Try expanding your preferences for more."
-                      : allDone 
+                      : allDone
                         ? "No matches yet — load more places or head home!"
                         : "Waiting for the rest of your crew..."
                   }
                 </p>
-                
+
                 {!allDone && waitingMembers.length > 0 && (
                   <div className="mb-6 p-4 bg-muted/50 rounded-lg">
                     <p className="text-sm text-muted-foreground mb-2">Still swiping:</p>
@@ -555,7 +568,7 @@ export default function SwipePage() {
                     )}
                   </div>
                 )}
-                
+
                 <div className="flex flex-col gap-3 items-center">
                   {matches.length > 0 && (
                     <Link href={`/group/${params.id}/matches`}>
@@ -566,8 +579,8 @@ export default function SwipePage() {
                     </Link>
                   )}
                   {!exhausted && (
-                    <Button 
-                      size="lg" 
+                    <Button
+                      size="lg"
                       variant={matches.length > 0 ? "outline" : "default"}
                       onClick={() => loadMoreMutation.mutate()}
                       disabled={loadMoreMutation.isPending}
@@ -594,7 +607,7 @@ export default function SwipePage() {
                 <SwipeCard
                   key={nextRestaurant.id}
                   restaurant={nextRestaurant}
-                  onSwipe={() => {}}
+                  onSwipe={() => { }}
                   isTop={false}
                 />
               )}
@@ -611,8 +624,8 @@ export default function SwipePage() {
             </div>
 
             <div className="shrink-0 max-w-md mx-auto w-full">
-              <SwipeButtons 
-                onSwipe={handleSwipe} 
+              <SwipeButtons
+                onSwipe={handleSwipe}
                 disabled={swipeMutation.isPending || isComplete}
               />
 
@@ -641,13 +654,12 @@ export default function SwipePage() {
                 {restaurants.slice(0, 10).map((_, i) => (
                   <motion.div
                     key={i}
-                    className={`w-2 h-2 rounded-full transition-all ${
-                      i < currentIndex
+                    className={`w-2 h-2 rounded-full transition-all ${i < currentIndex
                         ? "bg-primary"
                         : i === currentIndex
-                        ? "bg-primary w-4"
-                        : "bg-muted"
-                    }`}
+                          ? "bg-primary w-4"
+                          : "bg-muted"
+                      }`}
                     animate={i === currentIndex ? { scale: [1, 1.2, 1] } : {}}
                     transition={{ duration: 1, repeat: Infinity }}
                   />
@@ -660,14 +672,14 @@ export default function SwipePage() {
               </div>
 
               {likedRestaurants.length >= 3 && (
-                <motion.div 
+                <motion.div
                   className="mt-3 sm:mt-6"
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                 >
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={startFinalVote}
                     className="w-full text-muted-foreground"
                     data-testid="button-final-vote"
@@ -704,7 +716,7 @@ export default function SwipePage() {
                     <Trophy className="w-6 h-6 text-yellow-500" />
                   </div>
                   <p className="text-muted-foreground text-sm">Pick your favorite from your top choices!</p>
-                  
+
                   <div className="flex items-center justify-center gap-2 mt-4 text-lg font-bold">
                     <Timer className={`w-5 h-5 ${finalVoteTimer <= 10 ? 'text-destructive animate-pulse' : 'text-primary'}`} />
                     <span className={finalVoteTimer <= 10 ? 'text-destructive' : ''}>
@@ -721,13 +733,13 @@ export default function SwipePage() {
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: index * 0.1 }}
                     >
-                      <Card 
+                      <Card
                         className="overflow-hidden hover-elevate cursor-pointer"
                         onClick={() => selectFinalChoice(restaurant)}
                         data-testid={`card-final-vote-${restaurant.id}`}
                       >
                         <div className="flex items-center gap-3 p-3">
-                          <div 
+                          <div
                             className="w-16 h-16 rounded-lg bg-cover bg-center shrink-0"
                             style={{ backgroundImage: `url(${restaurant.imageUrl})` }}
                           />
