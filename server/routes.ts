@@ -94,10 +94,14 @@ function stripLeaderToken(group: any) {
 }
 
 // Signed cookie-based member binding (replaces express-session binding)
-const BINDING_SECRET = process.env.COOKIE_SECRET || "chickentinders-secret";
+const cookieSecret = process.env.COOKIE_SECRET;
+if (!cookieSecret && process.env.NODE_ENV === "production") {
+  throw new Error("COOKIE_SECRET environment variable is required in production");
+}
+const bindingSecret = cookieSecret || "chickentinders-dev-secret";
 
 function signValue(value: string): string {
-  const sig = createHmac("sha256", BINDING_SECRET).update(value).digest("base64url");
+  const sig = createHmac("sha256", bindingSecret).update(value).digest("base64url");
   return `${value}.${sig}`;
 }
 
@@ -106,7 +110,7 @@ function verifySignedValue(signed: string): string | null {
   if (lastDot === -1) return null;
   const value = signed.substring(0, lastDot);
   const sig = signed.substring(lastDot + 1);
-  const expected = createHmac("sha256", BINDING_SECRET).update(value).digest("base64url");
+  const expected = createHmac("sha256", bindingSecret).update(value).digest("base64url");
   if (sig !== expected) return null;
   return value;
 }

@@ -47,7 +47,11 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
-app.use(cookieParser(process.env.COOKIE_SECRET || "chickentinders-secret"));
+const cookieSecret = process.env.COOKIE_SECRET;
+if (!cookieSecret && process.env.NODE_ENV === "production") {
+  throw new Error("COOKIE_SECRET environment variable is required in production");
+}
+app.use(cookieParser(cookieSecret || "chickentinders-dev-secret"));
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
