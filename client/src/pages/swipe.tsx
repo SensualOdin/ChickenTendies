@@ -669,12 +669,22 @@ export default function SwipePage() {
                     <Button
                       size="lg"
                       variant={matches.length > 0 ? "outline" : "default"}
+                      className={matches.length > 0 ? "" : "bg-gradient-to-r from-primary to-orange-500"}
                       onClick={() => loadMoreMutation.mutate()}
                       disabled={loadMoreMutation.isPending}
                       data-testid="button-load-more"
                     >
-                      <RefreshCw className={`w-5 h-5 mr-2 ${loadMoreMutation.isPending ? "animate-spin" : ""}`} />
-                      {loadMoreMutation.isPending ? "Loading..." : "Load 20 More Places"}
+                      {loadMoreMutation.isPending ? (
+                        <>
+                          <Utensils className="w-5 h-5 mr-2 animate-bounce" />
+                          Finding restaurants nearby...
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="w-5 h-5 mr-2" />
+                          Load 20 More Places
+                        </>
+                      )}
                     </Button>
                   )}
                   <Link href="/">
