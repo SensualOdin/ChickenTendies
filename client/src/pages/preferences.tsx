@@ -14,7 +14,70 @@ import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Flame, Loader2, MapPin, Ruler, UtensilsCrossed, DollarSign, Leaf, Sparkles, Navigation, Star, Target } from "lucide-react";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+
+interface SessionTheme {
+  id: string;
+  name: string;
+  emoji: string;
+  description: string;
+  presets: Partial<GroupPreferences>;
+}
+
+const SESSION_THEMES: SessionTheme[] = [
+  {
+    id: "date-night",
+    name: "Date Night",
+    emoji: "🌙",
+    description: "Upscale & romantic vibes",
+    presets: {
+      priceRange: ["$$$", "$$$$"],
+      minRating: 4.0,
+      cuisineTypes: ["Italian", "French", "Japanese", "Mediterranean"],
+    },
+  },
+  {
+    id: "budget-bites",
+    name: "Budget Bites",
+    emoji: "💰",
+    description: "Great eats, easy on the wallet",
+    presets: {
+      priceRange: ["$", "$$"],
+      minRating: 0,
+    },
+  },
+  {
+    id: "adventure-mode",
+    name: "Adventure",
+    emoji: "🌍",
+    description: "Try something totally new",
+    presets: {
+      trySomethingNew: true,
+      priceRange: ["$", "$$", "$$$", "$$$$"],
+      minRating: 0,
+    },
+  },
+  {
+    id: "casual-hangout",
+    name: "Casual Hangout",
+    emoji: "🍔",
+    description: "Chill spots, good times",
+    presets: {
+      priceRange: ["$", "$$"],
+      cuisineTypes: ["Pizza", "Burger", "BBQ", "American"],
+    },
+  },
+  {
+    id: "healthy-clean",
+    name: "Healthy",
+    emoji: "🥗",
+    description: "Light & clean eating",
+    presets: {
+      dietaryRestrictions: ["vegetarian"],
+      minRating: 4.0,
+    },
+  },
+];
 
 export default function Preferences() {
   const params = useParams<{ id: string }>();
@@ -22,6 +85,7 @@ export default function Preferences() {
   const { toast } = useToast();
   const [isLocating, setIsLocating] = useState(false);
   const [usingGPS, setUsingGPS] = useState(false);
+  const [selectedTheme, setSelectedTheme] = useState<string | null>(null);
 
   const { data: group, isLoading } = useQuery<Group>({
     queryKey: ["/api/groups", params.id],
@@ -83,7 +147,7 @@ export default function Preferences() {
         const { latitude, longitude } = position.coords;
         form.setValue("latitude", latitude);
         form.setValue("longitude", longitude);
-        
+
         // Try to get a readable address using reverse geocoding
         try {
           const response = await fetch(
@@ -96,7 +160,7 @@ export default function Preferences() {
         } catch {
           form.setValue("zipCode", `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
         }
-        
+
         setUsingGPS(true);
         setIsLocating(false);
         toast({
@@ -150,6 +214,26 @@ export default function Preferences() {
     saveMutation.mutate(data);
   };
 
+  const handleThemeSelect = useCallback((theme: SessionTheme) => {
+    if (selectedTheme === theme.id) {
+      // Deselect — reset to defaults
+      setSelectedTheme(null);
+      form.setValue("priceRange", ["$", "$$", "$$$"]);
+      form.setValue("minRating", 0);
+      form.setValue("cuisineTypes", []);
+      form.setValue("dietaryRestrictions", []);
+      form.setValue("trySomethingNew", false);
+    } else {
+      setSelectedTheme(theme.id);
+      const p = theme.presets;
+      if (p.priceRange) form.setValue("priceRange", p.priceRange);
+      if (p.minRating !== undefined) form.setValue("minRating", p.minRating);
+      if (p.cuisineTypes) form.setValue("cuisineTypes", p.cuisineTypes);
+      if (p.dietaryRestrictions) form.setValue("dietaryRestrictions", p.dietaryRestrictions);
+      if (p.trySomethingNew !== undefined) form.setValue("trySomethingNew", p.trySomethingNew);
+    }
+  }, [selectedTheme, form]);
+
   if (isLoading || !group) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -189,7 +273,7 @@ export default function Preferences() {
         >
           <Card className="border-2">
             <CardHeader className="text-center border-b bg-gradient-to-r from-primary/5 to-orange-500/5">
-              <motion.div 
+              <motion.div
                 className="flex justify-center mb-2"
                 animate={{ rotate: [0, 10, -10, 0] }}
                 transition={{ duration: 2, repeat: Infinity }}
@@ -204,12 +288,42 @@ export default function Preferences() {
             <CardContent className="pt-6">
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+                  {/* Themed Session Picker */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-sm font-semibold">
+                      <Sparkles className="w-4 h-4 text-yellow-500" />
+                      Pick a Vibe
+                      <span className="text-muted-foreground font-normal text-xs">(optional)</span>
+                    </div>
+                    <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-hide">
+                      {SESSION_THEMES.map((theme) => (
+                        <button
+                          key={theme.id}
+                          type="button"
+                          onClick={() => handleThemeSelect(theme)}
+                          className={`flex-shrink-0 flex flex-col items-center gap-1 p-3 rounded-xl border-2 transition-all min-w-[90px] ${selectedTheme === theme.id
+                              ? "border-primary bg-gradient-to-br from-primary/15 to-orange-500/15 shadow-md shadow-primary/10"
+                              : "border-border hover:border-primary/40 bg-card"
+                            }`}
+                          data-testid={`theme-${theme.id}`}
+                        >
+                          <span className="text-2xl">{theme.emoji}</span>
+                          <span className={`text-xs font-bold leading-tight ${selectedTheme === theme.id ? "text-primary" : ""
+                            }`}>{theme.name}</span>
+                          <span className="text-[10px] text-muted-foreground leading-tight text-center">
+                            {theme.description}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                   <div className="space-y-4">
                     <div className="flex items-center gap-2 text-sm font-semibold">
                       <MapPin className="w-4 h-4 text-primary" />
                       Where are you?
                     </div>
-                    
+
                     <Button
                       type="button"
                       variant={usingGPS ? "default" : "outline"}
@@ -244,7 +358,7 @@ export default function Preferences() {
                         <span className="bg-card px-2 text-muted-foreground">or enter location</span>
                       </div>
                     </div>
-                    
+
                     <FormField
                       control={form.control}
                       name="zipCode"
@@ -252,8 +366,8 @@ export default function Preferences() {
                         <FormItem>
                           <FormLabel>Address, City, or Zip Code</FormLabel>
                           <FormControl>
-                            <Input 
-                              placeholder="123 Main St, Brooklyn NY or 10001" 
+                            <Input
+                              placeholder="123 Main St, Brooklyn NY or 10001"
                               maxLength={100}
                               className="border-2"
                               {...field}
@@ -311,7 +425,7 @@ export default function Preferences() {
                       <Star className="w-4 h-4 text-yellow-500" />
                       Minimum Rating
                     </div>
-                    
+
                     <FormField
                       control={form.control}
                       name="minRating"
@@ -329,11 +443,10 @@ export default function Preferences() {
                                 key={option.value}
                                 type="button"
                                 onClick={() => field.onChange(option.value)}
-                                className={`py-3 rounded-xl border-2 font-bold transition-all text-sm ${
-                                  (field.value || 0) === option.value
-                                    ? "border-yellow-500 bg-gradient-to-br from-yellow-500/20 to-orange-500/20 text-yellow-600 dark:text-yellow-400"
-                                    : "border-border hover:border-yellow-500/50"
-                                }`}
+                                className={`py-3 rounded-xl border-2 font-bold transition-all text-sm ${(field.value || 0) === option.value
+                                  ? "border-yellow-500 bg-gradient-to-br from-yellow-500/20 to-orange-500/20 text-yellow-600 dark:text-yellow-400"
+                                  : "border-border hover:border-yellow-500/50"
+                                  }`}
                                 data-testid={`button-rating-${option.value}`}
                               >
                                 {option.value > 0 && <Star className="w-3 h-3 inline mr-0.5 fill-current" />}
@@ -342,7 +455,7 @@ export default function Preferences() {
                             ))}
                           </div>
                           <FormDescription>
-                            {minRating && minRating > 0 
+                            {minRating && minRating > 0
                               ? `Only show restaurants rated ${minRating} stars or higher`
                               : "Show restaurants of any rating"
                             }
@@ -358,7 +471,7 @@ export default function Preferences() {
                       <DollarSign className="w-4 h-4 text-accent" />
                       Budget Vibes
                     </div>
-                    
+
                     <FormField
                       control={form.control}
                       name="priceRange"
@@ -382,11 +495,10 @@ export default function Preferences() {
                                             : [...current, price];
                                           field.onChange(updated);
                                         }}
-                                        className={`w-full py-3 rounded-xl border-2 font-bold transition-all ${
-                                          (field.value || []).includes(price)
-                                            ? "border-primary bg-gradient-to-br from-primary/20 to-orange-500/20 text-primary"
-                                            : "border-border hover:border-primary/50"
-                                        }`}
+                                        className={`w-full py-3 rounded-xl border-2 font-bold transition-all ${(field.value || []).includes(price)
+                                          ? "border-primary bg-gradient-to-br from-primary/20 to-orange-500/20 text-primary"
+                                          : "border-border hover:border-primary/50"
+                                          }`}
                                         data-testid={`button-price-${price}`}
                                       >
                                         {price}
@@ -408,7 +520,7 @@ export default function Preferences() {
                       <Leaf className="w-4 h-4 text-accent" />
                       Dietary Needs
                     </div>
-                    
+
                     <FormField
                       control={form.control}
                       name="dietaryRestrictions"
@@ -457,7 +569,7 @@ export default function Preferences() {
                         <span className="text-muted-foreground font-normal text-xs">(or leave blank for all)</span>
                       </div>
                     </div>
-                    
+
                     <FormField
                       control={form.control}
                       name="trySomethingNew"
@@ -482,7 +594,7 @@ export default function Preferences() {
                         </FormItem>
                       )}
                     />
-                    
+
                     <FormField
                       control={form.control}
                       name="cuisineTypes"
@@ -506,11 +618,10 @@ export default function Preferences() {
                                             : [...current, cuisine];
                                           field.onChange(updated);
                                         }}
-                                        className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all border-2 ${
-                                          (field.value || []).includes(cuisine)
-                                            ? "bg-gradient-to-r from-primary to-orange-500 text-white border-transparent"
-                                            : "bg-muted hover:border-primary/50 border-transparent"
-                                        }`}
+                                        className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all border-2 ${(field.value || []).includes(cuisine)
+                                          ? "bg-gradient-to-r from-primary to-orange-500 text-white border-transparent"
+                                          : "bg-muted hover:border-primary/50 border-transparent"
+                                          }`}
                                         data-testid={`button-cuisine-${cuisine}`}
                                       >
                                         {cuisine}
@@ -527,9 +638,9 @@ export default function Preferences() {
                     />
                   </div>
 
-                  <Button 
-                    type="submit" 
-                    className="w-full bg-gradient-to-r from-primary to-orange-500 shadow-lg shadow-primary/30" 
+                  <Button
+                    type="submit"
+                    className="w-full bg-gradient-to-r from-primary to-orange-500 shadow-lg shadow-primary/30"
                     size="lg"
                     disabled={saveMutation.isPending}
                     data-testid="button-start-swiping"

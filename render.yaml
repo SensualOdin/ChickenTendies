@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: chickentinders
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: IS_PRODUCTION
+        value: true
+      - key: VITE_API_URL
+        value: /api
+      - key: NODE_ENV
+        value: production
+    fromGroup:
+      - database_url
+      - supabase_creds
+
+envVarGroups:
+  - name: supabase_creds
+    envVars:
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false
+  - name: database_url
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: COOKIE_SECRET
+        generate: true

@@ -4,12 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Home, Flame, Loader2, Star, MapPin, ExternalLink, Heart, PartyPopper, Trophy, Sparkles, RefreshCw, CalendarPlus, Phone, Check, Truck, Share2, Pizza } from "lucide-react";
+import { Home, Flame, Loader2, Star, MapPin, ExternalLink, Heart, PartyPopper, Trophy, Sparkles, RefreshCw, CalendarPlus, Phone, Check, Truck, Share2, Pizza, Zap, Settings2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useState, useCallback, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { ConversionPrompt } from "@/components/conversion-prompt";
+import { getLeaderToken } from "@/lib/leader-token";
 import type { Group, Restaurant } from "@shared/schema";
 
 type SessionAction = "directions" | "doordash" | "visited" | "reserve";
@@ -19,12 +20,12 @@ function generateCalendarUrl(restaurant: Restaurant, groupName: string) {
   const dinnerDate = new Date(today);
   dinnerDate.setDate(today.getDate() + 1);
   dinnerDate.setHours(19, 0, 0, 0);
-  
+
   const endDate = new Date(dinnerDate);
   endDate.setHours(21, 0, 0, 0);
-  
+
   const formatDate = (d: Date) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
-  
+
   const title = encodeURIComponent(`Dinner at ${restaurant.name} - ${groupName}`);
   const details = encodeURIComponent(
     `Restaurant: ${restaurant.name}\n` +
@@ -34,7 +35,7 @@ function generateCalendarUrl(restaurant: Restaurant, groupName: string) {
     `Matched on ChickenTinders!`
   );
   const location = encodeURIComponent(restaurant.address);
-  
+
   return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${formatDate(dinnerDate)}/${formatDate(endDate)}&details=${details}&location=${location}`;
 }
 
@@ -88,6 +89,29 @@ export default function MatchesPage() {
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["/api/groups", params.id, "restaurants"] });
       setLocation(`/group/${params.id}/swipe`);
+    },
+  });
+
+  const rematchMutation = useMutation({
+    mutationFn: async () => {
+      const memberId = localStorage.getItem("grubmatch-member-id");
+      const response = await apiRequest("POST", `/api/groups/${params.id}/start-session`, {
+        hostMemberId: memberId,
+        preferences: group?.preferences,
+      });
+      return response.json();
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/groups", params.id] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/groups", params.id, "restaurants"] });
+      setLocation(`/group/${params.id}/swipe`);
+    },
+    onError: () => {
+      toast({
+        title: "Couldn't start rematch",
+        description: "Something went wrong. Try again!",
+        variant: "destructive",
+      });
     },
   });
 
@@ -147,7 +171,7 @@ export default function MatchesPage() {
         groupId: params.id,
         metadata: { restaurantId: restaurant.id, restaurantName: restaurant.name, shareMethod },
       });
-    } catch {}
+    } catch { }
   }, [params.id, toast, group]);
 
   const isLoading = groupLoading || matchesLoading;
@@ -185,12 +209,12 @@ export default function MatchesPage() {
       </header>
 
       <main className="px-4 md:px-6 py-6 max-w-2xl mx-auto safe-bottom">
-        <motion.div 
+        <motion.div
           className="text-center mb-8"
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
         >
-          <motion.div 
+          <motion.div
             className="flex justify-center mb-4"
             animate={{ scale: [1, 1.1, 1], rotate: [0, 5, -5, 0] }}
             transition={{ duration: 2, repeat: Infinity }}
@@ -201,7 +225,7 @@ export default function MatchesPage() {
             {matches?.length ? "Your Matches!" : "No Matches Yet"}
           </h1>
           <p className="text-muted-foreground">
-            {matches?.length 
+            {matches?.length
               ? `The squad agreed on ${matches.length} spot${matches.length !== 1 ? "s" : ""}! Time to eat!`
               : "Keep swiping to find spots everyone loves!"
             }
@@ -219,7 +243,7 @@ export default function MatchesPage() {
               >
                 <Card className="overflow-hidden border-2 hover-elevate">
                   <div className="flex flex-col sm:flex-row">
-                    <div 
+                    <div
                       className="h-48 sm:h-auto sm:w-40 bg-cover bg-center shrink-0 relative"
                       style={{ backgroundImage: `url(${restaurant.imageUrl})` }}
                     >
@@ -272,9 +296,9 @@ export default function MatchesPage() {
                       </p>
 
                       <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                        <Button 
-                          size="sm" 
-                          className="bg-gradient-to-r from-primary to-orange-500 text-xs" 
+                        <Button
+                          size="sm"
+                          className="bg-gradient-to-r from-primary to-orange-500 text-xs"
                           data-testid={`button-directions-${restaurant.id}`}
                           onClick={() => {
                             const destination = restaurant.latitude && restaurant.longitude
@@ -302,10 +326,10 @@ export default function MatchesPage() {
                           DoorDash
                         </Button>
                         {restaurant.yelpUrl && (
-                          <Button 
-                            size="sm" 
-                            variant="outline" 
-                            className="text-xs" 
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-xs"
                             data-testid={`button-reserve-${restaurant.id}`}
                             onClick={() => {
                               window.open(restaurant.yelpUrl, '_blank');
@@ -316,10 +340,10 @@ export default function MatchesPage() {
                             Reserve
                           </Button>
                         )}
-                        <Button 
-                          size="sm" 
-                          variant="outline" 
-                          className="text-xs" 
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-xs"
                           data-testid={`button-calendar-${restaurant.id}`}
                           onClick={() => {
                             window.open(generateCalendarUrl(restaurant, group.name), '_blank');
@@ -328,27 +352,27 @@ export default function MatchesPage() {
                           <CalendarPlus className="w-3 h-3 mr-1" />
                           Calendar
                         </Button>
-                        <Button 
-                          size="sm" 
-                          variant="outline" 
-                          className="text-xs" 
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-xs"
                           data-testid={`button-share-${restaurant.id}`}
                           onClick={() => handleShare(restaurant)}
                         >
                           <Share2 className="w-3 h-3 mr-1" />
                           Share
                         </Button>
-                        <Button 
-                          size="sm" 
+                        <Button
+                          size="sm"
                           variant={visitedRestaurantId === restaurant.id ? "default" : "outline"}
-                          className="text-xs" 
+                          className="text-xs"
                           data-testid={`button-visited-${restaurant.id}`}
                           onClick={() => {
                             setVisitedRestaurantId(restaurant.id);
                             completeSession(restaurant.id, "visited");
-                            toast({ 
-                              title: "Session wrapped up!", 
-                              description: `Marked "${restaurant.name}" as visited. Start a new session anytime!` 
+                            toast({
+                              title: "Session wrapped up!",
+                              description: `Marked "${restaurant.name}" as visited. Start a new session anytime!`
                             });
                           }}
                         >
@@ -375,7 +399,7 @@ export default function MatchesPage() {
           >
             <Card className="text-center py-12 border-2 border-dashed">
               <CardContent>
-                <motion.div 
+                <motion.div
                   className="flex justify-center mb-4"
                   animate={{ y: [0, -10, 0] }}
                   transition={{ duration: 1.5, repeat: Infinity }}
@@ -386,8 +410,8 @@ export default function MatchesPage() {
                 <p className="text-sm text-muted-foreground mb-6">
                   Keep swiping — your perfect spot is waiting!
                 </p>
-                <Button 
-                  className="bg-gradient-to-r from-primary to-orange-500" 
+                <Button
+                  className="bg-gradient-to-r from-primary to-orange-500"
                   data-testid="button-back-to-swiping"
                   onClick={() => loadMoreMutation.mutate()}
                   disabled={loadMoreMutation.isPending}
@@ -410,7 +434,61 @@ export default function MatchesPage() {
         )}
 
         {matches && matches.length > 0 && (
-          <motion.div 
+          <motion.div
+            className="mt-8"
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.5 }}
+          >
+            <Card className="border-2 border-dashed border-primary/30 bg-gradient-to-br from-primary/5 to-orange-500/5">
+              <CardContent className="p-6 text-center">
+                <motion.div
+                  className="flex justify-center mb-3"
+                  animate={{ scale: [1, 1.15, 1], rotate: [0, 5, -5, 0] }}
+                  transition={{ duration: 2, repeat: Infinity }}
+                >
+                  <Flame className="w-10 h-10 text-primary" />
+                </motion.div>
+                <h3 className="text-lg font-extrabold mb-1">Hungry Again? 🔥</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Start a new round with the squad
+                </p>
+                <div className="flex flex-col sm:flex-row gap-2 justify-center">
+                  <Button
+                    className="bg-gradient-to-r from-primary to-orange-500 shadow-lg shadow-primary/20"
+                    onClick={() => rematchMutation.mutate()}
+                    disabled={rematchMutation.isPending || !group?.preferences}
+                    data-testid="button-rematch-same"
+                  >
+                    {rematchMutation.isPending ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Firing up...
+                      </>
+                    ) : (
+                      <>
+                        <Zap className="w-4 h-4 mr-2" />
+                        Same Vibes
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="border-2"
+                    onClick={() => setLocation(`/group/${params.id}/preferences`)}
+                    data-testid="button-rematch-change"
+                  >
+                    <Settings2 className="w-4 h-4 mr-2" />
+                    Change Vibes
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+
+        {matches && matches.length > 0 && (
+          <motion.div
             className="mt-8 text-center"
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
@@ -419,9 +497,9 @@ export default function MatchesPage() {
             <p className="text-sm text-muted-foreground mb-4">
               Want more options?
             </p>
-            <Button 
-              variant="outline" 
-              className="border-2" 
+            <Button
+              variant="outline"
+              className="border-2"
               data-testid="button-continue-swiping"
               onClick={() => loadMoreMutation.mutate()}
               disabled={loadMoreMutation.isPending}

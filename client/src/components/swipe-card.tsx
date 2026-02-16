@@ -22,6 +22,25 @@ export function SwipeCard({ restaurant, onSwipe, isTop, visitedBefore = false }:
   const rotate = useTransform(x, [-200, 200], [-25, 25]);
   const opacity = useTransform(x, [-200, -100, 0, 100, 200], [0.5, 1, 1, 1, 0.5]);
 
+  const [photoIndex, setPhotoIndex] = useState(0);
+
+  const allPhotos = restaurant.photos && restaurant.photos.length > 0
+    ? restaurant.photos
+    : [restaurant.imageUrl];
+
+  const handlePhotoTap = (e: React.PointerEvent) => {
+    // Only handle taps, not drags
+    const rect = e.currentTarget.getBoundingClientRect();
+    const tapX = e.clientX - rect.left;
+    const halfWidth = rect.width / 2;
+
+    if (tapX < halfWidth) {
+      setPhotoIndex((prev) => Math.max(0, prev - 1));
+    } else {
+      setPhotoIndex((prev) => Math.min(allPhotos.length - 1, prev + 1));
+    }
+  };
+
   const likeOpacity = useTransform(x, [0, 100], [0, 1]);
   const nopeOpacity = useTransform(x, [-100, 0], [1, 0]);
   const superLikeOpacity = useTransform(y, [-100, 0], [1, 0]);
@@ -42,7 +61,7 @@ export function SwipeCard({ restaurant, onSwipe, isTop, visitedBefore = false }:
   if (!isTop) {
     return (
       <Card className="absolute inset-0 overflow-hidden border-0">
-        <div 
+        <div
           className="absolute inset-0 bg-cover bg-center"
           style={{ backgroundImage: `url(${restaurant.imageUrl})` }}
         >
@@ -63,12 +82,38 @@ export function SwipeCard({ restaurant, onSwipe, isTop, visitedBefore = false }:
       transition={{ type: "spring", stiffness: 300, damping: 30 }}
     >
       <Card className="relative h-full overflow-hidden border-0 shadow-2xl">
-        <div 
-          className="absolute inset-0 bg-cover bg-center"
-          style={{ backgroundImage: `url(${restaurant.imageUrl})` }}
+        <div
+          className="absolute inset-0 bg-cover bg-center transition-[background-image] duration-300"
+          style={{ backgroundImage: `url(${allPhotos[photoIndex]})` }}
         >
           <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
         </div>
+
+        {/* Photo carousel tap zones */}
+        {allPhotos.length > 1 && (
+          <>
+            <div
+              className="absolute top-0 left-0 w-1/2 h-1/2 z-20 cursor-pointer"
+              onPointerUp={handlePhotoTap}
+            />
+            <div
+              className="absolute top-0 right-0 w-1/2 h-1/2 z-20 cursor-pointer"
+              onPointerUp={handlePhotoTap}
+            />
+            {/* Dot indicators */}
+            <div className="absolute top-3 left-0 right-0 z-20 flex justify-center gap-1.5">
+              {allPhotos.map((_, i) => (
+                <div
+                  key={i}
+                  className={`h-1 rounded-full transition-all duration-200 ${i === photoIndex
+                      ? "w-6 bg-white"
+                      : "w-1.5 bg-white/50"
+                    }`}
+                />
+              ))}
+            </div>
+          </>
+        )}
 
         <motion.div
           className="absolute top-4 left-4 sm:top-8 sm:left-8 z-10"
@@ -128,14 +173,13 @@ export function SwipeCard({ restaurant, onSwipe, isTop, visitedBefore = false }:
           {restaurant.highlights && restaurant.highlights.length > 0 && (
             <div className="flex flex-wrap items-center gap-1.5 mb-2">
               {restaurant.highlights.slice(0, 4).map((highlight) => (
-                <Badge 
-                  key={highlight} 
-                  className={`text-white border-0 text-xs py-0.5 ${
-                    highlight === "Date Night" ? "bg-pink-500/80 dark:bg-pink-600/80" :
-                    highlight === "Brunch Spot" ? "bg-orange-400/80 dark:bg-orange-500/80" :
-                    highlight === "Casual Eats" ? "bg-blue-500/80 dark:bg-blue-600/80" :
-                    "bg-yellow-500/80 dark:bg-yellow-600/80"
-                  }`}
+                <Badge
+                  key={highlight}
+                  className={`text-white border-0 text-xs py-0.5 ${highlight === "Date Night" ? "bg-pink-500/80 dark:bg-pink-600/80" :
+                      highlight === "Brunch Spot" ? "bg-orange-400/80 dark:bg-orange-500/80" :
+                        highlight === "Casual Eats" ? "bg-blue-500/80 dark:bg-blue-600/80" :
+                          "bg-yellow-500/80 dark:bg-yellow-600/80"
+                    }`}
                 >
                   {highlight === "Reservations" && <Calendar className="w-3 h-3 mr-1" />}
                   {highlight === "Delivery" && <Truck className="w-3 h-3 mr-1" />}

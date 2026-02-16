@@ -3,7 +3,7 @@ import { z } from "zod";
 // Dietary restrictions enum
 export const dietaryRestrictions = [
   "vegetarian",
-  "vegan", 
+  "vegan",
   "gluten-free",
   "halal",
   "kosher",
@@ -95,6 +95,7 @@ export const restaurantSchema = z.object({
   rating: z.number().min(0).max(5),
   reviewCount: z.number(),
   imageUrl: z.string(),
+  photos: z.array(z.string()).default([]),
   address: z.string(),
   distance: z.number(),
   dietaryOptions: z.array(z.enum(dietaryRestrictions)).default([]),
@@ -154,7 +155,7 @@ export type JoinGroup = z.infer<typeof joinGroupSchema>;
 export type ReactionType = "fire" | "heart" | "drool" | "thumbsup" | "eyes" | "star";
 
 // WebSocket message types
-export type WSMessage = 
+export type WSMessage =
   | { type: "member_joined"; member: GroupMember }
   | { type: "member_left"; memberId: string }
   | { type: "member_removed"; memberId: string; memberName: string }

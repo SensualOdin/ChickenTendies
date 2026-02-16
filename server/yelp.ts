@@ -81,7 +81,7 @@ function detectCuisineFromCategories(categories: Array<{ alias: string; title: s
   for (const cat of categories) {
     const alias = cat.alias.toLowerCase();
     const title = cat.title.toLowerCase();
-    
+
     if (alias.includes("italian") || title.includes("italian")) return "Italian";
     if (alias.includes("mexican") || title.includes("mexican")) return "Mexican";
     if (alias.includes("chinese") || title.includes("chinese")) return "Chinese";
@@ -101,7 +101,7 @@ function detectCuisineFromCategories(categories: Array<{ alias: string; title: s
     if (alias.includes("bbq") || alias.includes("barbecue")) return "BBQ";
     if (alias.includes("mideastern") || title.includes("middle eastern")) return "Middle Eastern";
   }
-  
+
   return "American";
 }
 
@@ -147,8 +147,8 @@ function isActualRestaurant(categories: Array<{ alias: string; title: string }>)
     }
   }
 
-  return categories.some(cat => 
-    cat.alias.toLowerCase().includes("restaurant") || 
+  return categories.some(cat =>
+    cat.alias.toLowerCase().includes("restaurant") ||
     cat.title.toLowerCase().includes("restaurant")
   );
 }
@@ -162,6 +162,36 @@ function shuffleArray<T>(array: T[]): T[] {
   return shuffled;
 }
 
+async function fetchYelpBusinessPhotos(businessIds: string[]): Promise<Map<string, string[]>> {
+  const photoMap = new Map<string, string[]>();
+  if (!YELP_API_KEY || businessIds.length === 0) return photoMap;
+
+  const BATCH_SIZE = 5;
+  for (let i = 0; i < businessIds.length; i += BATCH_SIZE) {
+    const batch = businessIds.slice(i, i + BATCH_SIZE);
+    const promises = batch.map(async (id) => {
+      try {
+        const response = await fetch(`${YELP_BASE_URL}/businesses/${id}`, {
+          headers: {
+            "Authorization": `Bearer ${YELP_API_KEY}`,
+            "Accept": "application/json"
+          }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          if (data.photos && Array.isArray(data.photos)) {
+            photoMap.set(id, data.photos);
+          }
+        }
+      } catch (error) {
+        console.error(`Failed to fetch photos for business ${id}:`, error);
+      }
+    });
+    await Promise.all(promises);
+  }
+  return photoMap;
+}
+
 export async function fetchRestaurantsFromYelp(preferences: GroupPreferences, offset: number = 0): Promise<Restaurant[]> {
   if (!YELP_API_KEY) {
     console.log("No Yelp API key found, using mock data");
@@ -170,9 +200,9 @@ export async function fetchRestaurantsFromYelp(preferences: GroupPreferences, of
 
   const restaurants: Restaurant[] = [];
   const seenIds = new Set<string>();
-  
+
   const radiusMeters = Math.min(Math.round(preferences.radius * 1609.34), 40000);
-  
+
   const categories = preferences.cuisineTypes.length > 0
     ? preferences.cuisineTypes.map(c => cuisineToYelpCategory[c]).join(",")
     : "restaurants";
@@ -203,7 +233,7 @@ export async function fetchRestaurantsFromYelp(preferences: GroupPreferences, of
 
   try {
     const url = `${YELP_BASE_URL}/businesses/search?${params.toString()}`;
-    
+
     const response = await fetch(url, {
       headers: {
         "Authorization": `Bearer ${YELP_API_KEY}`,
@@ -221,11 +251,11 @@ export async function fetchRestaurantsFromYelp(preferences: GroupPreferences, of
 
     for (const business of data.businesses) {
       if (seenIds.has(business.id)) continue;
-      
+
       if (!isActualRestaurant(business.categories)) {
         continue;
       }
-      
+
       seenIds.add(business.id);
 
       const priceRange = yelpPriceToRange(business.price);
@@ -235,15 +265,15 @@ export async function fetchRestaurantsFromYelp(preferences: GroupPreferences, of
       const highlights: string[] = [];
       const categoryAliases = business.categories.map(c => c.alias.toLowerCase());
       const categoryTitles = business.categories.map(c => c.title.toLowerCase()).join(" ");
-      
+
       // Quality indicators
       if (business.rating >= 4.5) highlights.push("Highly Rated");
       if (business.review_count > 500) highlights.push("Popular Spot");
-      
+
       // Vibe/occasion tags
       const isUpscale = priceRange === "$$$" || priceRange === "$$$$";
-      const isRomantic = categoryTitles.includes("wine") || categoryTitles.includes("french") || 
-                        categoryTitles.includes("italian") || categoryAliases.includes("cocktailbars");
+      const isRomantic = categoryTitles.includes("wine") || categoryTitles.includes("french") ||
+        categoryTitles.includes("italian") || categoryAliases.includes("cocktailbars");
       if (isUpscale && business.rating >= 4.0) highlights.push("Date Night");
       if (categoryTitles.includes("brunch") || categoryTitles.includes("breakfast")) highlights.push("Brunch Spot");
       if (categoryAliases.some(a => a.includes("burger") || a.includes("pizza") || a.includes("wings"))) {
@@ -252,7 +282,7 @@ export async function fetchRestaurantsFromYelp(preferences: GroupPreferences, of
       if (categoryAliases.some(a => a.includes("sushi") || a.includes("ramen"))) {
         highlights.push("Japanese Cuisine");
       }
-      
+
       // Service options
       if (transactions.includes("reservation")) highlights.push("Reservations");
       if (transactions.includes("delivery")) highlights.push("Delivery");
@@ -266,6 +296,7 @@ export async function fetchRestaurantsFromYelp(preferences: GroupPreferences, of
         rating: business.rating,
         reviewCount: business.review_count,
         imageUrl: business.image_url || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=600&fit=crop",
+        photos: [],
         address: `${business.location.address1}, ${business.location.city}`,
         distance,
         dietaryOptions: [],
@@ -306,7 +337,7 @@ export async function fetchRestaurantsFromYelp(preferences: GroupPreferences, of
   }
 
   if (preferences.excludeCuisines && preferences.excludeCuisines.length > 0) {
-    filteredRestaurants = filteredRestaurants.filter(r => 
+    filteredRestaurants = filteredRestaurants.filter(r =>
       !preferences.excludeCuisines!.includes(r.cuisine)
     );
     console.log(`After cuisine exclusion filter: ${filteredRestaurants.length} remaining`);
@@ -318,7 +349,7 @@ export async function fetchRestaurantsFromYelp(preferences: GroupPreferences, of
   }
 
   filteredRestaurants.sort((a, b) => a.distance - b.distance);
-  
+
   const sliced = filteredRestaurants.slice(0, 20);
 
   try {
@@ -346,6 +377,22 @@ export async function fetchRestaurantsFromYelp(preferences: GroupPreferences, of
     for (const restaurant of sliced) {
       restaurant.combinedRating = restaurant.rating;
     }
+  }
+
+  // Fetch multiple photos for each restaurant from Yelp Business Detail API
+  try {
+    const photoMap = await fetchYelpBusinessPhotos(sliced.map(r => r.id));
+    for (const restaurant of sliced) {
+      const photos = photoMap.get(restaurant.id);
+      if (photos && photos.length > 0) {
+        restaurant.photos = photos;
+        // Use the first photo as the main imageUrl if available
+        restaurant.imageUrl = photos[0];
+      }
+    }
+    console.log(`Enriched ${sliced.length} restaurants with photos (${photoMap.size} had photos)`);
+  } catch (error) {
+    console.error("Photo enrichment failed:", error);
   }
 
   return sliced;
