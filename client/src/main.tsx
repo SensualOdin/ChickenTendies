@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import { ErrorBoundary } from "./components/error-boundary";
+import { isNative } from "./lib/platform";
 import "./index.css";
 
 // Handle GitHub Pages SPA redirect (404.html redirects here with ?redirect=path)
@@ -9,7 +10,8 @@ if (redirectParam) {
   window.history.replaceState(null, "", redirectParam);
 }
 
-if ('serviceWorker' in navigator) {
+// Only register service worker on web (native handles push/caching natively)
+if (!isNative() && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js')
       .then((registration) => {

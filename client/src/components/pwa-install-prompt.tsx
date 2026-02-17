@@ -1,10 +1,13 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { usePWAInstall } from "@/hooks/use-pwa-install";
+import { isNative } from "@/lib/platform";
 import { Download, X, Share, Plus } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 export function PWAInstallPrompt() {
+  if (isNative()) return null;
+
   const { isInstallable, isInstalled, isIOS, showIOSPrompt, install, dismiss } = usePWAInstall();
 
   if (isInstalled) return null;
