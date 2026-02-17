@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">ChickenTinders</string>
+    <string name="title_activity_main">ChickenTinders</string>
+    <string name="package_name">com.chickentinders.app</string>
+    <string name="custom_url_scheme">com.chickentinders.app</string>
+</resources>

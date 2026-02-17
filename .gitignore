@@ -6,3 +6,11 @@ vite.config.ts.*
 *.tar.gz
 .env
 .env.bak
+
+# Capacitor native build artifacts
+ios/App/Pods/
+ios/DerivedData/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
