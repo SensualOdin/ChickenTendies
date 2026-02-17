@@ -344,28 +344,32 @@ export default function ProfilePage() {
                 <div className="flex items-center gap-3">
                   {theme === "dark" ? (
                     <Moon className="w-5 h-5 text-muted-foreground" />
+                  ) : theme === "system" ? (
+                    <Settings className="w-5 h-5 text-muted-foreground" />
                   ) : (
                     <Sun className="w-5 h-5 text-muted-foreground" />
                   )}
                   <div>
                     <p className="text-sm font-medium">Appearance</p>
                     <p className="text-xs text-muted-foreground">
-                      {theme === "dark" ? "Dark mode" : "Light mode"}
+                      {theme === "dark" ? "Dark mode" : theme === "system" ? "System default" : "Light mode"}
                     </p>
                   </div>
                 </div>
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+                  onClick={() => setTheme(theme === "light" ? "dark" : theme === "dark" ? "system" : "light")}
                   data-testid="button-theme-toggle"
                 >
                   {theme === "dark" ? (
                     <Sun className="w-4 h-4 mr-2" />
+                  ) : theme === "system" ? (
+                    <Sun className="w-4 h-4 mr-2" />
                   ) : (
                     <Moon className="w-4 h-4 mr-2" />
                   )}
-                  {theme === "dark" ? "Light mode" : "Dark mode"}
+                  {theme === "dark" ? "System" : theme === "system" ? "Light" : "Dark"}
                 </Button>
               </div>
               <div className="border-t pt-4">
