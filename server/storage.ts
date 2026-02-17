@@ -41,6 +41,8 @@ export interface IStorage {
   getMembersWhoHaventSwiped(groupId: string, restaurantId: string): Promise<GroupMember[]>;
   markMemberDoneSwiping(groupId: string, memberId: string): Promise<{ group: Group; member: GroupMember } | undefined>;
   deleteSwipe(groupId: string, memberId: string, restaurantId: string): Promise<void>;
+  getSwipeCountForMember(groupId: string, memberId: string): Promise<number>;
+  getRestaurantCountForGroup(groupId: string): Promise<number>;
 }
 
 const mockRestaurants: Restaurant[] = [
@@ -570,6 +572,24 @@ export class DbStorage implements IStorage {
         eq(anonymousGroupSwipes.restaurantId, restaurantId),
       )
     );
+  }
+
+  async getSwipeCountForMember(groupId: string, memberId: string): Promise<number> {
+    const result = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(anonymousGroupSwipes)
+      .where(
+        and(
+          eq(anonymousGroupSwipes.groupId, groupId),
+          eq(anonymousGroupSwipes.memberId, memberId),
+        )
+      );
+    return Number(result[0]?.count ?? 0);
+  }
+
+  async getRestaurantCountForGroup(groupId: string): Promise<number> {
+    const restaurants = await this.getRestaurantsForGroup(groupId);
+    return restaurants?.length ?? 0;
   }
 }
 

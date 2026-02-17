@@ -34,6 +34,7 @@ export default function SwipePage() {
   const [visitedRestaurantIds, setVisitedRestaurantIds] = useState<Set<string>>(new Set());
   const [showNotificationPrompt, setShowNotificationPrompt] = useState(true);
   const [wsConnected, setWsConnected] = useState(true);
+  const [memberProgress, setMemberProgress] = useState<Record<string, { swipeCount: number; total: number }>>({});
 
   const memberId = localStorage.getItem("grubmatch-member-id");
   const { trackSwipe, flushNow } = useAnalytics(params.id, memberId || undefined);
@@ -196,6 +197,11 @@ export default function SwipePage() {
               description: "They're waiting for everyone else",
             });
           }
+        } else if (message.type === "member_progress") {
+          setMemberProgress(prev => ({
+            ...prev,
+            [message.memberId]: { swipeCount: message.swipeCount, total: message.totalRestaurants },
+          }));
         }
       };
 
@@ -572,7 +578,7 @@ export default function SwipePage() {
               <Bell className="w-5 h-5" />
             </Button>
           )}
-          <MemberAvatars members={group.members} size="sm" />
+          <MemberAvatars members={group.members} size="sm" progress={memberProgress} />
         </div>
       </header>
 

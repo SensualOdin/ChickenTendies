@@ -592,6 +592,24 @@ export async function registerRoutes(
       }
 
       res.json(swipe);
+
+      // Broadcast swipe progress to group
+      const groupClients = clients.get(req.params.id);
+      if (groupClients) {
+        const swipeCount = await storage.getSwipeCountForMember(req.params.id, memberId);
+        const totalRestaurants = await storage.getRestaurantCountForGroup(req.params.id);
+        const progressMsg = JSON.stringify({
+          type: "member_progress",
+          memberId,
+          swipeCount,
+          totalRestaurants,
+        });
+        groupClients.forEach((client) => {
+          if (client.ws.readyState === WebSocket.OPEN) {
+            client.ws.send(progressMsg);
+          }
+        });
+      }
     } catch (error) {
       res.status(400).json({ error: "Invalid request" });
     }

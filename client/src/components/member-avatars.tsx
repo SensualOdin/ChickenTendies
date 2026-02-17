@@ -27,9 +27,10 @@ interface MemberAvatarsProps {
   members: GroupMember[];
   showNames?: boolean;
   size?: "sm" | "md" | "lg";
+  progress?: Record<string, { swipeCount: number; total: number }>;
 }
 
-export function MemberAvatars({ members, showNames = false, size = "md" }: MemberAvatarsProps) {
+export function MemberAvatars({ members, showNames = false, size = "md", progress }: MemberAvatarsProps) {
   const sizeClasses = {
     sm: "h-8 w-8 text-xs",
     md: "h-10 w-10 text-sm",
@@ -65,20 +66,28 @@ export function MemberAvatars({ members, showNames = false, size = "md" }: Membe
 
   return (
     <div className="flex -space-x-2">
-      {members.map((member, index) => (
-        <div key={member.id} className="relative">
-          <Avatar className={`${sizeClasses[size]} border-2 border-background`}>
-            <AvatarFallback className={`${getColorForMember(index)} text-white font-medium`}>
-              {getInitials(member.name)}
-            </AvatarFallback>
-          </Avatar>
-          {member.isHost && (
-            <div className="absolute -top-1 -right-1 w-4 h-4 bg-yellow-400 rounded-full flex items-center justify-center">
-              <Crown className="w-2.5 h-2.5 text-yellow-900" />
-            </div>
-          )}
-        </div>
-      ))}
+      {members.map((member, index) => {
+        const memberProg = progress?.[member.id];
+        return (
+          <div key={member.id} className="relative" title={memberProg ? `${member.name}: ${memberProg.swipeCount}/${memberProg.total}` : member.name}>
+            <Avatar className={`${sizeClasses[size]} border-2 border-background`}>
+              <AvatarFallback className={`${getColorForMember(index)} text-white font-medium`}>
+                {getInitials(member.name)}
+              </AvatarFallback>
+            </Avatar>
+            {member.isHost && (
+              <div className="absolute -top-1 -right-1 w-4 h-4 bg-yellow-400 rounded-full flex items-center justify-center">
+                <Crown className="w-2.5 h-2.5 text-yellow-900" />
+              </div>
+            )}
+            {memberProg && (
+              <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-background rounded-full px-1 border text-[8px] font-bold text-muted-foreground whitespace-nowrap">
+                {memberProg.swipeCount}/{memberProg.total}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
