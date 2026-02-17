@@ -4,7 +4,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Home, Flame, Loader2, Star, MapPin, ExternalLink, Heart, PartyPopper, Trophy, Sparkles, RefreshCw, CalendarPlus, Phone, Check, Truck, Share2, Pizza, Zap, Settings2 } from "lucide-react";
+import { Home, Flame, Loader2, Star, MapPin, ExternalLink, Heart, PartyPopper, Trophy, Sparkles, RefreshCw, CalendarPlus, Phone, Check, Truck, Share2, Pizza, Zap, Settings2, MoreHorizontal } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { motion } from "framer-motion";
 import { useState, useCallback, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -295,7 +301,7 @@ export default function MatchesPage() {
                         {restaurant.description}
                       </p>
 
-                      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                      <div className="flex items-center gap-2">
                         <Button
                           size="sm"
                           className="bg-gradient-to-r from-primary to-orange-500 text-xs"
@@ -315,76 +321,63 @@ export default function MatchesPage() {
                           size="sm"
                           variant="outline"
                           className="text-xs"
-                          data-testid={`button-doordash-${restaurant.id}`}
-                          onClick={() => {
-                            const query = encodeURIComponent(restaurant.name);
-                            window.open(`https://www.doordash.com/search/store/${query}/`, '_blank');
-                            completeSession(restaurant.id, "doordash");
-                          }}
-                        >
-                          <Truck className="w-3 h-3 mr-1" />
-                          DoorDash
-                        </Button>
-                        {restaurant.yelpUrl && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-xs"
-                            data-testid={`button-reserve-${restaurant.id}`}
-                            onClick={() => {
-                              window.open(restaurant.yelpUrl, '_blank');
-                              completeSession(restaurant.id, "reserve");
-                            }}
-                          >
-                            <Phone className="w-3 h-3 mr-1" />
-                            Reserve
-                          </Button>
-                        )}
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="text-xs"
-                          data-testid={`button-calendar-${restaurant.id}`}
-                          onClick={() => {
-                            window.open(generateCalendarUrl(restaurant, group.name), '_blank');
-                          }}
-                        >
-                          <CalendarPlus className="w-3 h-3 mr-1" />
-                          Calendar
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="text-xs"
                           data-testid={`button-share-${restaurant.id}`}
                           onClick={() => handleShare(restaurant)}
                         >
                           <Share2 className="w-3 h-3 mr-1" />
                           Share
                         </Button>
-                        <Button
-                          size="sm"
-                          variant={visitedRestaurantId === restaurant.id ? "default" : "outline"}
-                          className="text-xs"
-                          data-testid={`button-visited-${restaurant.id}`}
-                          onClick={() => {
-                            setVisitedRestaurantId(restaurant.id);
-                            completeSession(restaurant.id, "visited");
-                            toast({
-                              title: "Session wrapped up!",
-                              description: `Marked "${restaurant.name}" as visited. Start a new session anytime!`
-                            });
-                          }}
-                        >
-                          {visitedRestaurantId === restaurant.id ? (
-                            <>
-                              <Check className="w-3 h-3 mr-1" />
-                              Going here!
-                            </>
-                          ) : (
-                            "We went here"
-                          )}
-                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button size="sm" variant="outline" className="text-xs px-2">
+                              <MoreHorizontal className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() => {
+                                const query = encodeURIComponent(restaurant.name);
+                                window.open(`https://www.doordash.com/search/store/${query}/`, '_blank');
+                                completeSession(restaurant.id, "doordash");
+                              }}
+                            >
+                              <Truck className="w-4 h-4 mr-2" />
+                              DoorDash
+                            </DropdownMenuItem>
+                            {restaurant.yelpUrl && (
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  window.open(restaurant.yelpUrl, '_blank');
+                                  completeSession(restaurant.id, "reserve");
+                                }}
+                              >
+                                <Phone className="w-4 h-4 mr-2" />
+                                Reserve
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem
+                              onClick={() => {
+                                window.open(generateCalendarUrl(restaurant, group.name), '_blank');
+                              }}
+                            >
+                              <CalendarPlus className="w-4 h-4 mr-2" />
+                              Add to Calendar
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setVisitedRestaurantId(restaurant.id);
+                                completeSession(restaurant.id, "visited");
+                                toast({
+                                  title: "Session wrapped up!",
+                                  description: `Marked "${restaurant.name}" as visited. Start a new session anytime!`
+                                });
+                              }}
+                            >
+                              <Check className="w-4 h-4 mr-2" />
+                              {visitedRestaurantId === restaurant.id ? "Going here!" : "We went here"}
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </CardContent>
                   </div>
