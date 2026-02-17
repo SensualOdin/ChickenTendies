@@ -637,9 +637,12 @@ export default function SwipePage() {
               {group.preferences.zipCode && (
                 <span className="flex items-center gap-1">
                   <MapPin className="w-3 h-3" />
-                  {group.preferences.zipCode.length > 20
-                    ? group.preferences.zipCode.substring(0, 20) + "..."
-                    : group.preferences.zipCode}
+                  {(() => {
+                    const loc = group.preferences.zipCode;
+                    // Hide raw coordinates - show friendly label instead
+                    if (/^-?\d+\.\d+,\s*-?\d+\.\d+$/.test(loc)) return "Near you";
+                    return loc.length > 20 ? loc.substring(0, 20) + "..." : loc;
+                  })()}
                 </span>
               )}
               {group.preferences.radius && (

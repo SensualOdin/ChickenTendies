@@ -182,14 +182,21 @@ export default function Preferences() {
         // Try to get a readable address using reverse geocoding
         try {
           const response = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`
+            `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`,
+            { headers: { "Accept": "application/json" } }
           );
+          if (!response.ok) throw new Error("Geocoding failed");
           const data = await response.json();
           const address = data.address;
-          const locationName = address.neighbourhood || address.suburb || address.city || address.town || "Current Location";
-          form.setValue("zipCode", `${locationName}, ${address.postcode || ""}`);
+          if (address) {
+            const locationName = address.neighbourhood || address.suburb || address.city || address.town || "Current Location";
+            const postcode = address.postcode ? `, ${address.postcode}` : "";
+            form.setValue("zipCode", `${locationName}${postcode}`);
+          } else {
+            form.setValue("zipCode", "Current Location");
+          }
         } catch {
-          form.setValue("zipCode", `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
+          form.setValue("zipCode", "Current Location");
         }
 
         setUsingGPS(true);
