@@ -22,6 +22,10 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { isNative, isIOS } from "@/lib/platform";
+import { StatusBar, Style } from "@capacitor/status-bar";
+import { App as CapApp, URLOpenListenerEvent } from "@capacitor/app";
+import { Keyboard } from "@capacitor/keyboard";
 
 function PendingCrewJoinRedirect() {
   const [location, setLocation] = useLocation();
@@ -112,6 +116,40 @@ function Router() {
 }
 
 function App() {
+  useEffect(() => {
+    if (!isNative()) return;
+
+    // Status bar: transparent overlay so our gradient header shows through
+    StatusBar.setStyle({ style: Style.Light });
+    if (!isIOS()) {
+      StatusBar.setBackgroundColor({ color: "#00000000" });
+      StatusBar.setOverlaysWebView({ overlay: true });
+    }
+
+    // Deep links: handle crew invite URLs when app is already open
+    const deepLinkListener = CapApp.addListener("appUrlOpen", (event: URLOpenListenerEvent) => {
+      const url = new URL(event.url);
+      const path = url.pathname || url.href.replace(/^[^/]*:\/\//, "/");
+      if (path && path !== "/") {
+        window.history.pushState(null, "", path);
+        window.dispatchEvent(new PopStateEvent("popstate"));
+      }
+    });
+
+    // Keyboard: track height so components can adjust
+    Keyboard.addListener("keyboardWillShow", (info) => {
+      document.body.style.setProperty("--keyboard-height", `${info.keyboardHeight}px`);
+    });
+    Keyboard.addListener("keyboardWillHide", () => {
+      document.body.style.setProperty("--keyboard-height", "0px");
+    });
+
+    return () => {
+      deepLinkListener.then(l => l.remove());
+      Keyboard.removeAllListeners();
+    };
+  }, []);
+
   return (
     <ThemeProvider defaultTheme="system">
       <QueryClientProvider client={queryClient}>

@@ -23,6 +23,9 @@ const config: CapacitorConfig = {
       presentationOptions: ["badge", "sound", "alert"],
     },
   },
+  // Custom URL scheme for deep links (chickentinders://crew/join/ABC123)
+  // Universal Links require apple-app-site-association hosted on your domain
+  appUrlScheme: "chickentinders",
 };
 
 export default config;
