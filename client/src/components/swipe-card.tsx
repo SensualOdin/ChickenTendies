@@ -147,12 +147,17 @@ export function SwipeCard({ restaurant, onSwipe, isTop, visitedBefore = false }:
         </motion.div>
 
         {visitedBefore && (
-          <div className="absolute top-4 right-4 z-10">
-            <Badge className="bg-purple-500/90 backdrop-blur-sm text-white border-0 font-semibold shadow-lg" data-testid="badge-visited-before">
-              <History className="w-3 h-3 mr-1" />
-              Been here before
+          <motion.div
+            className="absolute top-14 left-4 z-10"
+            initial={{ x: -20, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            transition={{ delay: 0.3 }}
+          >
+            <Badge className="bg-purple-600/95 backdrop-blur-sm text-white border-0 font-bold shadow-lg text-sm px-3 py-1.5" data-testid="badge-visited-before">
+              <History className="w-4 h-4 mr-1.5" />
+              You've been here!
             </Badge>
-          </div>
+          </motion.div>
         )}
 
         <div className="absolute bottom-0 left-0 right-0 p-4 sm:p-6 text-white">
