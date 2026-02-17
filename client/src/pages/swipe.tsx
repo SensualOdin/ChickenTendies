@@ -34,6 +34,7 @@ export default function SwipePage() {
   const [visitedRestaurantIds, setVisitedRestaurantIds] = useState<Set<string>>(new Set());
   const [showNotificationPrompt, setShowNotificationPrompt] = useState(true);
   const [wsConnected, setWsConnected] = useState(true);
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [memberProgress, setMemberProgress] = useState<Record<string, { swipeCount: number; total: number }>>({});
 
   const memberId = localStorage.getItem("grubmatch-member-id");
@@ -554,6 +555,15 @@ export default function SwipePage() {
       </AnimatePresence>
 
       <header className="flex items-center justify-between p-4 md:p-6 shrink-0">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => setShowExitConfirm(true)}
+          className="text-muted-foreground"
+          data-testid="button-exit-swipe"
+        >
+          <ArrowLeft className="w-5 h-5" />
+        </Button>
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-orange-500 flex items-center justify-center">
             <Flame className="w-4 h-4 text-primary-foreground" />
@@ -902,6 +912,45 @@ export default function SwipePage() {
           )}
         </AnimatePresence>
       </main>
+
+      <AnimatePresence>
+        {showExitConfirm && (
+          <motion.div
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowExitConfirm(false)}
+          >
+            <motion.div
+              className="bg-card rounded-xl p-6 max-w-sm w-full shadow-2xl border"
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-lg font-bold mb-2">Leave swiping?</h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                Your swipes so far are saved. You can come back to keep swiping.
+              </p>
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setShowExitConfirm(false)}
+                >
+                  Keep Swiping
+                </Button>
+                <Link href={`/group/${params.id}`}>
+                  <Button variant="default">
+                    Leave
+                  </Button>
+                </Link>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
