@@ -4,6 +4,8 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Star, MapPin, X, Leaf, Flame, Sparkles, Phone, Calendar, Truck, ShoppingBag, Heart, Coffee, Pizza, Utensils, History, ExternalLink } from "lucide-react";
 import type { Restaurant } from "@shared/schema";
+import { isNative } from "@/lib/platform";
+import { Haptics, ImpactStyle, NotificationType } from "@capacitor/haptics";
 
 export type SwipeAction = "like" | "dislike" | "superlike";
 
@@ -49,12 +51,21 @@ export function SwipeCard({ restaurant, onSwipe, isTop, visitedBefore = false }:
   const handleDragEnd = (_: unknown, info: PanInfo) => {
     if (info.offset.y < -100) {
       setExitY(-400);
+      if (isNative()) {
+        Haptics.notification({ type: NotificationType.Success });
+      }
       onSwipe("superlike");
     } else if (info.offset.x > 100) {
       setExitX(300);
+      if (isNative()) {
+        Haptics.impact({ style: ImpactStyle.Medium });
+      }
       onSwipe("like");
     } else if (info.offset.x < -100) {
       setExitX(-300);
+      if (isNative()) {
+        Haptics.impact({ style: ImpactStyle.Light });
+      }
       onSwipe("dislike");
     }
   };
