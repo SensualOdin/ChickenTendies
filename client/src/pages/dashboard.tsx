@@ -26,6 +26,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import logoImage from "@assets/460272BC-3FCC-4927-8C2E-4C236353E7AB_1768880143398.png";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { CrewWalkthrough } from "@/components/crew-walkthrough";
 
 interface Friend {
   id: string;
@@ -156,7 +157,7 @@ export default function Dashboard() {
   const startSessionMutation = useMutation({
     mutationFn: async (crew: Crew) => {
       await apiRequest("POST", `/api/crews/${crew.id}/sessions`, {});
-      
+
       const authHeaders = await getAuthHeaders();
       const response = await fetch(`${API_BASE}/api/groups/${crew.id}/join-session`, {
         method: "POST",
@@ -280,6 +281,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-background safe-top safe-x">
+      <CrewWalkthrough />
       <header className="flex items-center justify-between p-4 md:p-6 border-b gap-2">
         <Link href="/" className="flex items-center gap-2 shrink-0">
           <img src={logoImage} alt="ChickenTinders" className="w-10 h-10 rounded-xl object-cover shadow-lg shadow-primary/30" />
@@ -596,9 +598,9 @@ export default function Dashboard() {
                       </Button>
                     </CardHeader>
                     <CardContent className="flex gap-2 flex-wrap">
-                      <Button 
-                        size="sm" 
-                        className="flex-1" 
+                      <Button
+                        size="sm"
+                        className="flex-1"
                         data-testid={`button-start-session-${crew.id}`}
                         onClick={() => startSessionMutation.mutate(crew)}
                         disabled={startSessionMutation.isPending}
@@ -607,7 +609,7 @@ export default function Dashboard() {
                         {startSessionMutation.isPending ? "Starting..." : "New Session"}
                       </Button>
                       {crew.hasActiveSession && (
-                        <Button 
+                        <Button
                           size="sm"
                           variant="outline"
                           className="flex-1"
