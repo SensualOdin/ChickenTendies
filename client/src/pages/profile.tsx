@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -12,8 +12,8 @@ import { Label } from "@/components/ui/label";
 import { useTheme } from "@/lib/theme-provider";
 import { useToast } from "@/hooks/use-toast";
 import { motion } from "framer-motion";
-import { 
-  Trophy, Sparkles, Users, Flame, Award, 
+import {
+  Trophy, Sparkles, Users, Flame, Award,
   MapPin, Utensils, Heart, ArrowLeft, Star,
   Lock, Pencil, Check, X, Sun, Moon, LogOut, Settings
 } from "lucide-react";
@@ -71,6 +71,36 @@ export default function ProfilePage() {
   const { data: availableAchievements = [] } = useQuery<AchievementDefinition[]>({
     queryKey: ["/api/achievements/available"],
   });
+
+  // Celebrate newly unlocked achievements
+  useEffect(() => {
+    if (achievements.length === 0 || availableAchievements.length === 0) return;
+
+    const seenKey = "chickentinders-seen-achievements";
+    const seenRaw = localStorage.getItem(seenKey);
+    const seenSet = seenRaw ? new Set(JSON.parse(seenRaw) as string[]) : new Set<string>();
+
+    const newAchievements = achievements.filter(a => !seenSet.has(a.achievementType));
+
+    if (newAchievements.length > 0) {
+      // Save all as seen
+      const allTypes = achievements.map(a => a.achievementType);
+      localStorage.setItem(seenKey, JSON.stringify(allTypes));
+
+      // Show toast for each new one (with staggered delay)
+      newAchievements.forEach((achievement, index) => {
+        const def = availableAchievements.find(d => d.type === achievement.achievementType);
+        if (!def) return;
+
+        setTimeout(() => {
+          toast({
+            title: `Achievement Unlocked!`,
+            description: `${def.name} — ${def.description}`,
+          });
+        }, index * 1500);
+      });
+    }
+  }, [achievements, availableAchievements, toast]);
 
   const updateProfileMutation = useMutation({
     mutationFn: async (data: { firstName: string; lastName: string }) => {
@@ -286,20 +316,20 @@ export default function ProfilePage() {
                 {availableAchievements.map((def) => {
                   const isUnlocked = unlockedTypes.has(def.type);
                   const IconComponent = iconMap[def.icon] || Trophy;
-                  
+
                   return (
                     <motion.div
                       key={def.type}
                       className={`flex items-center gap-4 p-4 rounded-lg border ${
-                        isUnlocked 
-                          ? "bg-gradient-to-r from-yellow-500/10 to-orange-500/10 border-yellow-500/30" 
+                        isUnlocked
+                          ? "bg-gradient-to-r from-yellow-500/10 to-orange-500/10 border-yellow-500/30"
                           : "bg-muted/30 opacity-60"
                       }`}
                       whileHover={{ scale: isUnlocked ? 1.02 : 1 }}
                     >
                       <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                        isUnlocked 
-                          ? "bg-gradient-to-br from-yellow-400 to-orange-500" 
+                        isUnlocked
+                          ? "bg-gradient-to-br from-yellow-400 to-orange-500"
                           : "bg-muted"
                       }`}>
                         {isUnlocked ? (
