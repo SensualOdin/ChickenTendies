@@ -5,6 +5,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { openUrl } from "@/lib/open-url";
+import { isNative } from "@/lib/platform";
+import { Share } from "@capacitor/share";
 import { Home, Flame, Loader2, Star, MapPin, ExternalLink, Heart, PartyPopper, Trophy, Sparkles, RefreshCw, CalendarPlus, Phone, Check, Truck, Share2, Pizza, Zap, Settings2, MoreHorizontal } from "lucide-react";
 import {
   DropdownMenu,
@@ -145,7 +147,19 @@ export default function MatchesPage() {
 
     let shareMethod = "unknown";
 
-    if (navigator.share) {
+    if (isNative()) {
+      shareMethod = "native_share";
+      try {
+        await Share.share({
+          title: `${restaurant.name} - ChickenTinders Match!`,
+          text: shareText,
+          url: shareUrl,
+          dialogTitle: "Share your match",
+        });
+      } catch {
+        // User cancelled share
+      }
+    } else if (navigator.share) {
       shareMethod = "native_share";
       try {
         await navigator.share({
@@ -153,7 +167,7 @@ export default function MatchesPage() {
           text: shareText,
           url: shareUrl,
         });
-      } catch (err) {
+      } catch {
       }
     } else {
       shareMethod = "clipboard";
