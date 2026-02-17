@@ -11,7 +11,7 @@ import { Slider } from "@/components/ui/slider";
 import { groupPreferencesSchema, type GroupPreferences, type Group, dietaryRestrictions, cuisineTypes, priceRanges } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Flame, Loader2, MapPin, Ruler, UtensilsCrossed, DollarSign, Leaf, Sparkles, Navigation, Star, Target } from "lucide-react";
+import { ArrowLeft, ChevronDown, Flame, Loader2, MapPin, Ruler, UtensilsCrossed, DollarSign, Leaf, Sparkles, Navigation, Star, Target } from "lucide-react";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { useState, useEffect, useCallback } from "react";
@@ -79,6 +79,27 @@ const SESSION_THEMES: SessionTheme[] = [
   },
 ];
 
+function SectionHeader({
+  label, icon, isOpen, onToggle, badge
+}: {
+  label: string; icon: React.ReactNode; isOpen: boolean; onToggle: () => void; badge?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="flex items-center justify-between w-full text-sm font-semibold py-1"
+    >
+      <div className="flex items-center gap-2">
+        {icon}
+        {label}
+        {badge && <span className="text-muted-foreground font-normal text-xs">({badge})</span>}
+      </div>
+      <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${isOpen ? "rotate-180" : ""}`} />
+    </button>
+  );
+}
+
 export default function Preferences() {
   const params = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
@@ -86,6 +107,16 @@ export default function Preferences() {
   const [isLocating, setIsLocating] = useState(false);
   const [usingGPS, setUsingGPS] = useState(false);
   const [selectedTheme, setSelectedTheme] = useState<string | null>(null);
+  const [openSections, setOpenSections] = useState<Set<string>>(new Set(["vibes", "location"]));
+
+  const toggleSection = (section: string) => {
+    setOpenSections(prev => {
+      const next = new Set(prev);
+      if (next.has(section)) next.delete(section);
+      else next.add(section);
+      return next;
+    });
+  };
 
   const { data: group, isLoading } = useQuery<Group>({
     queryKey: ["/api/groups", params.id],
@@ -223,6 +254,7 @@ export default function Preferences() {
       form.setValue("cuisineTypes", []);
       form.setValue("dietaryRestrictions", []);
       form.setValue("trySomethingNew", false);
+      setOpenSections(new Set(["vibes", "location"]));
     } else {
       setSelectedTheme(theme.id);
       const p = theme.presets;
@@ -231,6 +263,12 @@ export default function Preferences() {
       if (p.cuisineTypes) form.setValue("cuisineTypes", p.cuisineTypes);
       if (p.dietaryRestrictions) form.setValue("dietaryRestrictions", p.dietaryRestrictions);
       if (p.trySomethingNew !== undefined) form.setValue("trySomethingNew", p.trySomethingNew);
+      const newOpenSections = new Set(["vibes", "location"]);
+      if (p.minRating !== undefined && p.minRating > 0) newOpenSections.add("rating");
+      if (p.priceRange) newOpenSections.add("price");
+      if (p.cuisineTypes) newOpenSections.add("cuisines");
+      if (p.dietaryRestrictions) newOpenSections.add("dietary");
+      setOpenSections(newOpenSections);
     }
   }, [selectedTheme, form]);
 
@@ -421,11 +459,9 @@ export default function Preferences() {
                   </div>
 
                   <div className="space-y-4">
-                    <div className="flex items-center gap-2 text-sm font-semibold">
-                      <Star className="w-4 h-4 text-yellow-500" />
-                      Minimum Rating
-                    </div>
+                    <SectionHeader label="Minimum Rating" icon={<Star className="w-4 h-4 text-yellow-500" />} isOpen={openSections.has("rating")} onToggle={() => toggleSection("rating")} />
 
+                    {openSections.has("rating") && (
                     <FormField
                       control={form.control}
                       name="minRating"
@@ -464,14 +500,13 @@ export default function Preferences() {
                         </FormItem>
                       )}
                     />
+                    )}
                   </div>
 
                   <div className="space-y-4">
-                    <div className="flex items-center gap-2 text-sm font-semibold">
-                      <DollarSign className="w-4 h-4 text-accent" />
-                      Budget Vibes
-                    </div>
+                    <SectionHeader label="Budget Vibes" icon={<DollarSign className="w-4 h-4 text-accent" />} isOpen={openSections.has("price")} onToggle={() => toggleSection("price")} />
 
+                    {openSections.has("price") && (
                     <FormField
                       control={form.control}
                       name="priceRange"
@@ -513,14 +548,13 @@ export default function Preferences() {
                         </FormItem>
                       )}
                     />
+                    )}
                   </div>
 
                   <div className="space-y-4">
-                    <div className="flex items-center gap-2 text-sm font-semibold">
-                      <Leaf className="w-4 h-4 text-accent" />
-                      Dietary Needs
-                    </div>
+                    <SectionHeader label="Dietary Needs" icon={<Leaf className="w-4 h-4 text-accent" />} isOpen={openSections.has("dietary")} onToggle={() => toggleSection("dietary")} />
 
+                    {openSections.has("dietary") && (
                     <FormField
                       control={form.control}
                       name="dietaryRestrictions"
@@ -559,17 +593,14 @@ export default function Preferences() {
                         </FormItem>
                       )}
                     />
+                    )}
                   </div>
 
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 text-sm font-semibold">
-                        <UtensilsCrossed className="w-4 h-4 text-primary" />
-                        Cravings
-                        <span className="text-muted-foreground font-normal text-xs">(or leave blank for all)</span>
-                      </div>
-                    </div>
+                    <SectionHeader label="Cravings" icon={<UtensilsCrossed className="w-4 h-4 text-primary" />} isOpen={openSections.has("cuisines")} onToggle={() => toggleSection("cuisines")} badge="or leave blank for all" />
 
+                    {openSections.has("cuisines") && (
+                    <>
                     <FormField
                       control={form.control}
                       name="trySomethingNew"
@@ -636,6 +667,8 @@ export default function Preferences() {
                         </FormItem>
                       )}
                     />
+                    </>
+                    )}
                   </div>
 
                   <Button
