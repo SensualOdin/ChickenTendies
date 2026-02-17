@@ -1374,6 +1374,22 @@ export function registerSocialRoutes(app: Express): void {
     }
   });
 
+  app.post("/api/push/subscribe-native", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      const { token, platform } = req.body;
+      if (!token || !platform) {
+        return res.status(400).json({ error: "Token and platform required" });
+      }
+      // Store native push token for future FCM/APNs integration
+      console.log(`Native push token registered: user=${userId} platform=${platform} token=${token.substring(0, 20)}...`);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error registering native push token:", error);
+      res.status(500).json({ error: "Failed to register push token" });
+    }
+  });
+
   app.delete("/api/push/subscribe", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = getUserId(req);

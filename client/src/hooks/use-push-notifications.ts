@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "./use-auth";
 import { apiRequest } from "@/lib/queryClient";
+import { isNative } from "@/lib/platform";
+import { PushNotifications } from "@capacitor/push-notifications";
 
 type PermissionState = "default" | "granted" | "denied" | "unsupported";
 
@@ -22,9 +24,11 @@ export function usePushNotifications() {
   const [isLoading, setIsLoading] = useState(false);
   const [vapidKey, setVapidKey] = useState<string | null>(null);
 
-  const isPushSupported = typeof window !== "undefined" && 
-    "serviceWorker" in navigator && 
-    "PushManager" in window;
+  const isPushSupported = isNative() || (
+    typeof window !== "undefined" &&
+    "serviceWorker" in navigator &&
+    "PushManager" in window
+  );
 
   useEffect(() => {
     if (!isPushSupported) {
@@ -32,24 +36,78 @@ export function usePushNotifications() {
       return;
     }
 
-    setPermission(Notification.permission as PermissionState);
-
-    fetch("/api/push/vapid-key")
-      .then((res) => res.json())
-      .then((data) => setVapidKey(data.publicKey))
-      .catch(() => {});
-
-    navigator.serviceWorker.ready.then((registration) => {
-      registration.pushManager.getSubscription().then((subscription) => {
-        setIsSubscribed(!!subscription);
+    if (isNative()) {
+      PushNotifications.checkPermissions().then(({ receive }) => {
+        if (receive === "granted") setPermission("granted");
+        else if (receive === "denied") setPermission("denied");
+        else setPermission("default");
       });
-    });
+
+      PushNotifications.addListener("registration", async (token) => {
+        setIsSubscribed(true);
+        try {
+          await apiRequest("POST", "/api/push/subscribe-native", {
+            token: token.value,
+            platform: (await import("@/lib/platform")).getPlatform(),
+          });
+        } catch (err) {
+          console.error("Failed to register native push token:", err);
+        }
+      });
+
+      PushNotifications.addListener("registrationError", (err) => {
+        console.error("Native push registration failed:", err);
+      });
+
+      return () => {
+        PushNotifications.removeAllListeners();
+      };
+    } else {
+      setPermission(Notification.permission as PermissionState);
+
+      fetch("/api/push/vapid-key")
+        .then((res) => res.json())
+        .then((data) => setVapidKey(data.publicKey))
+        .catch(() => {});
+
+      navigator.serviceWorker.ready.then((registration) => {
+        registration.pushManager.getSubscription().then((subscription) => {
+          setIsSubscribed(!!subscription);
+        });
+      });
+    }
   }, [isPushSupported]);
 
   const subscribe = useCallback(async () => {
-    if (!isPushSupported || !isAuthenticated || !vapidKey) return false;
+    if (!isPushSupported || !isAuthenticated) return false;
 
     setIsLoading(true);
+
+    if (isNative()) {
+      try {
+        const permResult = await PushNotifications.requestPermissions();
+        if (permResult.receive === "granted") {
+          setPermission("granted");
+          await PushNotifications.register();
+          setIsLoading(false);
+          return true;
+        } else {
+          setPermission("denied");
+          setIsLoading(false);
+          return false;
+        }
+      } catch (error) {
+        console.error("Native push error:", error);
+        setIsLoading(false);
+        return false;
+      }
+    }
+
+    if (!vapidKey) {
+      setIsLoading(false);
+      return false;
+    }
+
     try {
       const result = await Notification.requestPermission();
       setPermission(result as PermissionState);
@@ -88,6 +146,13 @@ export function usePushNotifications() {
 
     setIsLoading(true);
     try {
+      if (isNative()) {
+        await PushNotifications.removeAllListeners();
+        setIsSubscribed(false);
+        setIsLoading(false);
+        return true;
+      }
+
       const registration = await navigator.serviceWorker.ready;
       const subscription = await registration.pushManager.getSubscription();
 
@@ -129,8 +194,8 @@ export function useGroupPushNotifications({ groupId, memberId }: UseGroupPushNot
   const [isLoading, setIsLoading] = useState(false);
   const [vapidKey, setVapidKey] = useState<string | null>(null);
 
-  const isPushSupported = typeof window !== "undefined" && 
-    "serviceWorker" in navigator && 
+  const isPushSupported = typeof window !== "undefined" &&
+    "serviceWorker" in navigator &&
     "PushManager" in window;
 
   useEffect(() => {
