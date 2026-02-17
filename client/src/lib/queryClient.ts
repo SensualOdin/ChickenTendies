@@ -1,7 +1,12 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 import { supabase } from "./supabase";
+import { isNative } from "./platform";
 
-export const API_BASE = import.meta.env.VITE_API_URL || "";
+// On native, app runs from local files so we need the full backend URL.
+// On web, API calls go to the same origin.
+export const API_BASE = isNative()
+  ? (import.meta.env.VITE_PRODUCTION_API_URL || "https://chickentinders.onrender.com")
+  : (import.meta.env.VITE_API_URL || "");
 
 /** @deprecated CSRF is no longer used — auth is handled via JWT Bearer tokens */
 export function getCsrfToken(): string | null {

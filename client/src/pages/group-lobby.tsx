@@ -10,6 +10,7 @@ import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { apiRequest } from "@/lib/queryClient";
 import { getLeaderToken } from "@/lib/leader-token";
+import { isNative } from "@/lib/platform";
 import type { Group, WSMessage, GroupMember } from "@shared/schema";
 
 export default function GroupLobby() {
@@ -25,7 +26,7 @@ export default function GroupLobby() {
   const memberId = localStorage.getItem("grubmatch-member-id");
   const isHost = group?.members.find((m) => m.id === memberId)?.isHost ?? false;
   const storedLeaderToken = params.id ? getLeaderToken(params.id) : null;
-  
+
   // Check if user has a stored leader token for this group
   useEffect(() => {
     if (storedLeaderToken && !isHost && group) {
@@ -34,23 +35,23 @@ export default function GroupLobby() {
       setHasLeaderToken(false);
     }
   }, [storedLeaderToken, isHost, group]);
-  
+
   // Auto-reclaim leadership on mount if user has leader token but isn't recognized
   useEffect(() => {
     const attemptAutoReclaim = async () => {
       if (!params.id || !storedLeaderToken || isHost || !group || isReclaiming) return;
-      
+
       // Check if user is already in the group
       const isMember = group.members.some(m => m.id === memberId);
       if (isMember) return; // Already in group, just not as host - don't auto-reclaim
-      
+
       setIsReclaiming(true);
       try {
         const response = await apiRequest("POST", `/api/groups/${params.id}/reclaim-leadership`, {
           leaderToken: storedLeaderToken,
           memberName: "Leader"
         });
-        
+
         if (response.ok) {
           const data = await response.json();
           localStorage.setItem("grubmatch-member-id", data.memberId);
@@ -66,7 +67,7 @@ export default function GroupLobby() {
         setIsReclaiming(false);
       }
     };
-    
+
     attemptAutoReclaim();
   }, [params.id, storedLeaderToken, isHost, group, memberId, isReclaiming, toast]);
 
@@ -97,15 +98,18 @@ export default function GroupLobby() {
     let isClosedIntentionally = false;
 
     const connect = () => {
+      const wsBase = isNative()
+        ? "wss://chickentinders.onrender.com"
+        : `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}`;
+
       const apiUrl = import.meta.env.VITE_API_URL || "";
       let wsUrl: string;
-      if (apiUrl) {
+      if (!isNative() && apiUrl) {
         const url = new URL(apiUrl);
         const wsProtocol = url.protocol === "https:" ? "wss:" : "ws:";
         wsUrl = `${wsProtocol}//${url.host}/ws?groupId=${params.id}&memberId=${memberId}`;
       } else {
-        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-        wsUrl = `${protocol}//${window.location.host}/ws?groupId=${params.id}&memberId=${memberId}`;
+        wsUrl = `${wsBase}/ws?groupId=${params.id}&memberId=${memberId}`;
       }
       socket = new WebSocket(wsUrl);
 
@@ -116,7 +120,7 @@ export default function GroupLobby() {
 
       socket.onmessage = (event) => {
         const message: WSMessage = JSON.parse(event.data);
-        
+
         if (message.type === "sync") {
           setGroup(message.group);
         } else if (message.type === "member_joined") {
@@ -169,7 +173,7 @@ export default function GroupLobby() {
 
       socket.onclose = () => {
         if (isClosedIntentionally) return;
-        
+
         if (reconnectAttempts < maxReconnectAttempts) {
           reconnectAttempts++;
           const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
@@ -207,10 +211,10 @@ export default function GroupLobby() {
 
   const shareCode = useCallback(async () => {
     if (!group) return;
-    
+
     const joinUrl = `${window.location.origin}/join?code=${group.code}`;
     const shareMessage = `Swipe right on dinner! Join my party on ChickenTinders: ${joinUrl}`;
-    
+
     if (navigator.share) {
       try {
         await navigator.share({
@@ -256,7 +260,7 @@ export default function GroupLobby() {
       });
     },
   });
-  
+
   const reclaimMutation = useMutation({
     mutationFn: async () => {
       if (!storedLeaderToken) throw new Error("No leader token");
@@ -331,7 +335,7 @@ export default function GroupLobby() {
         >
           <Card className="border-2 overflow-hidden">
             <div className="bg-gradient-to-r from-primary/10 to-orange-500/10 p-6 text-center border-b">
-              <motion.div 
+              <motion.div
                 className="mb-2"
                 animate={{ scale: [1, 1.1, 1] }}
                 transition={{ duration: 2, repeat: Infinity }}
@@ -393,8 +397,8 @@ export default function GroupLobby() {
             </CardHeader>
             <CardContent className="space-y-2">
               {group.members.map((member) => (
-                <div 
-                  key={member.id} 
+                <div
+                  key={member.id}
                   className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
                   data-testid={`member-row-${member.id}`}
                 >
@@ -431,7 +435,7 @@ export default function GroupLobby() {
                 </div>
               ))}
               {group.members.length === 1 && (
-                <motion.p 
+                <motion.p
                   className="text-sm text-muted-foreground mt-4 text-center"
                   animate={{ opacity: [0.5, 1, 0.5] }}
                   transition={{ duration: 2, repeat: Infinity }}
@@ -449,8 +453,8 @@ export default function GroupLobby() {
           transition={{ delay: 0.2 }}
         >
           {isHost ? (
-            <Button 
-              size="lg" 
+            <Button
+              size="lg"
               className="w-full bg-gradient-to-r from-primary to-orange-500 shadow-lg shadow-primary/30"
               onClick={handleContinue}
               disabled={group.members.length < 1}
@@ -462,8 +466,8 @@ export default function GroupLobby() {
             </Button>
           ) : hasLeaderToken ? (
             <div className="space-y-3">
-              <Button 
-                size="lg" 
+              <Button
+                size="lg"
                 className="w-full bg-gradient-to-r from-amber-500 to-orange-500"
                 onClick={() => reclaimMutation.mutate()}
                 disabled={reclaimMutation.isPending}

@@ -9,6 +9,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useGroupPushNotifications } from "@/hooks/use-push-notifications";
 import { useAnalytics } from "@/hooks/use-analytics";
+import { isNative } from "@/lib/platform";
 import { Flame, ChevronRight, PartyPopper, Bell, Timer, Vote, Trophy, BellRing, X, Home, RefreshCw, ArrowLeft, ArrowRight, ArrowUp, Utensils, Heart, Sparkles, Undo2, MapPin } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Group, Restaurant, WSMessage } from "@shared/schema";
@@ -121,15 +122,18 @@ export default function SwipePage() {
     let isClosedIntentionally = false;
 
     const connect = () => {
+      const wsBase = isNative()
+        ? "wss://chickentinders.onrender.com"
+        : `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}`;
+
       const apiUrl = import.meta.env.VITE_API_URL || "";
       let wsUrl: string;
-      if (apiUrl) {
+      if (!isNative() && apiUrl) {
         const url = new URL(apiUrl);
         const wsProtocol = url.protocol === "https:" ? "wss:" : "ws:";
         wsUrl = `${wsProtocol}//${url.host}/ws?groupId=${params.id}&memberId=${memberId}`;
       } else {
-        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-        wsUrl = `${protocol}//${window.location.host}/ws?groupId=${params.id}&memberId=${memberId}`;
+        wsUrl = `${wsBase}/ws?groupId=${params.id}&memberId=${memberId}`;
       }
       socket = new WebSocket(wsUrl);
 
