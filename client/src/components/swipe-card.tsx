@@ -1,8 +1,8 @@
-import { motion, useMotionValue, useTransform, PanInfo } from "framer-motion";
+import { motion, useMotionValue, useTransform, PanInfo, AnimatePresence } from "framer-motion";
 import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Star, MapPin, X, Leaf, Flame, Sparkles, Phone, Calendar, Truck, ShoppingBag, Heart, Coffee, Pizza, Utensils, History } from "lucide-react";
+import { Star, MapPin, X, Leaf, Flame, Sparkles, Phone, Calendar, Truck, ShoppingBag, Heart, Coffee, Pizza, Utensils, History, ExternalLink } from "lucide-react";
 import type { Restaurant } from "@shared/schema";
 
 export type SwipeAction = "like" | "dislike" | "superlike";
@@ -23,6 +23,7 @@ export function SwipeCard({ restaurant, onSwipe, isTop, visitedBefore = false }:
   const opacity = useTransform(x, [-200, -100, 0, 100, 200], [0.5, 1, 1, 1, 0.5]);
 
   const [photoIndex, setPhotoIndex] = useState(0);
+  const [showDetails, setShowDetails] = useState(false);
 
   const allPhotos = restaurant.photos && restaurant.photos.length > 0
     ? restaurant.photos
@@ -235,7 +236,110 @@ export function SwipeCard({ restaurant, onSwipe, isTop, visitedBefore = false }:
           <p className="text-sm text-white/80 line-clamp-2">
             {restaurant.description}
           </p>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setShowDetails(true); }}
+            className="text-xs text-white/60 underline underline-offset-2 mt-1"
+            data-testid="button-details"
+          >
+            Tap for details
+          </button>
         </div>
+
+        <AnimatePresence>
+          {showDetails && (
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 25 }}
+              className="absolute inset-0 z-30 bg-card overflow-y-auto rounded-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-5 space-y-4">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h3 className="text-xl font-bold">{restaurant.name}</h3>
+                    <p className="text-sm text-muted-foreground">{restaurant.cuisine} · {restaurant.priceRange}</p>
+                  </div>
+                  <button
+                    onClick={() => setShowDetails(false)}
+                    className="p-1 rounded-full hover:bg-muted"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {allPhotos.length > 1 && (
+                  <div className="flex gap-2 overflow-x-auto pb-2">
+                    {allPhotos.map((photo, i) => (
+                      <div
+                        key={i}
+                        className="w-24 h-24 rounded-lg bg-cover bg-center shrink-0"
+                        style={{ backgroundImage: `url(${photo})` }}
+                      />
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex items-center gap-4 text-sm">
+                  <div className="flex items-center gap-1">
+                    <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
+                    <span className="font-bold">{(restaurant.combinedRating ?? restaurant.rating).toFixed(1)}</span>
+                    <span className="text-muted-foreground">({restaurant.reviewCount} reviews)</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <MapPin className="w-4 h-4 text-muted-foreground" />
+                    <span>{restaurant.distance.toFixed(1)} mi</span>
+                  </div>
+                </div>
+
+                {restaurant.googleRating != null && (
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                    <span>Yelp: {restaurant.rating.toFixed(1)}</span>
+                    <span>Google: {restaurant.googleRating.toFixed(1)}</span>
+                  </div>
+                )}
+
+                <p className="text-sm text-muted-foreground">{restaurant.description}</p>
+
+                {restaurant.address && (
+                  <div className="flex items-start gap-2 text-sm">
+                    <MapPin className="w-4 h-4 shrink-0 mt-0.5 text-muted-foreground" />
+                    <span>{restaurant.address}</span>
+                  </div>
+                )}
+
+                {restaurant.phone && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Phone className="w-4 h-4 text-muted-foreground" />
+                    <a href={`tel:${restaurant.phone}`} className="underline">{restaurant.phone}</a>
+                  </div>
+                )}
+
+                {restaurant.yelpUrl && (
+                  <a href={restaurant.yelpUrl} target="_blank" rel="noopener noreferrer" className="block">
+                    <button
+                      type="button"
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm border rounded-lg hover:bg-muted transition-colors"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                      View on Yelp
+                    </button>
+                  </a>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setShowDetails(false)}
+                  className="w-full px-4 py-2.5 text-sm font-medium text-white rounded-lg bg-gradient-to-r from-primary to-orange-500"
+                >
+                  Back to Swiping
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </Card>
     </motion.div>
   );
