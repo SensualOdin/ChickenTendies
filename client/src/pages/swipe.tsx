@@ -9,7 +9,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useGroupPushNotifications } from "@/hooks/use-push-notifications";
 import { useAnalytics } from "@/hooks/use-analytics";
-import { Flame, ChevronRight, PartyPopper, Bell, Timer, Vote, Trophy, BellRing, X, Home, RefreshCw, ArrowLeft, ArrowRight, ArrowUp, Utensils, Heart, Sparkles, Undo2 } from "lucide-react";
+import { Flame, ChevronRight, PartyPopper, Bell, Timer, Vote, Trophy, BellRing, X, Home, RefreshCw, ArrowLeft, ArrowRight, ArrowUp, Utensils, Heart, Sparkles, Undo2, MapPin } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Group, Restaurant, WSMessage } from "@shared/schema";
 import confetti from "canvas-confetti";
@@ -36,6 +36,7 @@ export default function SwipePage() {
   const [wsConnected, setWsConnected] = useState(true);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [memberProgress, setMemberProgress] = useState<Record<string, { swipeCount: number; total: number }>>({});
+  const [showPrefs, setShowPrefs] = useState(true);
 
   const memberId = localStorage.getItem("grubmatch-member-id");
   const { trackSwipe, flushNow } = useAnalytics(params.id, memberId || undefined);
@@ -622,6 +623,47 @@ export default function SwipePage() {
               </CardContent>
             </Card>
           </Link>
+        </motion.div>
+      )}
+
+      {showPrefs && group?.preferences && !isComplete && currentIndex < 3 && (
+        <motion.div
+          className="px-4 md:px-6 shrink-0"
+          initial={{ y: -20, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+        >
+          <div className="flex items-center justify-between gap-2 py-2 px-3 rounded-lg bg-muted/50 border text-xs text-muted-foreground">
+            <div className="flex items-center gap-3 flex-wrap">
+              {group.preferences.zipCode && (
+                <span className="flex items-center gap-1">
+                  <MapPin className="w-3 h-3" />
+                  {group.preferences.zipCode.length > 20
+                    ? group.preferences.zipCode.substring(0, 20) + "..."
+                    : group.preferences.zipCode}
+                </span>
+              )}
+              {group.preferences.radius && (
+                <span>{group.preferences.radius} mi</span>
+              )}
+              {group.preferences.priceRange && group.preferences.priceRange.length > 0 && (
+                <span>{group.preferences.priceRange.join(" ")}</span>
+              )}
+              {group.preferences.minRating > 0 && (
+                <span>{group.preferences.minRating}+ stars</span>
+              )}
+              {group.preferences.cuisineTypes && group.preferences.cuisineTypes.length > 0 && (
+                <span>{group.preferences.cuisineTypes.slice(0, 3).join(", ")}{group.preferences.cuisineTypes.length > 3 ? "..." : ""}</span>
+              )}
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-5 w-5 shrink-0"
+              onClick={() => setShowPrefs(false)}
+            >
+              <X className="w-3 h-3" />
+            </Button>
+          </div>
         </motion.div>
       )}
 
