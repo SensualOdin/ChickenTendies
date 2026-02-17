@@ -15,6 +15,8 @@ import { ArrowLeft, ChevronDown, Flame, Loader2, MapPin, Ruler, UtensilsCrossed,
 import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { useState, useEffect, useCallback } from "react";
+import { isNative } from "@/lib/platform";
+import { Geolocation } from "@capacitor/geolocation";
 
 interface SessionTheme {
   id: string;
@@ -28,7 +30,7 @@ const SESSION_THEMES: SessionTheme[] = [
   {
     id: "date-night",
     name: "Date Night",
-    emoji: "🌙",
+    emoji: "\u{1F319}",
     description: "Upscale & romantic vibes",
     presets: {
       priceRange: ["$$$", "$$$$"],
@@ -39,7 +41,7 @@ const SESSION_THEMES: SessionTheme[] = [
   {
     id: "budget-bites",
     name: "Budget Bites",
-    emoji: "💰",
+    emoji: "\u{1F4B0}",
     description: "Great eats, easy on the wallet",
     presets: {
       priceRange: ["$", "$$"],
@@ -49,7 +51,7 @@ const SESSION_THEMES: SessionTheme[] = [
   {
     id: "adventure-mode",
     name: "Adventure",
-    emoji: "🌍",
+    emoji: "\u{1F30D}",
     description: "Try something totally new",
     presets: {
       trySomethingNew: true,
@@ -60,7 +62,7 @@ const SESSION_THEMES: SessionTheme[] = [
   {
     id: "casual-hangout",
     name: "Casual Hangout",
-    emoji: "🍔",
+    emoji: "\u{1F354}",
     description: "Chill spots, good times",
     presets: {
       priceRange: ["$", "$$"],
@@ -70,7 +72,7 @@ const SESSION_THEMES: SessionTheme[] = [
   {
     id: "healthy-clean",
     name: "Healthy",
-    emoji: "🥗",
+    emoji: "\u{1F957}",
     description: "Light & clean eating",
     presets: {
       dietaryRestrictions: ["vegetarian"],
@@ -162,60 +164,80 @@ export default function Preferences() {
     }
   }, [group?.preferences, form]);
 
-  const handleFindMe = () => {
-    if (!navigator.geolocation) {
-      toast({
-        title: "GPS not available",
-        description: "Your browser doesn't support location services.",
-        variant: "destructive",
-      });
-      return;
-    }
-
+  const handleFindMe = async () => {
     setIsLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const { latitude, longitude } = position.coords;
-        form.setValue("latitude", latitude);
-        form.setValue("longitude", longitude);
 
-        // Try to get a readable address using reverse geocoding
-        try {
-          const response = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`,
-            { headers: { "Accept": "application/json" } }
-          );
-          if (!response.ok) throw new Error("Geocoding failed");
-          const data = await response.json();
-          const address = data.address;
-          if (address) {
-            const locationName = address.neighbourhood || address.suburb || address.city || address.town || "Current Location";
-            const postcode = address.postcode ? `, ${address.postcode}` : "";
-            form.setValue("zipCode", `${locationName}${postcode}`);
-          } else {
-            form.setValue("zipCode", "Current Location");
-          }
-        } catch {
-          form.setValue("zipCode", "Current Location");
+    try {
+      let latitude: number;
+      let longitude: number;
+
+      if (isNative()) {
+        const position = await Geolocation.getCurrentPosition({
+          enableHighAccuracy: true,
+          timeout: 10000,
+        });
+        latitude = position.coords.latitude;
+        longitude = position.coords.longitude;
+      } else {
+        if (!navigator.geolocation) {
+          toast({
+            title: "GPS not available",
+            description: "Your browser doesn't support location services.",
+            variant: "destructive",
+          });
+          setIsLocating(false);
+          return;
         }
 
-        setUsingGPS(true);
-        setIsLocating(false);
-        toast({
-          title: "Location found!",
-          description: "We'll search for restaurants near you.",
+        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, {
+            enableHighAccuracy: true,
+            timeout: 10000,
+          });
         });
-      },
-      (error) => {
-        setIsLocating(false);
-        toast({
-          title: "Couldn't get location",
-          description: error.code === 1 ? "Please allow location access in your browser." : "Try entering your address manually.",
-          variant: "destructive",
-        });
-      },
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
+        latitude = position.coords.latitude;
+        longitude = position.coords.longitude;
+      }
+
+      form.setValue("latitude", latitude);
+      form.setValue("longitude", longitude);
+
+      try {
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`,
+          { headers: { "Accept": "application/json" } }
+        );
+        if (!response.ok) throw new Error("Geocoding failed");
+        const data = await response.json();
+        const address = data.address;
+        if (address) {
+          const locationName = address.neighbourhood || address.suburb || address.city || address.town || "Current Location";
+          const postcode = address.postcode ? `, ${address.postcode}` : "";
+          form.setValue("zipCode", `${locationName}${postcode}`);
+        } else {
+          form.setValue("zipCode", "Current Location");
+        }
+      } catch {
+        form.setValue("zipCode", "Current Location");
+      }
+
+      setUsingGPS(true);
+      setIsLocating(false);
+      toast({
+        title: "Location found!",
+        description: "We'll search for restaurants near you.",
+      });
+    } catch (error: any) {
+      setIsLocating(false);
+      const message = error?.code === 1 || error?.message?.includes("denied")
+        ? "Please allow location access in your device settings."
+        : "Try entering your address manually.";
+      toast({
+        title: "Couldn't get location",
+        description: message,
+        variant: "destructive",
+      });
+    }
   };
 
   const clearGPS = () => {
