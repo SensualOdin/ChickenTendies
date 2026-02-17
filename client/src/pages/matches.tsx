@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { openUrl } from "@/lib/open-url";
 import { Home, Flame, Loader2, Star, MapPin, ExternalLink, Heart, PartyPopper, Trophy, Sparkles, RefreshCw, CalendarPlus, Phone, Check, Truck, Share2, Pizza, Zap, Settings2, MoreHorizontal } from "lucide-react";
 import {
   DropdownMenu,
@@ -310,7 +311,7 @@ export default function MatchesPage() {
                             const destination = restaurant.latitude && restaurant.longitude
                               ? `${restaurant.latitude},${restaurant.longitude}`
                               : encodeURIComponent(restaurant.address);
-                            window.open(`https://www.google.com/maps/dir/?api=1&destination=${destination}`, '_blank');
+                            openUrl(`https://www.google.com/maps/dir/?api=1&destination=${destination}`);
                             completeSession(restaurant.id, "directions");
                           }}
                         >
@@ -337,7 +338,7 @@ export default function MatchesPage() {
                             <DropdownMenuItem
                               onClick={() => {
                                 const query = encodeURIComponent(restaurant.name);
-                                window.open(`https://www.doordash.com/search/store/${query}/`, '_blank');
+                                openUrl(`https://www.doordash.com/search/store/${query}/`);
                                 completeSession(restaurant.id, "doordash");
                               }}
                             >
@@ -347,7 +348,7 @@ export default function MatchesPage() {
                             {restaurant.yelpUrl && (
                               <DropdownMenuItem
                                 onClick={() => {
-                                  window.open(restaurant.yelpUrl, '_blank');
+                                  openUrl(restaurant.yelpUrl!);
                                   completeSession(restaurant.id, "reserve");
                                 }}
                               >
@@ -357,7 +358,7 @@ export default function MatchesPage() {
                             )}
                             <DropdownMenuItem
                               onClick={() => {
-                                window.open(generateCalendarUrl(restaurant, group.name), '_blank');
+                                openUrl(generateCalendarUrl(restaurant, group.name));
                               }}
                             >
                               <CalendarPlus className="w-4 h-4 mr-2" />

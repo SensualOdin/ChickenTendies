@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Star, MapPin, X, Leaf, Flame, Sparkles, Phone, Calendar, Truck, ShoppingBag, Heart, Coffee, Pizza, Utensils, History, ExternalLink } from "lucide-react";
+import { openUrl } from "@/lib/open-url";
 import type { Restaurant } from "@shared/schema";
 import { isNative } from "@/lib/platform";
 import { Haptics, ImpactStyle, NotificationType } from "@capacitor/haptics";
@@ -334,15 +335,14 @@ export function SwipeCard({ restaurant, onSwipe, isTop, visitedBefore = false }:
                 )}
 
                 {restaurant.yelpUrl && (
-                  <a href={restaurant.yelpUrl} target="_blank" rel="noopener noreferrer" className="block">
-                    <button
-                      type="button"
-                      className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm border rounded-lg hover:bg-muted transition-colors"
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                      View on Yelp
-                    </button>
-                  </a>
+                  <button
+                    type="button"
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm border rounded-lg hover:bg-muted transition-colors"
+                    onClick={() => openUrl(restaurant.yelpUrl!)}
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    View on Yelp
+                  </button>
                 )}
 
                 <button
