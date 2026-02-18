@@ -11,21 +11,15 @@
 <body>
   <p>Signing you in...</p>
   <script>
-    // After OAuth, Supabase redirects here with tokens in the URL hash.
-    // Redirect to the native app via deep link so it can pick up the session.
-    var hash = window.location.hash;
-    if (hash && hash.includes('access_token')) {
-      window.location.href = 'chickentinders://auth/callback' + hash;
-    } else {
-      // Fallback: try with query params
-      var search = window.location.search;
-      if (search && search.includes('access_token')) {
-        window.location.href = 'chickentinders://auth/callback' + search;
-      } else {
-        // No tokens found, redirect to dashboard
-        window.location.href = '/dashboard';
-      }
-    }
+    // After OAuth, Supabase redirects here with either:
+    // - Hash fragment: #access_token=...&refresh_token=... (implicit flow)
+    // - Query params: ?code=... (PKCE flow)
+    // Forward everything to the native app via deep link.
+    var hash = window.location.hash || '';
+    var search = window.location.search || '';
+    // Always redirect to the native app with both query and hash preserved
+    var deepLink = 'chickentinders://auth/callback' + search + hash;
+    window.location.replace(deepLink);
   </script>
 </body>
 </html>

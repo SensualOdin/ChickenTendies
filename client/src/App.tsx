@@ -162,11 +162,21 @@ function App() {
     const deepLinkListener = CapApp.addListener("appUrlOpen", async (event: URLOpenListenerEvent) => {
       const url = new URL(event.url);
 
-      // Handle OAuth callback: extract tokens from the URL hash/query
-      if (url.pathname === "/auth/callback" || url.href.includes("access_token")) {
+      // Handle OAuth callback
+      if (url.pathname === "/auth/callback" || url.href.includes("access_token") || url.href.includes("code=")) {
         // Close the in-app browser
         Browser.close().catch(() => {});
-        // Extract the fragment (hash) which contains the tokens
+
+        // Try PKCE flow first (code in query params)
+        const code = url.searchParams.get("code");
+        if (code) {
+          await supabase.auth.exchangeCodeForSession(code);
+          window.history.pushState(null, "", "/dashboard");
+          window.dispatchEvent(new PopStateEvent("popstate"));
+          return;
+        }
+
+        // Try implicit flow (tokens in hash)
         const hashParams = url.hash
           ? new URLSearchParams(url.hash.substring(1))
           : new URLSearchParams(url.search);
@@ -176,7 +186,12 @@ function App() {
           await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
           window.history.pushState(null, "", "/dashboard");
           window.dispatchEvent(new PopStateEvent("popstate"));
+          return;
         }
+
+        // Tokens not found — navigate to dashboard anyway, auth state listener may pick it up
+        window.history.pushState(null, "", "/dashboard");
+        window.dispatchEvent(new PopStateEvent("popstate"));
         return;
       }
 
