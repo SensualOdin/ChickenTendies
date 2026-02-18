@@ -26,6 +26,8 @@ import { isNative, isIOS } from "@/lib/platform";
 import { StatusBar, Style } from "@capacitor/status-bar";
 import { App as CapApp, URLOpenListenerEvent } from "@capacitor/app";
 import { Keyboard } from "@capacitor/keyboard";
+import { Browser } from "@capacitor/browser";
+import { supabase } from "@/lib/supabase";
 
 function PendingCrewJoinRedirect() {
   const [location, setLocation] = useLocation();
@@ -94,6 +96,35 @@ function PendingConversionRedirect() {
   return null;
 }
 
+// OAuth callback: on the web, this page receives the tokens from Supabase
+// and redirects native users back into the app via deep link.
+function AuthCallback() {
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash && hash.includes("access_token")) {
+      // If running inside the native app, Supabase will pick up the tokens automatically
+      if (isNative()) {
+        setLocation("/dashboard");
+        return;
+      }
+      // On web (reached after OAuth redirect from native flow), redirect to the native app
+      const deepLink = `chickentinders://auth/callback${hash}`;
+      window.location.href = deepLink;
+    } else {
+      // No tokens, just go to dashboard (Supabase may have already set the session)
+      setLocation("/dashboard");
+    }
+  }, [setLocation]);
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <p className="text-muted-foreground">Signing you in...</p>
+    </div>
+  );
+}
+
 function Router() {
   return (
     <Switch>
@@ -110,6 +141,7 @@ function Router() {
       <Route path="/crew/:id" component={CrewManage} />
       <Route path="/analytics" component={AnalyticsPage} />
       <Route path="/login" component={LoginPage} />
+      <Route path="/auth/callback" component={AuthCallback} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -126,9 +158,28 @@ function App() {
       StatusBar.setOverlaysWebView({ overlay: true });
     }
 
-    // Deep links: handle crew invite URLs when app is already open
-    const deepLinkListener = CapApp.addListener("appUrlOpen", (event: URLOpenListenerEvent) => {
+    // Deep links: handle crew invite URLs and OAuth callbacks
+    const deepLinkListener = CapApp.addListener("appUrlOpen", async (event: URLOpenListenerEvent) => {
       const url = new URL(event.url);
+
+      // Handle OAuth callback: extract tokens from the URL hash/query
+      if (url.pathname === "/auth/callback" || url.href.includes("access_token")) {
+        // Close the in-app browser
+        Browser.close().catch(() => {});
+        // Extract the fragment (hash) which contains the tokens
+        const hashParams = url.hash
+          ? new URLSearchParams(url.hash.substring(1))
+          : new URLSearchParams(url.search);
+        const accessToken = hashParams.get("access_token");
+        const refreshToken = hashParams.get("refresh_token");
+        if (accessToken && refreshToken) {
+          await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+          window.history.pushState(null, "", "/dashboard");
+          window.dispatchEvent(new PopStateEvent("popstate"));
+        }
+        return;
+      }
+
       const path = url.pathname || url.href.replace(/^[^/]*:\/\//, "/");
       if (path && path !== "/") {
         window.history.pushState(null, "", path);

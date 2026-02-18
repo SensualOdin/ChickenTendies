@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Signing you in...</title>
+  <style>
+    body { background: #1a1a2e; color: #fff; font-family: -apple-system, sans-serif; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+    p { font-size: 1.1rem; opacity: 0.7; }
+  </style>
+</head>
+<body>
+  <p>Signing you in...</p>
+  <script>
+    // After OAuth, Supabase redirects here with tokens in the URL hash.
+    // Redirect to the native app via deep link so it can pick up the session.
+    var hash = window.location.hash;
+    if (hash && hash.includes('access_token')) {
+      window.location.href = 'chickentinders://auth/callback' + hash;
+    } else {
+      // Fallback: try with query params
+      var search = window.location.search;
+      if (search && search.includes('access_token')) {
+        window.location.href = 'chickentinders://auth/callback' + search;
+      } else {
+        // No tokens found, redirect to dashboard
+        window.location.href = '/dashboard';
+      }
+    }
+  </script>
+</body>
+</html>

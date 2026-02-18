@@ -7,6 +7,8 @@ import { ArrowRight, Shield, Users, Utensils, Mail } from "lucide-react";
 import { motion } from "framer-motion";
 import { Link, useLocation } from "wouter";
 import { supabase } from "@/lib/supabase";
+import { isNative } from "@/lib/platform";
+import { Browser } from "@capacitor/browser";
 import logoImage from "@assets/460272BC-3FCC-4927-8C2E-4C236353E7AB_1768880143398.png";
 
 export default function LoginPage() {
@@ -64,13 +66,30 @@ export default function LoginPage() {
     setError(null);
 
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: {
-          redirectTo: `${window.location.origin}/dashboard`,
-        },
-      });
-      if (error) throw error;
+      if (isNative()) {
+        // On native, we generate the OAuth URL and open it in the system browser.
+        // The redirect comes back via deep link (chickentinders://...) which the
+        // App.tsx deep link handler picks up and sets the Supabase session.
+        const { data, error } = await supabase.auth.signInWithOAuth({
+          provider: "google",
+          options: {
+            redirectTo: "https://chickentinders.app/auth/callback",
+            skipBrowserRedirect: true,
+          },
+        });
+        if (error) throw error;
+        if (data.url) {
+          await Browser.open({ url: data.url });
+        }
+      } else {
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: "google",
+          options: {
+            redirectTo: `${window.location.origin}/dashboard`,
+          },
+        });
+        if (error) throw error;
+      }
     } catch (err: any) {
       setError(err.message || "Google sign-in failed");
       setLoading(false);
