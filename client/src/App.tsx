@@ -163,17 +163,26 @@ function App() {
       const url = new URL(event.url);
 
       // Handle OAuth callback
-      if (url.pathname === "/auth/callback" || url.href.includes("access_token") || url.href.includes("code=")) {
+      // Note: with custom URL schemes, new URL("chickentinders://auth/callback")
+      // parses "auth" as hostname and "/callback" as pathname, so check href too
+      const isAuthCallback = url.href.includes("/auth/callback") || url.href.includes("access_token") || url.href.includes("code=");
+      if (isAuthCallback) {
         // Close the in-app browser
         Browser.close().catch(() => {});
+
+        const navigateToDashboard = () => {
+          window.history.pushState(null, "", "/dashboard");
+          window.dispatchEvent(new PopStateEvent("popstate"));
+        };
 
         // Try PKCE flow first (code in query params)
         const code = url.searchParams.get("code");
         if (code) {
-          await supabase.auth.exchangeCodeForSession(code);
-          window.history.pushState(null, "", "/dashboard");
-          window.dispatchEvent(new PopStateEvent("popstate"));
-          return;
+          const { error } = await supabase.auth.exchangeCodeForSession(code);
+          if (!error) {
+            navigateToDashboard();
+            return;
+          }
         }
 
         // Try implicit flow (tokens in hash)
@@ -183,15 +192,15 @@ function App() {
         const accessToken = hashParams.get("access_token");
         const refreshToken = hashParams.get("refresh_token");
         if (accessToken && refreshToken) {
-          await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
-          window.history.pushState(null, "", "/dashboard");
-          window.dispatchEvent(new PopStateEvent("popstate"));
-          return;
+          const { error } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+          if (!error) {
+            navigateToDashboard();
+            return;
+          }
         }
 
-        // Tokens not found — navigate to dashboard anyway, auth state listener may pick it up
-        window.history.pushState(null, "", "/dashboard");
-        window.dispatchEvent(new PopStateEvent("popstate"));
+        // Fallback: navigate to dashboard, auth state listener may pick it up
+        navigateToDashboard();
         return;
       }
 
