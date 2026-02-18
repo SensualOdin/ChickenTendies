@@ -1,9 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
+import { API_BASE } from "@/lib/queryClient";
 import type { User } from "@shared/models/auth";
 import { useEffect, useState } from "react";
-
-const API_BASE = import.meta.env.VITE_API_URL || "";
 
 async function fetchUser(): Promise<User | null> {
   const { data: { session } } = await supabase.auth.getSession();

@@ -17,11 +17,13 @@ declare module "http" {
   }
 }
 
-// CORS — allow frontend origin (GitHub Pages or localhost dev)
+// CORS — allow frontend origin, localhost dev, and native Capacitor apps
 const allowedOrigins = [
   process.env.FRONTEND_URL,
   "http://localhost:5173",
   "http://localhost:3000",
+  "capacitor://localhost",
+  "https://localhost",
 ].filter(Boolean) as string[];
 
 app.use(cors({
