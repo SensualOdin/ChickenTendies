@@ -4,7 +4,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import { z } from "zod";
 import { randomUUID, createHmac, timingSafeEqual } from "crypto";
 import { storage } from "./storage";
-import { insertGroupSchema, joinGroupSchema, groupPreferencesSchema, persistentGroups, diningSessions, users } from "@shared/schema";
+import { insertGroupSchema, joinGroupSchema, groupPreferencesSchema, persistentGroups, diningSessions, users, anonymousGroups } from "@shared/schema";
 import type { WSMessage, Group, Restaurant, GroupMember } from "@shared/schema";
 import { isAuthenticated, optionalAuth, registerAuthRoutes } from "./auth";
 import { registerSocialRoutes } from "./social-routes";
@@ -358,6 +358,8 @@ export async function registerRoutes(
       const isSessionCreator = activeSession.createdById === userId;
       const hasNoMembers = memGroup && memGroup.members.length === 0;
 
+      const hadExistingRow = !!memGroup;
+
       if (!memGroup || hasNoMembers) {
         const hostMemberId = randomUUID();
         const host: GroupMember = {
@@ -379,7 +381,20 @@ export async function registerRoutes(
           createdAt: Date.now(),
           leaderToken,
         };
-        await storage.updateGroup(groupId, memGroup);
+        if (hadExistingRow) {
+          await storage.updateGroup(groupId, memGroup);
+        } else {
+          // Crew's first session — no row in anonymousGroups yet, INSERT one
+          await db.insert(anonymousGroups).values({
+            id: groupId,
+            code: persistentGroup.inviteCode,
+            name: persistentGroup.name,
+            members: memGroup.members,
+            preferences: memGroup.preferences,
+            status: memGroup.status,
+            leaderToken,
+          });
+        }
         sessionUserMap.set(`${groupId}:${userId}`, hostMemberId);
         bindMemberToSession(req, res, groupId, hostMemberId);
 
