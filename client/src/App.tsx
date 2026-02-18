@@ -171,6 +171,9 @@ function App() {
         Browser.close().catch(() => {});
 
         const navigateToDashboard = () => {
+          // Clear any cached null auth state so dashboard shows loading
+          // instead of briefly flashing "Please sign in"
+          queryClient.resetQueries({ queryKey: ["/api/auth/user"] });
           window.history.pushState(null, "", "/dashboard");
           window.dispatchEvent(new PopStateEvent("popstate"));
         };

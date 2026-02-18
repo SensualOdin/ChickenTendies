@@ -509,7 +509,7 @@ export default function Dashboard() {
           </Dialog>
         </div>
 
-        {isPushSupported && !isSubscribed && permission !== "denied" && (
+        {isPushSupported && !isSubscribed && permission !== "denied" && permission !== "granted" && (
           <motion.div
             initial={{ y: 10, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
