@@ -122,15 +122,23 @@ function verifySignedValue(signed: string): string | null {
 }
 
 function getMemberBindings(req: Request): Record<string, string> {
+  // Try cookie first (works on web, same-origin)
   const raw = req.cookies?.["member-bindings"];
-  if (!raw) return {};
-  const value = verifySignedValue(raw);
-  if (!value) return {};
-  try {
-    return JSON.parse(value);
-  } catch {
-    return {};
+  if (raw) {
+    const value = verifySignedValue(raw);
+    if (value) {
+      try { return JSON.parse(value); } catch { /* fall through */ }
+    }
   }
+  // Fallback: check custom header (works on native/cross-origin where cookies fail)
+  const headerRaw = req.headers["x-member-bindings"] as string | undefined;
+  if (headerRaw) {
+    const value = verifySignedValue(headerRaw);
+    if (value) {
+      try { return JSON.parse(value); } catch { /* fall through */ }
+    }
+  }
+  return {};
 }
 
 function bindMemberToSession(req: any, res: any, groupId: string, memberId: string) {
@@ -138,6 +146,7 @@ function bindMemberToSession(req: any, res: any, groupId: string, memberId: stri
   existing[groupId] = memberId;
   const value = JSON.stringify(existing);
   const signed = signValue(value);
+  // Set cookie for web (same-origin)
   res.cookie("member-bindings", signed, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
@@ -145,6 +154,8 @@ function bindMemberToSession(req: any, res: any, groupId: string, memberId: stri
     maxAge: 24 * 60 * 60 * 1000, // 24 hours
     path: "/",
   });
+  // Also set custom header for native apps (cross-origin where cookies don't work)
+  res.setHeader("X-Member-Bindings", signed);
 }
 
 function getSessionMemberId(req: any, groupId: string): string | null {

@@ -19,7 +19,20 @@ export async function getAuthHeaders(): Promise<Record<string, string>> {
   if (session?.access_token) {
     headers["Authorization"] = `Bearer ${session.access_token}`;
   }
+  // On native, cookies don't work cross-origin so send member bindings via header
+  const memberBindings = localStorage.getItem("member-bindings");
+  if (memberBindings) {
+    headers["X-Member-Bindings"] = memberBindings;
+  }
   return headers;
+}
+
+/** Save member bindings from server response header (native cross-origin fallback) */
+function saveMemberBindings(res: Response) {
+  const bindings = res.headers.get("X-Member-Bindings");
+  if (bindings) {
+    localStorage.setItem("member-bindings", bindings);
+  }
 }
 
 async function throwIfResNotOk(res: Response) {
@@ -47,6 +60,7 @@ export async function apiRequest(
     credentials: "include",
   });
 
+  saveMemberBindings(res);
   await throwIfResNotOk(res);
   return res;
 }
@@ -63,6 +77,8 @@ export const getQueryFn: <T>(options: {
       headers: authHeaders,
       credentials: "include",
     });
+
+    saveMemberBindings(res);
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {
       return null;
