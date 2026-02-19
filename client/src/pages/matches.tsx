@@ -65,6 +65,7 @@ export default function MatchesPage() {
   const { data: matches, isLoading: matchesLoading } = useQuery<Restaurant[]>({
     queryKey: ["/api/groups", params.id, "matches"],
     enabled: !!params.id,
+    staleTime: 0,
   });
 
   useEffect(() => {
