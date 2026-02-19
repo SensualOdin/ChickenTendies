@@ -172,16 +172,12 @@ export default function Preferences() {
       let longitude: number;
 
       if (isNative()) {
-        // Use navigator.geolocation directly — WKWebView supports it natively
-        // and the Capacitor plugin can hang on some iOS versions
-        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-          const timeoutId = setTimeout(() => reject(new Error("Location request timed out")), 12000);
-          navigator.geolocation.getCurrentPosition(
-            (pos) => { clearTimeout(timeoutId); resolve(pos); },
-            (err) => { clearTimeout(timeoutId); reject(err); },
-            { enableHighAccuracy: true, timeout: 10000 }
-          );
-        });
+        const position = await Promise.race([
+          Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 10000 }),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("Location request timed out")), 15000)
+          ),
+        ]);
         latitude = position.coords.latitude;
         longitude = position.coords.longitude;
       } else {
