@@ -11,7 +11,7 @@ import { MemberAvatars } from "@/components/member-avatars";
 import {
   Flame, Loader2, Star, MapPin, ExternalLink, Heart, PartyPopper, Trophy, Sparkles,
   RefreshCw, CalendarPlus, Phone, Check, Truck, Share2, Pizza, Zap, Settings2,
-  MoreHorizontal, Lock, X,
+  MoreHorizontal, Lock, X, Home,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -465,15 +465,25 @@ export default function MatchesPage() {
       </AnimatePresence>
 
       <header className="flex items-center justify-between p-4 md:p-6">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setLocation(`/group/${params.id}/swipe`)}
-          data-testid="button-back-to-swiping"
-        >
-          <Flame className="w-4 h-4 mr-1" />
-          Keep Swiping
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setLocation(isAuthenticated ? "/dashboard" : "/")}
+          >
+            <Home className="w-4 h-4 mr-1" />
+            Home
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setLocation(`/group/${params.id}/swipe`)}
+            data-testid="button-back-to-swiping"
+          >
+            <Flame className="w-4 h-4 mr-1" />
+            Keep Swiping
+          </Button>
+        </div>
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-orange-500 flex items-center justify-center">
             <Flame className="w-4 h-4 text-primary-foreground" />
@@ -558,7 +568,7 @@ export default function MatchesPage() {
                             <Badge variant="outline" className="font-bold">{restaurant.priceRange}</Badge>
                           </div>
 
-                          <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground mb-3">
+                          <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground mb-2">
                             <div className="flex items-center gap-1">
                               <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
                               <span className="font-medium text-foreground">{(restaurant.combinedRating ?? restaurant.rating).toFixed(1)}</span>
@@ -575,6 +585,15 @@ export default function MatchesPage() {
                               <span>{restaurant.distance.toFixed(1)} mi</span>
                             </div>
                           </div>
+                          {restaurant.googleRating != null && (
+                            <div className="flex items-center gap-3 text-xs text-muted-foreground mb-2">
+                              <span>Yelp {restaurant.rating.toFixed(1)}</span>
+                              <span>Google {restaurant.googleRating.toFixed(1)}</span>
+                            </div>
+                          )}
+                          {restaurant.description && (
+                            <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{restaurant.description}</p>
+                          )}
 
                           {/* Vote section */}
                           <div className="flex items-center gap-3 mb-3">
@@ -630,6 +649,13 @@ export default function MatchesPage() {
                               )}
                               Lock It In!
                             </Button>
+                          )}
+
+                          {/* Non-host guidance after voting */}
+                          {!isHost && iVoted && (
+                            <p className="text-xs text-muted-foreground mb-3 italic">
+                              Waiting for the host to lock it in...
+                            </p>
                           )}
 
                           {/* Action buttons in collapsible details */}
@@ -803,6 +829,48 @@ export default function MatchesPage() {
                   </>
                 )}
               </Button>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Hungry Again? rematch section */}
+        {isHost && sortedMatches.length > 0 && (
+          <motion.div
+            className="mt-8 text-center"
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.7 }}
+          >
+            <div className="border-t border-dashed pt-6">
+              <h3 className="font-bold text-lg mb-1">Hungry Again?</h3>
+              <p className="text-sm text-muted-foreground mb-4">Start a new session with your crew</p>
+              <div className="flex flex-col sm:flex-row gap-2 justify-center">
+                <Button
+                  className="bg-gradient-to-r from-primary to-orange-500"
+                  onClick={() => rematchMutation.mutate()}
+                  disabled={rematchMutation.isPending}
+                >
+                  {rematchMutation.isPending ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                      Starting...
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="w-4 h-4 mr-2" />
+                      Same Vibes
+                    </>
+                  )}
+                </Button>
+                <Button
+                  variant="outline"
+                  className="border-2"
+                  onClick={() => setLocation(`/group/${params.id}/preferences`)}
+                >
+                  <Settings2 className="w-4 h-4 mr-2" />
+                  Change Vibes
+                </Button>
+              </div>
             </div>
           </motion.div>
         )}
