@@ -172,10 +172,18 @@ export default function Preferences() {
       let longitude: number;
 
       if (isNative()) {
-        const position = await Geolocation.getCurrentPosition({
-          enableHighAccuracy: true,
-          timeout: 10000,
-        });
+        // Request permission first — iOS requires this before getCurrentPosition
+        const permStatus = await Geolocation.requestPermissions();
+        if (permStatus.location === "denied") {
+          throw { code: 1, message: "Location permission denied" };
+        }
+        // Wrap in manual timeout since Capacitor plugin may not honor timeout option
+        const position = await Promise.race([
+          Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 10000 }),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error("Location request timed out")), 12000)
+          ),
+        ]);
         latitude = position.coords.latitude;
         longitude = position.coords.longitude;
       } else {
