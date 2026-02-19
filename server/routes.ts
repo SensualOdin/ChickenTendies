@@ -786,6 +786,14 @@ export async function registerRoutes(
         restaurant,
       });
 
+      // Send push notification to members who may have closed the app
+      sendPushToGroupMembers(req.params.id, {
+        title: `${restaurant.name} is locked in!`,
+        body: `${group.name} is going to ${restaurant.name}. Let's eat!`,
+        url: `/group/${req.params.id}/matches`,
+        data: { groupId: req.params.id, type: "match_picked", restaurantId },
+      });
+
       // Clear votes
       matchVotes.delete(req.params.id);
 
