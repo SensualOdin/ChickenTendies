@@ -14,7 +14,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { ArrowLeft, Flame, Loader2, Ticket, User, Smartphone, Users } from "lucide-react";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
-import { useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useState, useMemo } from "react";
 
 interface CrewPreview {
   name: string;
@@ -25,7 +25,7 @@ interface CrewPreview {
 export default function JoinGroupPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const { isAuthenticated } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const searchString = useSearch();
   const urlParams = new URLSearchParams(searchString);
   const codeFromUrl = (urlParams.get("code") || "").toUpperCase().slice(0, 6);
@@ -42,7 +42,7 @@ export default function JoinGroupPage() {
     resolver: zodResolver(joinGroupSchema),
     defaultValues: {
       code: codeFromUrl,
-      memberName: "",
+      memberName: user?.firstName || "",
     },
   });
 
@@ -53,6 +53,13 @@ export default function JoinGroupPage() {
       form.setValue("code", codeFromUrl);
     }
   }, [codeFromUrl, form]);
+
+  // Auto-fill name from profile when user loads
+  useEffect(() => {
+    if (user?.firstName && !form.getValues("memberName")) {
+      form.setValue("memberName", user.firstName);
+    }
+  }, [user, form]);
 
   const { data: crewPreview, isLoading: previewLoading } = useQuery<CrewPreview | null>({
     queryKey: ["/api/crews/preview", currentCode?.length === 6 ? currentCode.toUpperCase() : ""],

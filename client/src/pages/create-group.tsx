@@ -1,4 +1,5 @@
 import { useLocation } from "wouter";
+import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
@@ -10,6 +11,7 @@ import { insertGroupSchema, type InsertGroup } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { storeLeaderToken } from "@/lib/leader-token";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 import { ArrowLeft, Flame, Loader2, PartyPopper, Sparkles } from "lucide-react";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
@@ -17,14 +19,22 @@ import { motion } from "framer-motion";
 export default function CreateGroup() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { user, isAuthenticated } = useAuth();
 
   const form = useForm<InsertGroup>({
     resolver: zodResolver(insertGroupSchema),
     defaultValues: {
       name: "",
-      hostName: "",
+      hostName: user?.firstName || "",
     },
   });
+
+  // Auto-fill name from profile when user loads
+  useEffect(() => {
+    if (user?.firstName && !form.getValues("hostName")) {
+      form.setValue("hostName", user.firstName);
+    }
+  }, [user, form]);
 
   const createMutation = useMutation({
     mutationFn: async (data: InsertGroup) => {

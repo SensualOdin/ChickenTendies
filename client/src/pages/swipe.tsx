@@ -7,6 +7,7 @@ import { SwipeCard, SwipeButtons, type SwipeAction } from "@/components/swipe-ca
 import { MemberAvatars } from "@/components/member-avatars";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 import { useGroupPushNotifications } from "@/hooks/use-push-notifications";
 import { useAnalytics } from "@/hooks/use-analytics";
 import { isNative } from "@/lib/platform";
@@ -39,6 +40,7 @@ export default function SwipePage() {
   const [memberProgress, setMemberProgress] = useState<Record<string, { swipeCount: number; total: number }>>({});
   const [showPrefs, setShowPrefs] = useState(false);
 
+  const { isAuthenticated } = useAuth();
   const memberId = localStorage.getItem("grubmatch-member-id");
   const { trackSwipe, flushNow } = useAnalytics(params.id, memberId || undefined);
 
@@ -757,10 +759,10 @@ export default function SwipePage() {
                       )}
                     </Button>
                   )}
-                  <Link href="/">
+                  <Link href={isAuthenticated ? "/dashboard" : "/"}>
                     <Button size="lg" variant="outline" data-testid="button-back-home">
                       <Home className="w-5 h-5 mr-2" />
-                      Back to Home
+                      {isAuthenticated ? "Back to Dashboard" : "Back to Home"}
                     </Button>
                   </Link>
                 </div>

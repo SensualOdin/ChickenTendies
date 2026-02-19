@@ -9,6 +9,7 @@ import { ArrowLeft, Flame, Copy, Check, Users, ArrowRight, Loader2, PartyPopper,
 import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { apiRequest } from "@/lib/queryClient";
+import { useAuth } from "@/hooks/use-auth";
 import { getLeaderToken } from "@/lib/leader-token";
 import { isNative } from "@/lib/platform";
 import type { Group, WSMessage, GroupMember } from "@shared/schema";
@@ -17,6 +18,7 @@ export default function GroupLobby() {
   const params = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { isAuthenticated } = useAuth();
   const [copied, setCopied] = useState(false);
   const [ws, setWs] = useState<WebSocket | null>(null);
   const [group, setGroup] = useState<Group | null>(null);
@@ -312,7 +314,7 @@ export default function GroupLobby() {
   return (
     <div className="min-h-screen bg-background safe-top safe-x">
       <header className="flex items-center justify-between p-4 md:p-6">
-        <Link href="/">
+        <Link href={isAuthenticated ? "/dashboard" : "/"}>
           <Button variant="ghost" size="icon" data-testid="button-back">
             <ArrowLeft className="w-5 h-5" />
           </Button>
