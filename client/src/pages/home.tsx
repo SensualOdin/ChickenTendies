@@ -114,32 +114,33 @@ export default function Home() {
         </motion.div>
         <div className="flex items-center gap-2">
           {isLoading ? null : isAuthenticated ? (
-            <>
-              <Link href="/dashboard">
-                <Button variant="default" size="sm" className="bg-gradient-to-r from-primary to-orange-500" data-testid="button-dashboard">
-                  <LayoutDashboard className="w-4 h-4 mr-1.5" />
-                  Dashboard
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="rounded-full" data-testid="button-user-menu">
+                  <Avatar className="w-8 h-8">
+                    <AvatarImage src={user?.profileImageUrl || undefined} />
+                    <AvatarFallback>
+                      {user?.firstName?.[0] || user?.email?.[0]?.toUpperCase() || "U"}
+                    </AvatarFallback>
+                  </Avatar>
                 </Button>
-              </Link>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon" className="rounded-full" data-testid="button-user-menu">
-                    <Avatar className="w-8 h-8">
-                      <AvatarImage src={user?.profileImageUrl || undefined} />
-                      <AvatarFallback>
-                        {user?.firstName?.[0] || user?.email?.[0]?.toUpperCase() || "U"}
-                      </AvatarFallback>
-                    </Avatar>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onSelect={() => logout()} className="cursor-pointer" data-testid="button-logout">
-                    <LogOut className="w-4 h-4 mr-2" />
-                    Sign Out
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onSelect={() => navigate("/dashboard")}
+                  className="cursor-pointer"
+                  data-testid="link-dashboard"
+                >
+                  <LayoutDashboard className="w-4 h-4 mr-2" />
+                  Dashboard
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => logout()} className="cursor-pointer" data-testid="button-logout">
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Sign Out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           ) : (
             <Link href="/login">
               <Button variant="outline" className="flex items-center gap-2" data-testid="button-login">
@@ -195,24 +196,35 @@ export default function Home() {
               Works instantly in your browser. No app download, no account needed.
             </motion.p>
 
-            <motion.div 
-              className="flex flex-col sm:flex-row items-center justify-center gap-4"
+            <motion.div
+              className="flex flex-col items-center justify-center gap-3"
               initial={{ y: 30, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               transition={{ delay: 0.5 }}
             >
-              <Link href="/create">
-                <Button size="lg" className="w-full sm:w-auto bg-gradient-to-r from-primary to-orange-500 shadow-lg shadow-primary/30" data-testid="button-create-group">
-                  <Flame className="w-5 h-5 mr-2" />
-                  Start a Party — It's Free
-                  <ArrowRight className="w-5 h-5 ml-2" />
-                </Button>
-              </Link>
-              <Link href="/join">
-                <Button size="lg" variant="outline" className="w-full sm:w-auto" data-testid="button-join-group">
-                  I Have a Code
-                </Button>
-              </Link>
+              {isAuthenticated && (
+                <Link href="/dashboard">
+                  <Button size="lg" className="w-full sm:w-auto bg-gradient-to-r from-primary to-orange-500 shadow-lg shadow-primary/30" data-testid="button-dashboard">
+                    <LayoutDashboard className="w-5 h-5 mr-2" />
+                    Go to Dashboard
+                    <ArrowRight className="w-5 h-5 ml-2" />
+                  </Button>
+                </Link>
+              )}
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+                <Link href="/create">
+                  <Button size="lg" variant={isAuthenticated ? "outline" : "default"} className={`w-full sm:w-auto ${!isAuthenticated ? "bg-gradient-to-r from-primary to-orange-500 shadow-lg shadow-primary/30" : ""}`} data-testid="button-create-group">
+                    <Flame className="w-5 h-5 mr-2" />
+                    {isAuthenticated ? "Start a Party" : "Start a Party — It's Free"}
+                    {!isAuthenticated && <ArrowRight className="w-5 h-5 ml-2" />}
+                  </Button>
+                </Link>
+                <Link href="/join">
+                  <Button size="lg" variant="outline" className="w-full sm:w-auto" data-testid="button-join-group">
+                    I Have a Code
+                  </Button>
+                </Link>
+              </div>
             </motion.div>
           </section>
 
