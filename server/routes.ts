@@ -69,6 +69,9 @@ interface WSClient {
 
 const clients: Map<string, WSClient[]> = new Map();
 
+// In-memory vote storage: groupId -> Map<memberId, restaurantId>
+const matchVotes: Map<string, Map<string, string>> = new Map();
+
 function broadcast(groupId: string, message: WSMessage, excludeMemberId?: string) {
   const groupClients = clients.get(groupId) || [];
   const data = JSON.stringify(message);
@@ -538,6 +541,9 @@ export async function registerRoutes(
         return;
       }
 
+      // Clear any previous match votes
+      matchVotes.delete(req.params.id);
+
       // Update status to swiping
       await storage.updateGroupStatus(req.params.id, "swiping");
 
@@ -669,6 +675,124 @@ export async function registerRoutes(
   app.get("/api/groups/:id/matches", async (req, res) => {
     const matches = await storage.getMatchesForGroup(req.params.id);
     res.json(matches);
+  });
+
+  // Vote for a matched restaurant
+  app.post("/api/groups/:id/vote-match", async (req, res) => {
+    try {
+      const { memberId, restaurantId } = req.body;
+      if (!memberId || !restaurantId) {
+        res.status(400).json({ error: "memberId and restaurantId required" });
+        return;
+      }
+
+      if (!verifyMemberIdentity(req, req.params.id, memberId)) {
+        res.status(403).json({ error: "Session identity mismatch" });
+        return;
+      }
+
+      const group = await storage.getGroup(req.params.id);
+      if (!group) {
+        res.status(404).json({ error: "Group not found" });
+        return;
+      }
+
+      const member = group.members.find(m => m.id === memberId);
+      if (!member) {
+        res.status(403).json({ error: "Member not in group" });
+        return;
+      }
+
+      // Record vote (one per member, can change)
+      if (!matchVotes.has(req.params.id)) {
+        matchVotes.set(req.params.id, new Map());
+      }
+      const groupVotes = matchVotes.get(req.params.id)!;
+      groupVotes.set(memberId, restaurantId);
+
+      // Broadcast vote to all members
+      broadcast(req.params.id, {
+        type: "match_vote",
+        memberId,
+        memberName: member.name,
+        restaurantId,
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      res.status(400).json({ error: "Invalid request" });
+    }
+  });
+
+  // Get current match votes for a group
+  app.get("/api/groups/:id/match-votes", async (req, res) => {
+    const group = await storage.getGroup(req.params.id);
+    if (!group) {
+      res.status(404).json({ error: "Group not found" });
+      return;
+    }
+
+    const groupVotes = matchVotes.get(req.params.id);
+    const votes: Record<string, { memberId: string; memberName: string }[]> = {};
+
+    if (groupVotes) {
+      groupVotes.forEach((rId, mId) => {
+        const member = group.members.find(m => m.id === mId);
+        if (!member) return;
+        if (!votes[rId]) votes[rId] = [];
+        votes[rId].push({ memberId: mId, memberName: member.name });
+      });
+    }
+
+    res.json({ votes });
+  });
+
+  // Host picks (locks in) a matched restaurant
+  app.post("/api/groups/:id/pick-match", async (req, res) => {
+    try {
+      const { memberId, restaurantId } = req.body;
+      if (!memberId || !restaurantId) {
+        res.status(400).json({ error: "memberId and restaurantId required" });
+        return;
+      }
+
+      if (!verifyMemberIdentity(req, req.params.id, memberId)) {
+        res.status(403).json({ error: "Session identity mismatch" });
+        return;
+      }
+
+      const group = await storage.getGroup(req.params.id);
+      if (!group) {
+        res.status(404).json({ error: "Group not found" });
+        return;
+      }
+
+      const hostMember = group.members.find(m => m.id === memberId && m.isHost);
+      if (!hostMember) {
+        res.status(403).json({ error: "Only the host can pick a match" });
+        return;
+      }
+
+      const matches = await storage.getMatchesForGroup(req.params.id);
+      const restaurant = matches.find(r => r.id === restaurantId);
+      if (!restaurant) {
+        res.status(404).json({ error: "Restaurant not in matches" });
+        return;
+      }
+
+      // Broadcast pick to all members
+      broadcast(req.params.id, {
+        type: "match_picked",
+        restaurant,
+      });
+
+      // Clear votes
+      matchVotes.delete(req.params.id);
+
+      res.json({ success: true, restaurant });
+    } catch (error) {
+      res.status(400).json({ error: "Invalid request" });
+    }
   });
 
   // Nudge members who haven't swiped yet

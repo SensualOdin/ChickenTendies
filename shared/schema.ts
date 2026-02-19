@@ -168,7 +168,9 @@ export type WSMessage =
   | { type: "member_done_swiping"; memberId: string; memberName: string }
   | { type: "live_reaction"; memberId: string; memberName: string; reaction: ReactionType; restaurantId: string }
   | { type: "all_done_swiping" }
-  | { type: "member_progress"; memberId: string; swipeCount: number; totalRestaurants: number };
+  | { type: "member_progress"; memberId: string; swipeCount: number; totalRestaurants: number }
+  | { type: "match_vote"; memberId: string; memberName: string; restaurantId: string }
+  | { type: "match_picked"; restaurant: Restaurant };
 
 // Export auth models
 export * from "./models/auth";
