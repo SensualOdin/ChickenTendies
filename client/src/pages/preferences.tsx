@@ -172,18 +172,16 @@ export default function Preferences() {
       let longitude: number;
 
       if (isNative()) {
-        // Request permission first — iOS requires this before getCurrentPosition
-        const permStatus = await Geolocation.requestPermissions();
-        if (permStatus.location === "denied") {
-          throw { code: 1, message: "Location permission denied" };
-        }
-        // Wrap in manual timeout since Capacitor plugin may not honor timeout option
-        const position = await Promise.race([
-          Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 10000 }),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error("Location request timed out")), 12000)
-          ),
-        ]);
+        // Use navigator.geolocation directly — WKWebView supports it natively
+        // and the Capacitor plugin can hang on some iOS versions
+        const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+          const timeoutId = setTimeout(() => reject(new Error("Location request timed out")), 12000);
+          navigator.geolocation.getCurrentPosition(
+            (pos) => { clearTimeout(timeoutId); resolve(pos); },
+            (err) => { clearTimeout(timeoutId); reject(err); },
+            { enableHighAccuracy: true, timeout: 10000 }
+          );
+        });
         latitude = position.coords.latitude;
         longitude = position.coords.longitude;
       } else {
