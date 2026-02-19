@@ -163,9 +163,17 @@ function getSessionMemberId(req: any, groupId: string): string | null {
 }
 
 function verifyMemberIdentity(req: any, groupId: string, claimedMemberId: string): boolean {
-  const boundMemberId = getSessionMemberId(req, groupId);
-  if (!boundMemberId) return false;
-  return boundMemberId === claimedMemberId;
+  const bindings = getMemberBindings(req);
+  const boundMemberId = bindings[groupId] || null;
+  if (!boundMemberId) {
+    console.log(`[verifyMemberIdentity] FAILED: no binding for group=${groupId}, claimed=${claimedMemberId}, cookie=${!!req.cookies?.["member-bindings"]}, header=${!!req.headers["x-member-bindings"]}, bindingKeys=${Object.keys(bindings).join(",")}`);
+    return false;
+  }
+  if (boundMemberId !== claimedMemberId) {
+    console.log(`[verifyMemberIdentity] MISMATCH: group=${groupId}, bound=${boundMemberId}, claimed=${claimedMemberId}`);
+    return false;
+  }
+  return true;
 }
 
 async function sendSync(ws: WebSocket, groupId: string) {

@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { useParams, useLocation, Link } from "wouter";
+import { useParams, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -990,11 +990,9 @@ export default function SwipePage() {
                 >
                   Keep Swiping
                 </Button>
-                <Link href={`/group/${params.id}`}>
-                  <Button variant="default">
-                    Leave
-                  </Button>
-                </Link>
+                <Button variant="default" onClick={() => setLocation("/dashboard")}>
+                  Leave
+                </Button>
               </div>
             </motion.div>
           </motion.div>

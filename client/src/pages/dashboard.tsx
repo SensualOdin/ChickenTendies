@@ -19,7 +19,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useNotifications } from "@/hooks/use-notifications";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest, getAuthHeaders, API_BASE } from "@/lib/queryClient";
+import { apiRequest, getAuthHeaders, API_BASE, saveMemberBindings } from "@/lib/queryClient";
 import { storeLeaderToken } from "@/lib/leader-token";
 import { Users, Plus, ArrowRight, UserPlus, Check, X, UserMinus, Bell, BellRing, BellOff, Play, User, BarChart3, CheckCheck, Settings, Flame } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -167,6 +167,7 @@ export default function Dashboard() {
       if (!response.ok) {
         throw new Error("Failed to join session");
       }
+      saveMemberBindings(response);
       return response.json();
     },
     onSuccess: (data) => {
@@ -192,6 +193,7 @@ export default function Dashboard() {
         credentials: "include",
       });
       if (response.ok) {
+        saveMemberBindings(response);
         const data = await response.json();
         localStorage.setItem("grubmatch-member-id", data.memberId);
         localStorage.setItem("grubmatch-group-id", data.group.id);

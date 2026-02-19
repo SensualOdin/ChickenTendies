@@ -28,7 +28,7 @@ export async function getAuthHeaders(): Promise<Record<string, string>> {
 }
 
 /** Save member bindings from server response header (native cross-origin fallback) */
-function saveMemberBindings(res: Response) {
+export function saveMemberBindings(res: Response) {
   const bindings = res.headers.get("X-Member-Bindings");
   if (bindings) {
     localStorage.setItem("member-bindings", bindings);
