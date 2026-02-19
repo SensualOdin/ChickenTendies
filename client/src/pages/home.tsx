@@ -112,36 +112,34 @@ export default function Home() {
             <span className="text-xs text-muted-foreground hidden sm:block">Swipe Together, Dine Together</span>
           </div>
         </motion.div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           {isLoading ? null : isAuthenticated ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="flex items-center gap-2" data-testid="button-user-menu">
-                  <Avatar className="w-8 h-8">
-                    <AvatarImage src={user?.profileImageUrl || undefined} />
-                    <AvatarFallback>
-                      {user?.firstName?.[0] || user?.email?.[0]?.toUpperCase() || "U"}
-                    </AvatarFallback>
-                  </Avatar>
-                  <span className="hidden sm:inline">{user?.firstName || "User"}</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem 
-                  onSelect={() => navigate("/dashboard")} 
-                  className="cursor-pointer flex items-center gap-2" 
-                  data-testid="link-dashboard"
-                >
-                  <LayoutDashboard className="w-4 h-4" />
+            <>
+              <Link href="/dashboard">
+                <Button variant="default" size="sm" className="bg-gradient-to-r from-primary to-orange-500" data-testid="button-dashboard">
+                  <LayoutDashboard className="w-4 h-4 mr-1.5" />
                   Dashboard
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={() => logout()} className="cursor-pointer" data-testid="button-logout">
-                  <LogOut className="w-4 h-4 mr-2" />
-                  Sign Out
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                </Button>
+              </Link>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="rounded-full" data-testid="button-user-menu">
+                    <Avatar className="w-8 h-8">
+                      <AvatarImage src={user?.profileImageUrl || undefined} />
+                      <AvatarFallback>
+                        {user?.firstName?.[0] || user?.email?.[0]?.toUpperCase() || "U"}
+                      </AvatarFallback>
+                    </Avatar>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={() => logout()} className="cursor-pointer" data-testid="button-logout">
+                    <LogOut className="w-4 h-4 mr-2" />
+                    Sign Out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </>
           ) : (
             <Link href="/login">
               <Button variant="outline" className="flex items-center gap-2" data-testid="button-login">

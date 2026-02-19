@@ -381,12 +381,16 @@ export default function Dashboard() {
             </Link>
           )}
           <Link href="/profile">
-            <Avatar className="w-8 h-8 cursor-pointer hover:ring-2 ring-primary transition-all">
-              <AvatarImage src={user.profileImageUrl || undefined} />
-              <AvatarFallback>
-                {user.firstName?.[0] || user.email?.[0]?.toUpperCase() || "U"}
-              </AvatarFallback>
-            </Avatar>
+            <Button variant="outline" size="sm" className="flex items-center gap-2" data-testid="button-profile">
+              <Avatar className="w-6 h-6">
+                <AvatarImage src={user.profileImageUrl || undefined} />
+                <AvatarFallback className="text-[10px]">
+                  {user.firstName?.[0] || user.email?.[0]?.toUpperCase() || "U"}
+                </AvatarFallback>
+              </Avatar>
+              <span className="hidden sm:inline">Profile</span>
+              <User className="w-4 h-4 sm:hidden" />
+            </Button>
           </Link>
         </div>
       </header>
