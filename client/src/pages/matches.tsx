@@ -213,14 +213,15 @@ export default function MatchesPage() {
   return (
     <div className="min-h-screen bg-background safe-top safe-x">
       <header className="flex items-center justify-between p-4 md:p-6">
-        <div className="flex items-center gap-2">
-          <Link href="/">
-            <Button variant="ghost" data-testid="button-home">
-              <Home className="w-4 h-4 mr-2" />
-              Home
-            </Button>
-          </Link>
-        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setLocation(`/group/${params.id}/swipe`)}
+          data-testid="button-back-to-swiping"
+        >
+          <Flame className="w-4 h-4 mr-1" />
+          Keep Swiping
+        </Button>
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-orange-500 flex items-center justify-center">
             <Flame className="w-4 h-4 text-primary-foreground" />
@@ -505,25 +506,34 @@ export default function MatchesPage() {
             <p className="text-sm text-muted-foreground mb-4">
               Want more options?
             </p>
-            <Button
-              variant="outline"
-              className="border-2"
-              data-testid="button-continue-swiping"
-              onClick={() => loadMoreMutation.mutate()}
-              disabled={loadMoreMutation.isPending}
-            >
-              {loadMoreMutation.isPending ? (
-                <>
-                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                  Loading More...
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Load 20 More Restaurants
-                </>
-              )}
-            </Button>
+            <div className="flex flex-col sm:flex-row gap-2 justify-center">
+              <Button
+                className="bg-gradient-to-r from-primary to-orange-500"
+                data-testid="button-continue-swiping"
+                onClick={() => setLocation(`/group/${params.id}/swipe`)}
+              >
+                <Flame className="w-4 h-4 mr-2" />
+                Back to Swiping
+              </Button>
+              <Button
+                variant="outline"
+                className="border-2"
+                onClick={() => loadMoreMutation.mutate()}
+                disabled={loadMoreMutation.isPending}
+              >
+                {loadMoreMutation.isPending ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                    Loading More...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Load 20 More
+                  </>
+                )}
+              </Button>
+            </div>
           </motion.div>
         )}
 
