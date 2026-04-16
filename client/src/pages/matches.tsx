@@ -19,11 +19,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -84,6 +79,9 @@ export default function MatchesPage() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [votes, setVotes] = useState<VoteMap>({});
   const [pickedRestaurant, setPickedRestaurant] = useState<Restaurant | null>(null);
+  // Which match card currently has its voter list expanded inline (tap the
+  // avatar cluster to toggle). Only one at a time to keep the layout tight.
+  const [expandedVotersFor, setExpandedVotersFor] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
   const memberId = localStorage.getItem("grubmatch-member-id");
@@ -612,7 +610,14 @@ export default function MatchesPage() {
                             <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{restaurant.description}</p>
                           )}
 
-                          {/* Vote section */}
+                          {/* Vote section. The avatar cluster is an inline toggle
+                              rather than a Radix Popover: the Popover approach
+                              failed silently on both web and mobile (likely
+                              interaction between Radix's Slot event attachment
+                              and the parent Framer Motion `popLayout` animations
+                              that re-key children on every vote change). Inline
+                              state-based disclosure is simpler, has no portal,
+                              and can't be clipped by mobile viewports. */}
                           <div className="flex items-center gap-3 mb-3 flex-wrap">
                             <Button
                               size="sm"
@@ -629,71 +634,92 @@ export default function MatchesPage() {
                               {iVoted ? "You voted" : "Vote"}
                             </Button>
                             {voteCount > 0 && (
-                              // Tap the avatar cluster to see the full voter list —
-                              // critical for hosts making tied decisions and for
-                              // voters to see their own vote reflected by name.
-                              <Popover>
-                                <PopoverTrigger asChild>
-                                  <button
-                                    type="button"
-                                    className="flex items-center gap-1.5 rounded-md px-1 py-0.5 hover:bg-muted transition-colors"
-                                    data-testid={`button-voters-${restaurant.id}`}
-                                    aria-label={`${voteCount} voter${voteCount !== 1 ? "s" : ""}, tap to see names`}
-                                  >
-                                    <span className="text-sm font-bold text-foreground">{voteCount}</span>
-                                    <span className="text-xs text-muted-foreground">vote{voteCount !== 1 ? "s" : ""}</span>
-                                    <div className="flex -space-x-1 ml-1">
-                                      {restaurantVotes.slice(0, 4).map((v) => {
-                                        const isMe = v.memberId === memberId;
-                                        return (
-                                          <div
-                                            key={v.memberId}
-                                            className={`w-5 h-5 rounded-full border flex items-center justify-center text-[8px] font-bold ${
-                                              isMe
-                                                ? "bg-primary text-white border-primary ring-2 ring-primary/30"
-                                                : "bg-primary/20 text-primary border-background"
-                                            }`}
-                                          >
-                                            {v.memberName.charAt(0).toUpperCase()}
-                                          </div>
-                                        );
-                                      })}
-                                      {restaurantVotes.length > 4 && (
-                                        <div className="w-5 h-5 rounded-full bg-muted border border-background flex items-center justify-center text-[8px] font-bold text-muted-foreground">
-                                          +{restaurantVotes.length - 4}
-                                        </div>
-                                      )}
+                              <button
+                                type="button"
+                                className="flex items-center gap-1.5 rounded-md px-1 py-0.5 hover:bg-muted transition-colors cursor-pointer"
+                                data-testid={`button-voters-${restaurant.id}`}
+                                aria-label={`${voteCount} voter${voteCount !== 1 ? "s" : ""}, tap to ${
+                                  expandedVotersFor === restaurant.id ? "hide" : "see"
+                                } names`}
+                                aria-expanded={expandedVotersFor === restaurant.id}
+                                onClick={() =>
+                                  setExpandedVotersFor((prev) =>
+                                    prev === restaurant.id ? null : restaurant.id,
+                                  )
+                                }
+                              >
+                                <span className="text-sm font-bold text-foreground">{voteCount}</span>
+                                <span className="text-xs text-muted-foreground">vote{voteCount !== 1 ? "s" : ""}</span>
+                                <div className="flex -space-x-1 ml-1">
+                                  {restaurantVotes.slice(0, 4).map((v) => {
+                                    const isMe = v.memberId === memberId;
+                                    return (
+                                      <div
+                                        key={v.memberId}
+                                        className={`w-5 h-5 rounded-full border flex items-center justify-center text-[8px] font-bold ${
+                                          isMe
+                                            ? "bg-primary text-white border-primary ring-2 ring-primary/30"
+                                            : "bg-primary/20 text-primary border-background"
+                                        }`}
+                                      >
+                                        {v.memberName.charAt(0).toUpperCase()}
+                                      </div>
+                                    );
+                                  })}
+                                  {restaurantVotes.length > 4 && (
+                                    <div className="w-5 h-5 rounded-full bg-muted border border-background flex items-center justify-center text-[8px] font-bold text-muted-foreground">
+                                      +{restaurantVotes.length - 4}
                                     </div>
-                                  </button>
-                                </PopoverTrigger>
-                                <PopoverContent
-                                  side="top"
-                                  align="start"
-                                  className="w-auto min-w-[160px] p-2"
-                                >
-                                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold mb-1 px-1">
+                                  )}
+                                </div>
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Expanded voter list — inline disclosure, animated. */}
+                          <AnimatePresence initial={false}>
+                            {expandedVotersFor === restaurant.id && voteCount > 0 && (
+                              <motion.div
+                                key="voters-list"
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: "auto", opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                transition={{ duration: 0.18 }}
+                                className="overflow-hidden mb-3"
+                              >
+                                <div className="rounded-md border bg-muted/30 px-3 py-2">
+                                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold mb-1">
                                     Voters
                                   </p>
                                   <ul className="space-y-0.5 text-sm">
-                                    {restaurantVotes.map((v) => (
-                                      <li
-                                        key={v.memberId}
-                                        className="flex items-center gap-2 px-1 py-0.5"
-                                      >
-                                        <span className="w-5 h-5 rounded-full bg-primary/20 text-primary flex items-center justify-center text-[10px] font-bold">
-                                          {v.memberName.charAt(0).toUpperCase()}
-                                        </span>
-                                        <span className={v.memberId === memberId ? "font-bold" : ""}>
-                                          {v.memberName}
-                                          {v.memberId === memberId ? " (you)" : ""}
-                                        </span>
-                                      </li>
-                                    ))}
+                                    {restaurantVotes.map((v) => {
+                                      const isMe = v.memberId === memberId;
+                                      return (
+                                        <li
+                                          key={v.memberId}
+                                          className="flex items-center gap-2"
+                                        >
+                                          <span
+                                            className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                                              isMe
+                                                ? "bg-primary text-white"
+                                                : "bg-primary/20 text-primary"
+                                            }`}
+                                          >
+                                            {v.memberName.charAt(0).toUpperCase()}
+                                          </span>
+                                          <span className={isMe ? "font-bold" : ""}>
+                                            {v.memberName}
+                                            {isMe ? " (you)" : ""}
+                                          </span>
+                                        </li>
+                                      );
+                                    })}
                                   </ul>
-                                </PopoverContent>
-                              </Popover>
+                                </div>
+                              </motion.div>
                             )}
-                          </div>
+                          </AnimatePresence>
 
                           {/* Lock It In — host only, available on every match */}
                           {showLockIn && (
