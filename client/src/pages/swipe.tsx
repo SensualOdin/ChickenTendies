@@ -1,9 +1,14 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useLocation, Link } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { SwipeCard, SwipeButtons, type SwipeAction } from "@/components/swipe-card";
+import {
+  SwipeCard,
+  SwipeButtons,
+  type SwipeAction,
+  type SwipeCardHandle,
+} from "@/components/swipe-card";
 import { MemberAvatars } from "@/components/member-avatars";
 import { apiRequest, queryClient, API_BASE, getAuthHeaders } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -39,6 +44,10 @@ export default function SwipePage() {
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [memberProgress, setMemberProgress] = useState<Record<string, { swipeCount: number; total: number }>>({});
   const [showPrefs, setShowPrefs] = useState(false);
+  const [autoNavTimer, setAutoNavTimer] = useState<number | null>(null);
+  // Imperative handle to the top SwipeCard so button taps and keyboard input
+  // can play the same spring animation as a hand gesture.
+  const cardRef = useRef<SwipeCardHandle>(null);
 
   const { isAuthenticated } = useAuth();
   const memberId = localStorage.getItem("grubmatch-member-id");
@@ -214,6 +223,14 @@ export default function SwipePage() {
             ...prev,
             [message.memberId]: { swipeCount: message.swipeCount, total: message.totalRestaurants },
           }));
+        } else if (message.type === "all_done_swiping") {
+          // Everyone's finished. Kick off a short countdown that auto-navigates
+          // the whole group to /matches together, so a table of four friends
+          // arrive at the decision screen at the same moment instead of each
+          // wandering there individually. The countdown (not an instant redirect)
+          // gives the user a 3-second "we're about to look!" beat and a chance
+          // to opt out if they were mid-reading.
+          setAutoNavTimer(3);
         }
       };
 
@@ -331,7 +348,10 @@ export default function SwipePage() {
     },
   });
 
-  const handleSwipe = useCallback((action: SwipeAction) => {
+  // Internal handler run AFTER the card exit animation completes (either from
+  // a drag release or from a programmatic trigger). Buttons and keyboard call
+  // the imperative trigger(), which animates the card and then invokes this.
+  const commitSwipe = useCallback((action: SwipeAction) => {
     if (currentIndex >= restaurants.length) return;
 
     const restaurant = restaurants[currentIndex];
@@ -364,6 +384,26 @@ export default function SwipePage() {
     // handler on every message, defeating memoization and risking stale refs
     // in listeners that capture it.
   }, [currentIndex, restaurants, swipeMutation, params.id, trackSwipe]);
+
+  // Public handler used by the action buttons and keyboard shortcuts. Triggers
+  // the card's exit animation (so tapping a button *feels* like swiping) and
+  // the underlying commit fires from inside the SwipeCard's `onSwipe` callback.
+  // For drag gestures, SwipeCard calls playExit itself, then fires onSwipe —
+  // so the end behavior is identical regardless of input modality.
+  const handleSwipe = useCallback(
+    (action: SwipeAction) => {
+      if (currentIndex >= restaurants.length) return;
+      if (cardRef.current) {
+        // Triggering the card's imperative exit will call the card's onSwipe
+        // prop (which is commitSwipe below) after the animation kicks off.
+        cardRef.current.trigger(action);
+      } else {
+        // Fallback: no card mounted for some reason, fire the commit directly.
+        commitSwipe(action);
+      }
+    },
+    [commitSwipe, currentIndex, restaurants.length],
+  );
 
   const handleUndo = useCallback(() => {
     if (!lastSwipe) return;
@@ -448,6 +488,20 @@ export default function SwipePage() {
   const waitingMembers = group?.members.filter(m => !m.doneSwiping) || [];
   const allDone = group ? group.members.every(m => m.doneSwiping) : false;
 
+  // Countdown that auto-navigates the entire group to /matches when the server
+  // broadcasts `all_done_swiping`. This is the fix for the "silent handoff"
+  // problem: previously each user had to notice and tap through individually,
+  // so a group of friends never arrived at the decision screen together.
+  useEffect(() => {
+    if (autoNavTimer === null) return;
+    if (autoNavTimer <= 0) {
+      setLocation(`/group/${params.id}/matches`);
+      return;
+    }
+    const t = setTimeout(() => setAutoNavTimer((v) => (v === null ? null : v - 1)), 1000);
+    return () => clearTimeout(t);
+  }, [autoNavTimer, params.id, setLocation]);
+
   if (isLoading || !group) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -464,6 +518,63 @@ export default function SwipePage() {
   return (
     <div className="h-[100dvh] bg-background flex flex-col relative safe-top safe-x">
       <SwipeWalkthrough />
+
+      {/* Synchronized "everyone's done!" overlay. Fires on the server's
+          `all_done_swiping` WS broadcast, counts down, and auto-navigates the
+          whole group to /matches in unison. Tapping "See matches now" skips the
+          countdown; "Stay here" cancels it for users who want a moment. */}
+      <AnimatePresence>
+        {autoNavTimer !== null && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm"
+            onClick={() => setAutoNavTimer(null)}
+          >
+            <motion.div
+              className="bg-card rounded-2xl p-8 max-w-sm w-[90%] text-center shadow-2xl border"
+              initial={{ y: 30, scale: 0.95 }}
+              animate={{ y: 0, scale: 1 }}
+              exit={{ y: 30, scale: 0.95 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <motion.div
+                className="flex justify-center mb-4"
+                animate={{ rotate: [0, 10, -10, 0] }}
+                transition={{ duration: 0.6, repeat: 2 }}
+              >
+                <PartyPopper className="w-14 h-14 text-primary" />
+              </motion.div>
+              <h2 className="text-2xl font-extrabold mb-1">Crew's Ready!</h2>
+              <p className="text-sm text-muted-foreground mb-6">
+                Everyone finished swiping. Heading to your matches in{" "}
+                <span className="font-bold text-primary">{autoNavTimer}</span>...
+              </p>
+              <div className="flex flex-col gap-2">
+                <Button
+                  size="lg"
+                  className="w-full bg-gradient-to-r from-primary to-orange-500"
+                  onClick={() => setLocation(`/group/${params.id}/matches`)}
+                  data-testid="button-see-matches-now"
+                >
+                  <PartyPopper className="w-5 h-5 mr-2" />
+                  See matches now
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setAutoNavTimer(null)}
+                  data-testid="button-stay-on-swipe"
+                >
+                  Stay here
+                </Button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <AnimatePresence>
         {showMatchCelebration && latestMatch && (
           <motion.div
@@ -793,8 +904,9 @@ export default function SwipePage() {
               {currentRestaurant && (
                 <SwipeCard
                   key={currentRestaurant.id}
+                  ref={cardRef}
                   restaurant={currentRestaurant}
-                  onSwipe={handleSwipe}
+                  onSwipe={commitSwipe}
                   isTop={true}
                   visitedBefore={visitedRestaurantIds.has(currentRestaurant.id)}
                 />

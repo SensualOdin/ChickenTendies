@@ -19,6 +19,11 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { useToast } from "@/hooks/use-toast";
@@ -270,28 +275,34 @@ export default function MatchesPage() {
     },
   });
 
+  // Conversion prompt for anonymous users. Previously this used a 2-second
+  // timer + click/scroll listener, which could fire *during* rapid voting —
+  // interrupting the exact moment of delight. New timing: show it only after
+  // the decision has landed (host picked a restaurant) OR after 20 seconds
+  // of genuine idleness on the page with no voting activity. Either way, the
+  // prompt arrives as celebration, not interruption.
   useEffect(() => {
     if (authLoading || isAuthenticated || !matches?.length) return;
     const dismissed = sessionStorage.getItem(`chickentinders-conversion-dismissed-${params.id}`);
     if (dismissed) return;
 
-    const handleInteraction = () => {
-      setShowConversion(true);
-      cleanup();
-    };
-    const cleanup = () => {
-      document.removeEventListener("click", handleInteraction);
-      document.removeEventListener("scroll", handleInteraction, true);
-    };
-    const timer = setTimeout(() => {
-      document.addEventListener("click", handleInteraction, { once: true });
-      document.addEventListener("scroll", handleInteraction, { once: true, capture: true });
-    }, 2000);
-    return () => {
-      clearTimeout(timer);
-      cleanup();
-    };
-  }, [authLoading, isAuthenticated, matches, params.id]);
+    // 1. If the host has picked, show after the celebration modal has had a
+    //    moment to play (~4s gives confetti and the "IT'S DECIDED!" reveal
+    //    enough breathing room).
+    if (pickedRestaurant) {
+      const t = setTimeout(() => setShowConversion(true), 4000);
+      return () => clearTimeout(t);
+    }
+
+    // 2. Otherwise, wait 20 seconds of idle time. Any voting activity resets
+    //    the timer so users mid-decision aren't interrupted.
+    const IDLE_MS = 20_000;
+    const t = setTimeout(() => setShowConversion(true), IDLE_MS);
+    return () => clearTimeout(t);
+    // Depending on `votes` resets the timer on every vote — exactly the behavior
+    // we want. Once votes stabilize and nobody interacts for 20s, the prompt
+    // surfaces.
+  }, [authLoading, isAuthenticated, matches, params.id, pickedRestaurant, votes]);
 
   const loadMoreMutation = useMutation({
     mutationFn: async () => {
@@ -534,7 +545,11 @@ export default function MatchesPage() {
                 const voteCount = restaurantVotes.length;
                 const iVoted = myVoteRestaurantId === restaurant.id;
                 const isTopPick = restaurant.id === topVotedId;
-                const showLockIn = isHost && (isTopPick || sortedMatches.length === 1);
+                // Host can lock in any match now — not just the top-voted one.
+                // Previously hiding the button on non-leaders created confusion
+                // for hosts deciding between tied options, and made non-hosts
+                // think their votes for anything but the top were wasted.
+                const showLockIn = isHost;
 
                 return (
                   <motion.div
@@ -598,7 +613,7 @@ export default function MatchesPage() {
                           )}
 
                           {/* Vote section */}
-                          <div className="flex items-center gap-3 mb-3">
+                          <div className="flex items-center gap-3 mb-3 flex-wrap">
                             <Button
                               size="sm"
                               variant={iVoted ? "default" : "outline"}
@@ -608,55 +623,105 @@ export default function MatchesPage() {
                               }
                               onClick={() => voteMutation.mutate(restaurant.id)}
                               disabled={voteMutation.isPending}
+                              data-testid={`button-vote-${restaurant.id}`}
                             >
                               <Flame className="w-4 h-4 mr-1" />
-                              {iVoted ? "Voted!" : "Vote"}
+                              {iVoted ? "You voted" : "Vote"}
                             </Button>
                             {voteCount > 0 && (
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-sm font-bold text-foreground">{voteCount}</span>
-                                <span className="text-xs text-muted-foreground">vote{voteCount !== 1 ? "s" : ""}</span>
-                                <div className="flex -space-x-1 ml-1">
-                                  {restaurantVotes.slice(0, 4).map((v, i) => (
-                                    <div
-                                      key={v.memberId}
-                                      className="w-5 h-5 rounded-full bg-primary/20 border border-background flex items-center justify-center text-[8px] font-bold text-primary"
-                                      title={v.memberName}
-                                    >
-                                      {v.memberName.charAt(0).toUpperCase()}
+                              // Tap the avatar cluster to see the full voter list —
+                              // critical for hosts making tied decisions and for
+                              // voters to see their own vote reflected by name.
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <button
+                                    type="button"
+                                    className="flex items-center gap-1.5 rounded-md px-1 py-0.5 hover:bg-muted transition-colors"
+                                    data-testid={`button-voters-${restaurant.id}`}
+                                    aria-label={`${voteCount} voter${voteCount !== 1 ? "s" : ""}, tap to see names`}
+                                  >
+                                    <span className="text-sm font-bold text-foreground">{voteCount}</span>
+                                    <span className="text-xs text-muted-foreground">vote{voteCount !== 1 ? "s" : ""}</span>
+                                    <div className="flex -space-x-1 ml-1">
+                                      {restaurantVotes.slice(0, 4).map((v) => {
+                                        const isMe = v.memberId === memberId;
+                                        return (
+                                          <div
+                                            key={v.memberId}
+                                            className={`w-5 h-5 rounded-full border flex items-center justify-center text-[8px] font-bold ${
+                                              isMe
+                                                ? "bg-primary text-white border-primary ring-2 ring-primary/30"
+                                                : "bg-primary/20 text-primary border-background"
+                                            }`}
+                                          >
+                                            {v.memberName.charAt(0).toUpperCase()}
+                                          </div>
+                                        );
+                                      })}
+                                      {restaurantVotes.length > 4 && (
+                                        <div className="w-5 h-5 rounded-full bg-muted border border-background flex items-center justify-center text-[8px] font-bold text-muted-foreground">
+                                          +{restaurantVotes.length - 4}
+                                        </div>
+                                      )}
                                     </div>
-                                  ))}
-                                  {restaurantVotes.length > 4 && (
-                                    <div className="w-5 h-5 rounded-full bg-muted border border-background flex items-center justify-center text-[8px] font-bold text-muted-foreground">
-                                      +{restaurantVotes.length - 4}
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
+                                  </button>
+                                </PopoverTrigger>
+                                <PopoverContent
+                                  side="top"
+                                  align="start"
+                                  className="w-auto min-w-[160px] p-2"
+                                >
+                                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold mb-1 px-1">
+                                    Voters
+                                  </p>
+                                  <ul className="space-y-0.5 text-sm">
+                                    {restaurantVotes.map((v) => (
+                                      <li
+                                        key={v.memberId}
+                                        className="flex items-center gap-2 px-1 py-0.5"
+                                      >
+                                        <span className="w-5 h-5 rounded-full bg-primary/20 text-primary flex items-center justify-center text-[10px] font-bold">
+                                          {v.memberName.charAt(0).toUpperCase()}
+                                        </span>
+                                        <span className={v.memberId === memberId ? "font-bold" : ""}>
+                                          {v.memberName}
+                                          {v.memberId === memberId ? " (you)" : ""}
+                                        </span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </PopoverContent>
+                              </Popover>
                             )}
                           </div>
 
-                          {/* Lock It In button for host */}
+                          {/* Lock It In — host only, available on every match */}
                           {showLockIn && (
                             <Button
                               size="sm"
-                              className="w-full mb-3 bg-gradient-to-r from-yellow-500 to-orange-500 text-white font-bold shadow-lg"
+                              variant={isTopPick ? "default" : "outline"}
+                              className={
+                                isTopPick
+                                  ? "w-full mb-3 bg-gradient-to-r from-yellow-500 to-orange-500 text-white font-bold shadow-lg"
+                                  : "w-full mb-3 border-yellow-500/40 text-yellow-700 dark:text-yellow-400 hover:bg-yellow-500/10"
+                              }
                               onClick={() => pickMutation.mutate(restaurant.id)}
                               disabled={pickMutation.isPending}
+                              data-testid={`button-lock-${restaurant.id}`}
                             >
                               {pickMutation.isPending ? (
                                 <Loader2 className="w-4 h-4 mr-1 animate-spin" />
                               ) : (
                                 <Lock className="w-4 h-4 mr-1" />
                               )}
-                              Lock It In!
+                              {isTopPick ? "Lock It In!" : "Lock this one in"}
                             </Button>
                           )}
 
                           {/* Non-host guidance after voting */}
                           {!isHost && iVoted && (
                             <p className="text-xs text-muted-foreground mb-3 italic">
-                              Waiting for the host to lock it in...
+                              Votes help the host decide — they'll make the final call.
                             </p>
                           )}
 
