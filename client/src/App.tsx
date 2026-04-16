@@ -20,7 +20,7 @@ import NotFound from "@/pages/not-found";
 import { PWAInstallPrompt } from "@/components/pwa-install-prompt";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, getCsrfToken } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { isNative, isIOS } from "@/lib/platform";
 import { StatusBar, Style } from "@capacitor/status-bar";
@@ -148,6 +148,12 @@ function Router() {
 }
 
 function App() {
+  // Prime the CSRF token on app boot so the first mutation doesn't eat a
+  // round-trip waiting for /api/csrf-token. Runs on web + native.
+  useEffect(() => {
+    getCsrfToken().catch(() => {});
+  }, []);
+
   useEffect(() => {
     if (!isNative()) return;
 

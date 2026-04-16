@@ -1,8 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
-import { API_BASE } from "@/lib/queryClient";
+import { API_BASE, getAuthHeaders } from "@/lib/queryClient";
 import type { User } from "@shared/models/auth";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 async function fetchUser(): Promise<User | null> {
   const { data: { session } } = await supabase.auth.getSession();
@@ -32,6 +32,14 @@ export function useAuth() {
     () => window.location.hash.includes("access_token")
   );
 
+  // Keep a ref mirror of isRestoringSession so the auth-state-change listener
+  // can read the latest value without being re-subscribed on every flip (which
+  // previously leaked subscriptions and created login-flow race conditions).
+  const isRestoringSessionRef = useRef(isRestoringSession);
+  useEffect(() => {
+    isRestoringSessionRef.current = isRestoringSession;
+  }, [isRestoringSession]);
+
   const { data: user, isLoading: isQueryLoading } = useQuery<User | null>({
     queryKey: ["/api/auth/user"],
     queryFn: fetchUser,
@@ -39,23 +47,26 @@ export function useAuth() {
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
 
-  // Listen for Supabase auth state changes
+  // Listen for Supabase auth state changes. Subscribe exactly once per mount.
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       // If we were waiting for a session restore (OAuth redirect), finish it
-      if (isRestoringSession && (event === "SIGNED_IN" || event === "SIGNED_OUT")) {
+      if (isRestoringSessionRef.current && (event === "SIGNED_IN" || event === "SIGNED_OUT")) {
         setIsRestoringSession(false);
       }
 
       if (event === "SIGNED_IN" && session) {
-        // Sync user to our database
+        // Sync user to our database. Use getAuthHeaders() to pick up the
+        // CSRF token + any other headers in one place rather than hand-building.
         const meta = session.user.user_metadata;
+        const headers = {
+          "Content-Type": "application/json",
+          ...(await getAuthHeaders()),
+        };
         await fetch(`${API_BASE}/api/auth/sync`, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${session.access_token}`,
-          },
+          headers,
+          credentials: "include",
           body: JSON.stringify({
             firstName: meta?.full_name?.split(" ")[0] || meta?.name?.split(" ")[0] || null,
             lastName: meta?.full_name?.split(" ").slice(1).join(" ") || null,
@@ -72,7 +83,7 @@ export function useAuth() {
     });
 
     return () => subscription.unsubscribe();
-  }, [queryClient, isRestoringSession]);
+  }, [queryClient]);
 
   const logoutMutation = useMutation({
     mutationFn: async () => {

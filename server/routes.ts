@@ -15,6 +15,7 @@ import { db } from "./db";
 import { authStorage } from "./auth/storage";
 import { eq, and, inArray } from "drizzle-orm";
 import rateLimit from "express-rate-limit";
+import { generateCsrfToken, issueCsrfCookie, csrfMiddleware } from "./csrf";
 
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -124,6 +125,26 @@ function verifySignedValue(signed: string): string | null {
   return value;
 }
 
+// Origins that are allowed to supply identity via the X-Member-Bindings header.
+// Capacitor iOS/Android WebView sets one of these; regular browsers do NOT.
+// Restricting to these origins prevents a browser-origin attacker from presenting
+// a stolen binding token via the header to bypass cookie-bound identity.
+const NATIVE_APP_ORIGINS = new Set([
+  "capacitor://localhost",
+  "https://localhost",
+]);
+
+function isNativeAppRequest(req: Request): boolean {
+  const origin = req.headers.origin;
+  // A missing Origin header is only acceptable for non-browser contexts. Real
+  // browsers always send Origin on cross-origin requests; native WebViews send
+  // one of NATIVE_APP_ORIGINS. We treat no-origin as native-eligible because
+  // some mobile tooling strips it, and the signed header alone is still the
+  // sole identity path there.
+  if (!origin) return true;
+  return NATIVE_APP_ORIGINS.has(origin);
+}
+
 function getMemberBindings(req: Request): Record<string, string> {
   // Try cookie first (works on web, same-origin)
   const raw = req.cookies?.["member-bindings"];
@@ -133,12 +154,16 @@ function getMemberBindings(req: Request): Record<string, string> {
       try { return JSON.parse(value); } catch { /* fall through */ }
     }
   }
-  // Fallback: check custom header (works on native/cross-origin where cookies fail)
-  const headerRaw = req.headers["x-member-bindings"] as string | undefined;
-  if (headerRaw) {
-    const value = verifySignedValue(headerRaw);
-    if (value) {
-      try { return JSON.parse(value); } catch { /* fall through */ }
+  // Fallback: check custom header (works on native/cross-origin where cookies fail).
+  // Only trust this header from native app origins. Browser-origin requests must
+  // use the cookie path to prevent header-replay impersonation.
+  if (isNativeAppRequest(req)) {
+    const headerRaw = req.headers["x-member-bindings"] as string | undefined;
+    if (headerRaw) {
+      const value = verifySignedValue(headerRaw);
+      if (value) {
+        try { return JSON.parse(value); } catch { /* fall through */ }
+      }
     }
   }
   return {};
@@ -207,8 +232,21 @@ export async function registerRoutes(
     res.json({ status: "ok", timestamp: Date.now() });
   });
 
+  // CSRF token endpoint — clients must GET this once on boot and echo the
+  // returned token via the X-CSRF-Token header on all mutating requests.
+  app.get("/api/csrf-token", (_req, res) => {
+    const token = generateCsrfToken();
+    issueCsrfCookie(res, token);
+    res.json({ token });
+  });
+
   // Apply rate limiter BEFORE registering routes so all /api/ routes are covered
   app.use("/api/", generalLimiter);
+
+  // CSRF enforcement on all /api/* mutating requests. Exemptions are defined
+  // inside csrfMiddleware (health, csrf-token, safe methods). Must run AFTER
+  // cookieParser (set up in index.ts) so req.cookies is populated.
+  app.use("/api/", csrfMiddleware);
 
   registerAuthRoutes(app);
   registerSocialRoutes(app);
@@ -462,8 +500,10 @@ export async function registerRoutes(
         return;
       }
 
-      // Verify the token matches
-      if (group.leaderToken !== leaderToken) {
+      // Verify the token matches using constant-time comparison to avoid timing attacks.
+      const expected = Buffer.from(group.leaderToken || "");
+      const provided = Buffer.from(leaderToken);
+      if (expected.length !== provided.length || !timingSafeEqual(expected, provided)) {
         res.status(403).json({ error: "Invalid leader token" });
         return;
       }
@@ -562,6 +602,19 @@ export async function registerRoutes(
   });
 
   app.post("/api/groups/:id/restaurants/load-more", async (req, res) => {
+    // Only group members should be able to trigger expensive restaurant-loading.
+    // The caller must identify themselves via memberId (body) matched against
+    // the signed binding cookie/header.
+    const { memberId } = req.body ?? {};
+    if (!memberId || typeof memberId !== "string") {
+      res.status(400).json({ error: "memberId required" });
+      return;
+    }
+    if (!verifyMemberIdentity(req, req.params.id, memberId)) {
+      res.status(403).json({ error: "Session identity mismatch" });
+      return;
+    }
+
     const existingCount = (await storage.getRestaurantsForGroup(req.params.id)).length;
     const restaurants = await storage.loadMoreRestaurants(req.params.id);
     const newCount = restaurants.length;
@@ -786,13 +839,15 @@ export async function registerRoutes(
         restaurant,
       });
 
-      // Send push notification to members who may have closed the app
+      // Send push notification to members who may have closed the app.
+      // Fire-and-forget, but swallow errors to avoid unhandled promise rejections
+      // crashing the Node process if the push service is down.
       sendPushToGroupMembers(req.params.id, {
         title: `${restaurant.name} is locked in!`,
         body: `${group.name} is going to ${restaurant.name}. Let's eat!`,
         url: `/group/${req.params.id}/matches`,
         data: { groupId: req.params.id, type: "match_picked", restaurantId },
-      });
+      }).catch((err) => console.error("[push] match_picked failed:", err));
 
       // Clear votes
       matchVotes.delete(req.params.id);
@@ -875,13 +930,14 @@ export async function registerRoutes(
       // Check if ALL members are now done swiping
       const allDone = result.group.members.every(m => m.doneSwiping);
       if (allDone && result.group.members.length > 0) {
-        // Send push notification to all group members
+        // Send push notification to all group members (fire-and-forget with
+        // error capture to prevent unhandled rejection crashes).
         sendPushToGroupMembers(req.params.id, {
           title: "Everyone's done swiping!",
           body: `Your group "${result.group.name}" has finished swiping. Check out your matches!`,
           url: `/group/${req.params.id}/matches`,
           data: { groupId: req.params.id, type: "all_done_swiping" }
-        });
+        }).catch((err) => console.error("[push] all_done_swiping failed:", err));
 
         // Also broadcast via WebSocket for users who are still on the page
         broadcast(req.params.id, { type: "all_done_swiping" });

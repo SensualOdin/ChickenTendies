@@ -8,9 +8,39 @@ export const API_BASE = isNative()
   ? (import.meta.env.VITE_PRODUCTION_API_URL || "https://chickentinders.onrender.com")
   : (import.meta.env.VITE_API_URL || "");
 
-/** @deprecated CSRF is no longer used — auth is handled via JWT Bearer tokens */
-export function getCsrfToken(): string | null {
-  return null;
+// CSRF token is cached in memory for the lifetime of the tab/app launch.
+// We refetch lazily on first mutation and on 403-CSRF_INVALID responses.
+let cachedCsrfToken: string | null = null;
+let csrfFetchInFlight: Promise<string | null> | null = null;
+
+async function fetchCsrfToken(): Promise<string | null> {
+  // De-dupe concurrent first-mutation bursts so we only hit /api/csrf-token once.
+  if (csrfFetchInFlight) return csrfFetchInFlight;
+  csrfFetchInFlight = (async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/csrf-token`, {
+        credentials: "include",
+      });
+      if (!res.ok) return null;
+      const body = (await res.json()) as { token?: string };
+      cachedCsrfToken = body.token ?? null;
+      return cachedCsrfToken;
+    } catch {
+      return null;
+    } finally {
+      csrfFetchInFlight = null;
+    }
+  })();
+  return csrfFetchInFlight;
+}
+
+export async function getCsrfToken(): Promise<string | null> {
+  if (cachedCsrfToken) return cachedCsrfToken;
+  return fetchCsrfToken();
+}
+
+export function invalidateCsrfToken(): void {
+  cachedCsrfToken = null;
 }
 
 export async function getAuthHeaders(): Promise<Record<string, string>> {
@@ -24,8 +54,16 @@ export async function getAuthHeaders(): Promise<Record<string, string>> {
   if (memberBindings) {
     headers["X-Member-Bindings"] = memberBindings;
   }
+  // Attach CSRF token opportunistically. Server only enforces on mutating
+  // methods, so including it on GETs is harmless and means every raw fetch
+  // call site that routes through getAuthHeaders() is CSRF-compliant without
+  // needing to remember it.
+  const csrf = await getCsrfToken();
+  if (csrf) headers["X-CSRF-Token"] = csrf;
   return headers;
 }
+
+const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 /** Save member bindings from server response header (native cross-origin fallback) */
 export function saveMemberBindings(res: Response) {
@@ -47,18 +85,39 @@ export async function apiRequest(
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
-  const authHeaders = await getAuthHeaders();
-  const headers: Record<string, string> = { ...authHeaders };
-  if (data) {
-    headers["Content-Type"] = "application/json";
-  }
+  const upper = method.toUpperCase();
+  const needsCsrf = MUTATING_METHODS.has(upper);
 
-  const res = await fetch(`${API_BASE}${url}`, {
-    method,
-    headers,
-    body: data ? JSON.stringify(data) : undefined,
-    credentials: "include",
-  });
+  const doFetch = async (): Promise<Response> => {
+    const authHeaders = await getAuthHeaders();
+    const headers: Record<string, string> = { ...authHeaders };
+    if (data) {
+      headers["Content-Type"] = "application/json";
+    }
+    if (needsCsrf) {
+      const token = await getCsrfToken();
+      if (token) headers["X-CSRF-Token"] = token;
+    }
+    return fetch(`${API_BASE}${url}`, {
+      method,
+      headers,
+      body: data ? JSON.stringify(data) : undefined,
+      credentials: "include",
+    });
+  };
+
+  let res = await doFetch();
+
+  // One-shot retry on CSRF failure: token may have expired or the session was
+  // reset. Invalidate the cache, fetch a fresh token, and retry once.
+  if (needsCsrf && res.status === 403) {
+    const body = await res.clone().text();
+    if (body.includes("CSRF_INVALID")) {
+      invalidateCsrfToken();
+      await fetchCsrfToken();
+      res = await doFetch();
+    }
+  }
 
   saveMemberBindings(res);
   await throwIfResNotOk(res);

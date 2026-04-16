@@ -295,7 +295,9 @@ export default function MatchesPage() {
 
   const loadMoreMutation = useMutation({
     mutationFn: async () => {
-      const response = await apiRequest("POST", `/api/groups/${params.id}/restaurants/load-more`);
+      const response = await apiRequest("POST", `/api/groups/${params.id}/restaurants/load-more`, {
+        memberId,
+      });
       return response.json();
     },
     onSuccess: async () => {

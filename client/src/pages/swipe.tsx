@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { SwipeCard, SwipeButtons, type SwipeAction } from "@/components/swipe-card";
 import { MemberAvatars } from "@/components/member-avatars";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, API_BASE, getAuthHeaders } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { useGroupPushNotifications } from "@/hooks/use-push-notifications";
@@ -62,12 +62,16 @@ export default function SwipePage() {
     permission !== "denied" &&
     !isSubscribed;
 
-  // Fetch visited restaurants from user's crews for smart exclusions
+  // Fetch visited restaurants from user's crews for smart exclusions.
+  // Must use API_BASE + auth headers so this works on native (where the WebView
+  // lives at capacitor://localhost and relative paths don't resolve to our API).
   useEffect(() => {
     const fetchVisitedRestaurants = async () => {
       try {
-        const response = await fetch("/api/sessions/visited-restaurants", {
+        const headers = await getAuthHeaders();
+        const response = await fetch(`${API_BASE}/api/sessions/visited-restaurants`, {
           credentials: "include",
+          headers,
         });
         if (response.ok) {
           const data = await response.json();
@@ -274,7 +278,9 @@ export default function SwipePage() {
 
   const loadMoreMutation = useMutation({
     mutationFn: async () => {
-      const response = await apiRequest("POST", `/api/groups/${params.id}/restaurants/load-more`);
+      const response = await apiRequest("POST", `/api/groups/${params.id}/restaurants/load-more`, {
+        memberId,
+      });
       return response.json() as Promise<{ restaurants: Restaurant[]; loadedNew: boolean }>;
     },
     onSuccess: (data) => {
@@ -353,7 +359,11 @@ export default function SwipePage() {
 
     setLastSwipe({ restaurant, index: currentIndex });
     setCurrentIndex((prev) => prev + 1);
-  }, [currentIndex, restaurants, swipeMutation, params.id, trackSwipe, group]);
+    // Intentionally omit `group` — it's not read inside this callback, and its
+    // high-frequency updates from WebSocket sync would otherwise recreate this
+    // handler on every message, defeating memoization and risking stale refs
+    // in listeners that capture it.
+  }, [currentIndex, restaurants, swipeMutation, params.id, trackSwipe]);
 
   const handleUndo = useCallback(() => {
     if (!lastSwipe) return;

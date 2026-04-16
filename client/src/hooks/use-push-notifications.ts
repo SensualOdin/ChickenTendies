@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "./use-auth";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, API_BASE } from "@/lib/queryClient";
 import { isNative } from "@/lib/platform";
 import { PushNotifications } from "@capacitor/push-notifications";
 
@@ -65,7 +65,7 @@ export function usePushNotifications() {
     } else {
       setPermission(Notification.permission as PermissionState);
 
-      fetch("/api/push/vapid-key")
+      fetch(`${API_BASE}/api/push/vapid-key`, { credentials: "include" })
         .then((res) => res.json())
         .then((data) => setVapidKey(data.publicKey))
         .catch(() => {});
@@ -207,7 +207,7 @@ export function useGroupPushNotifications({ groupId, memberId }: UseGroupPushNot
     setPermission(Notification.permission as PermissionState);
 
     if (groupId) {
-      fetch(`/api/groups/${groupId}/push/vapid-key`)
+      fetch(`${API_BASE}/api/groups/${groupId}/push/vapid-key`, { credentials: "include" })
         .then((res) => res.json())
         .then((data) => setVapidKey(data.vapidKey))
         .catch(() => {});
