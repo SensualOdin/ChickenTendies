@@ -208,9 +208,18 @@ export function useGroupPushNotifications({ groupId, memberId }: UseGroupPushNot
 
     if (groupId) {
       fetch(`${API_BASE}/api/groups/${groupId}/push/vapid-key`, { credentials: "include" })
-        .then((res) => res.json())
+        .then((res) => {
+          if (!res.ok) throw new Error(`vapid-key HTTP ${res.status}`);
+          return res.json();
+        })
         .then((data) => setVapidKey(data.vapidKey))
-        .catch(() => {});
+        .catch((err) => {
+          // Server returns 500 if VAPID env vars aren't configured. The caller
+          // uses !vapidKey to hide the notification banner entirely when this
+          // happens, so we just need to make sure vapidKey stays null.
+          console.warn("[push] vapid-key fetch failed, notifications disabled:", err);
+          setVapidKey(null);
+        });
     }
   }, [isPushSupported, groupId]);
 
@@ -263,5 +272,10 @@ export function useGroupPushNotifications({ groupId, memberId }: UseGroupPushNot
     isSubscribed,
     isLoading,
     subscribe,
+    // True once we've successfully fetched a VAPID key from the server. Call
+    // sites use this to avoid showing an "Enable notifications" affordance
+    // when push is not actually available (e.g., the server env lacks VAPID
+    // keys and /api/groups/:id/push/vapid-key returns 500).
+    vapidReady: !!vapidKey,
   };
 }

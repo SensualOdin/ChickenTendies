@@ -44,6 +44,7 @@ export default function SwipePage() {
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [memberProgress, setMemberProgress] = useState<Record<string, { swipeCount: number; total: number }>>({});
   const [showPrefs, setShowPrefs] = useState(false);
+  const [showMembers, setShowMembers] = useState(false);
   const [autoNavTimer, setAutoNavTimer] = useState<number | null>(null);
   // Imperative handle to the top SwipeCard so button taps and keyboard input
   // can play the same spring animation as a hand gesture.
@@ -58,15 +59,20 @@ export default function SwipePage() {
     permission,
     isSubscribed,
     isLoading: notificationLoading,
-    subscribe: subscribeToNotifications
+    subscribe: subscribeToNotifications,
+    vapidReady,
   } = useGroupPushNotifications({
     groupId: params.id || "",
     memberId: memberId || ""
   });
 
+  // Only offer the push banner when push actually works end-to-end. If the
+  // server hasn't been configured with VAPID keys, vapidReady is false and
+  // the "Enable" button would silently fail — hide it instead.
   const shouldShowNotificationPrompt =
     showNotificationPrompt &&
     isPushSupported &&
+    vapidReady &&
     permission !== "granted" &&
     permission !== "denied" &&
     !isSubscribed;
@@ -646,6 +652,23 @@ export default function SwipePage() {
                   if (success) {
                     toast({ title: "Notifications enabled!", description: "We'll ping you when everyone finishes." });
                     setShowNotificationPrompt(false);
+                  } else {
+                    // Silent-fail used to be the default — surface something
+                    // so the user knows the click registered. Read
+                    // Notification.permission directly (not the closed-over
+                    // `permission` state, which was captured pre-prompt) to
+                    // tailor the message when the user just denied the OS
+                    // prompt.
+                    const denied =
+                      typeof Notification !== "undefined" &&
+                      Notification.permission === "denied";
+                    toast({
+                      title: "Couldn't turn on notifications",
+                      description: denied
+                        ? "Notifications are blocked in your browser settings."
+                        : "Something went wrong. Try again or enable them later.",
+                      variant: "destructive",
+                    });
                   }
                 }}
                 disabled={notificationLoading}
@@ -716,9 +739,90 @@ export default function SwipePage() {
               <Bell className="w-5 h-5" />
             </Button>
           )}
-          <MemberAvatars members={group.members} size="sm" progress={memberProgress} />
+          <button
+            type="button"
+            onClick={() => setShowMembers((prev) => !prev)}
+            aria-expanded={showMembers}
+            aria-label={`${group.members.length} member${group.members.length !== 1 ? "s" : ""}, tap to ${showMembers ? "hide" : "see"} names`}
+            className="rounded-full -m-1 p-1 hover:bg-muted transition-colors cursor-pointer"
+            data-testid="button-members-toggle"
+          >
+            <MemberAvatars members={group.members} size="sm" progress={memberProgress} />
+          </button>
         </div>
       </header>
+
+      {/* Inline member list — tapping the avatar cluster in the header toggles
+          this open. Shows everyone's name, host badge, swipe progress, and
+          done status so the whole crew can see who they're waiting on without
+          relying on desktop-only `title` tooltips. */}
+      <AnimatePresence initial={false}>
+        {showMembers && (
+          <motion.div
+            key="member-list"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden px-4 md:px-6 shrink-0"
+          >
+            <div className="rounded-lg border bg-muted/30 p-3 mb-2">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-semibold">
+                  Crew ({group.members.length})
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowMembers(false)}
+                  className="text-xs text-muted-foreground hover:text-foreground"
+                  data-testid="button-members-close"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <ul className="space-y-1.5">
+                {group.members.map((member) => {
+                  const prog = memberProgress[member.id];
+                  const isMe = member.id === memberId;
+                  return (
+                    <li
+                      key={member.id}
+                      className="flex items-center gap-2 text-sm"
+                    >
+                      <span className="w-6 h-6 rounded-full bg-primary/20 text-primary flex items-center justify-center text-[10px] font-bold">
+                        {member.name.charAt(0).toUpperCase()}
+                      </span>
+                      <span className={isMe ? "font-bold" : ""}>
+                        {member.name}
+                        {isMe ? " (you)" : ""}
+                      </span>
+                      {member.isHost && (
+                        <span className="text-[10px] uppercase tracking-wide text-yellow-600 dark:text-yellow-400 font-semibold">
+                          Host
+                        </span>
+                      )}
+                      <span className="ml-auto flex items-center gap-2">
+                        {prog && (
+                          <span className="text-xs text-muted-foreground tabular-nums">
+                            {prog.swipeCount}/{prog.total}
+                          </span>
+                        )}
+                        {member.doneSwiping ? (
+                          <span className="text-[10px] uppercase tracking-wide text-emerald-600 dark:text-emerald-400 font-semibold">
+                            Done
+                          </span>
+                        ) : (
+                          <span className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />
+                        )}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {matches.length > 0 && (
         <motion.div
