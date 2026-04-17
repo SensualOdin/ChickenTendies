@@ -440,7 +440,7 @@ export default function MatchesPage() {
               <div className="flex flex-col gap-3">
                 <Button
                   size="lg"
-                  className="w-full bg-gradient-to-r from-primary to-orange-500"
+                  className="w-full"
                   onClick={() => {
                     const destination = pickedRestaurant.latitude && pickedRestaurant.longitude
                       ? `${pickedRestaurant.latitude},${pickedRestaurant.longitude}`
@@ -623,7 +623,7 @@ export default function MatchesPage() {
                               size="sm"
                               variant={iVoted ? "default" : "outline"}
                               className={iVoted
-                                ? "bg-gradient-to-r from-primary to-orange-500 text-white"
+                                ? "text-white"
                                 : "border-primary/30 text-primary hover:bg-primary/10"
                               }
                               onClick={() => voteMutation.mutate(restaurant.id)}
@@ -760,7 +760,7 @@ export default function MatchesPage() {
                             <div className="flex items-center gap-2 mt-2 flex-wrap">
                               <Button
                                 size="sm"
-                                className="bg-gradient-to-r from-primary to-orange-500 text-xs"
+                                className="text-xs"
                                 data-testid={`button-directions-${restaurant.id}`}
                                 onClick={() => {
                                   const destination = restaurant.latitude && restaurant.longitude
@@ -863,7 +863,7 @@ export default function MatchesPage() {
                   Keep swiping — your perfect spot is waiting!
                 </p>
                 <Button
-                  className="bg-gradient-to-r from-primary to-orange-500"
+                  className=""
                   data-testid="button-back-to-swiping"
                   onClick={() => loadMoreMutation.mutate()}
                   disabled={loadMoreMutation.isPending}
@@ -897,7 +897,7 @@ export default function MatchesPage() {
             </p>
             <div className="flex flex-col sm:flex-row gap-2 justify-center">
               <Button
-                className="bg-gradient-to-r from-primary to-orange-500"
+                className=""
                 data-testid="button-continue-swiping"
                 onClick={() => setLocation(`/group/${params.id}/swipe`)}
               >
@@ -939,7 +939,7 @@ export default function MatchesPage() {
               <p className="text-sm text-muted-foreground mb-4">Start a new session with your crew</p>
               <div className="flex flex-col sm:flex-row gap-2 justify-center">
                 <Button
-                  className="bg-gradient-to-r from-primary to-orange-500"
+                  className=""
                   onClick={() => rematchMutation.mutate()}
                   disabled={rematchMutation.isPending}
                 >

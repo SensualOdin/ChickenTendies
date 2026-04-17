@@ -506,7 +506,7 @@ export const SwipeCard = forwardRef<SwipeCardHandle, SwipeCardProps>(function Sw
                 <button
                   type="button"
                   onClick={() => setShowDetails(false)}
-                  className="w-full px-4 py-2.5 text-sm font-medium text-white rounded-lg bg-gradient-to-r from-primary to-orange-500"
+                  className="w-full px-4 py-2.5 text-sm font-medium text-white rounded-lg"
                 >
                   Back to Swiping
                 </button>

@@ -396,7 +396,7 @@ export default function Preferences() {
                     <Button
                       type="button"
                       variant={usingGPS ? "default" : "outline"}
-                      className={`w-full ${usingGPS ? "bg-gradient-to-r from-primary to-orange-500" : ""}`}
+                      className="w-full"
                       onClick={usingGPS ? clearGPS : handleFindMe}
                       disabled={isLocating}
                       data-testid="button-find-me"
@@ -681,7 +681,7 @@ export default function Preferences() {
                                           field.onChange(updated);
                                         }}
                                         className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all border-2 ${(field.value || []).includes(cuisine)
-                                          ? "bg-gradient-to-r from-primary to-orange-500 text-white border-transparent"
+                                          ? "bg-primary text-primary-foreground border-transparent"
                                           : "bg-muted hover:border-primary/50 border-transparent"
                                           }`}
                                         data-testid={`button-cuisine-${cuisine}`}
@@ -704,7 +704,7 @@ export default function Preferences() {
 
                   <Button
                     type="submit"
-                    className="w-full bg-gradient-to-r from-primary to-orange-500 shadow-lg shadow-primary/30"
+                    className="w-full rounded-full h-12"
                     size="lg"
                     disabled={saveMutation.isPending}
                     data-testid="button-start-swiping"

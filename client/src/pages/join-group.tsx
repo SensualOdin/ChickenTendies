@@ -11,10 +11,11 @@ import { joinGroupSchema, type JoinGroup } from "@shared/schema";
 import { getAuthHeaders, API_BASE } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
-import { ArrowLeft, Flame, Loader2, Ticket, User, Smartphone, Users } from "lucide-react";
+import { ArrowLeft, Loader2, Ticket, Smartphone, Users, ArrowRight } from "lucide-react";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
-import { useCallback, useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
+import logoImage from "@assets/460272BC-3FCC-4927-8C2E-4C236353E7AB_1768880143398.png";
 
 interface CrewPreview {
   name: string;
@@ -259,35 +260,46 @@ export default function JoinGroupPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background safe-top safe-x">
-      <header className="flex items-center justify-between p-4 md:p-6">
+    <div className="editorial-page min-h-screen safe-top safe-x flex flex-col">
+      <header className="editorial-container py-6 flex items-center justify-between">
         <Link href="/">
-          <Button variant="ghost" size="icon" data-testid="button-back">
+          <Button variant="ghost" size="icon" data-testid="button-back" className="rounded-full">
             <ArrowLeft className="w-5 h-5" />
           </Button>
         </Link>
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-orange-500 flex items-center justify-center">
-            <Flame className="w-4 h-4 text-primary-foreground" />
+        <Link href="/" className="flex items-center gap-3">
+          <img src={logoImage} alt="ChickenTinders" className="w-9 h-9 rounded-[10px] object-cover" />
+          <div className="hidden sm:block">
+            <div className="font-serif font-bold text-lg tracking-tight leading-none">ChickenTinders</div>
+            <div className="font-mono text-[10px] tracking-[0.14em] uppercase opacity-55 mt-0.5">Swipe Together, Dine Together</div>
           </div>
-          <div className="flex flex-col">
-            <span className="font-bold bg-gradient-to-r from-primary to-orange-500 bg-clip-text text-transparent leading-tight">ChickenTinders</span>
-            <span className="text-xs text-muted-foreground hidden sm:block">Swipe Together, Dine Together</span>
-          </div>
-        </div>
+        </Link>
+        <div className="w-10" />
       </header>
 
-      <main className="px-4 md:px-6 py-8 max-w-md mx-auto safe-bottom">
+      <main className="flex-1 px-4 py-8 max-w-md w-full mx-auto safe-bottom relative z-[1]">
+        <div className="text-center mb-8">
+          <div className="eyebrow mb-5 inline-flex">
+            <span className="dot"></span>
+            {crewPreview ? "Crew invite" : "Join a party"}
+          </div>
+          <h1 className="editorial-display text-5xl sm:text-6xl mb-3">
+            {crewPreview ? <>You're <em>invited.</em></> : <>Got a <em>code?</em></>}
+          </h1>
+          <p className="text-muted-foreground max-w-xs mx-auto text-sm">
+            {crewPreview ? "Join the crew or enter a different code below." : "Drop the 6-character code and you're in. No signup."}
+          </p>
+        </div>
         {isInBrowser && (
           <motion.div
             initial={{ y: -10, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             className="mb-4"
           >
-            <Card className="border-2 border-primary/30 bg-primary/5">
+            <Card className="editorial-card" style={{ borderColor: "hsl(var(--paprika) / 0.35)", background: "hsl(var(--paprika) / 0.05)" }}>
               <CardContent className="p-4">
                 <div className="flex items-start gap-3">
-                  <Smartphone className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                  <Smartphone className="w-5 h-5 shrink-0 mt-0.5" style={{ color: "hsl(var(--paprika))" }} />
                   <div className="text-sm">
                     <p className="font-medium" data-testid="text-pwa-hint">Already have ChickenTinders on your home screen?</p>
                     <p className="text-muted-foreground mt-1">
@@ -307,13 +319,13 @@ export default function JoinGroupPage() {
             transition={{ duration: 0.4 }}
             className="mb-4"
           >
-            <Card className="border-2 border-primary/30">
+            <Card className="editorial-card !p-0">
               <CardHeader className="text-center pb-3">
-                <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mx-auto mb-2">
-                  <Users className="w-6 h-6 text-primary" />
+                <div className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-2" style={{ background: "hsl(var(--paprika) / 0.12)" }}>
+                  <Users className="w-6 h-6" style={{ color: "hsl(var(--paprika))" }} />
                 </div>
-                <CardTitle className="text-xl" data-testid="text-crew-preview-name">{crewPreview.name}</CardTitle>
-                <CardDescription>
+                <CardTitle className="editorial-display text-3xl" data-testid="text-crew-preview-name">{crewPreview.name}</CardTitle>
+                <CardDescription className="font-mono text-[11px] tracking-[0.14em] uppercase">
                   {crewPreview.memberCount} member{crewPreview.memberCount !== 1 ? "s" : ""}
                 </CardDescription>
               </CardHeader>
@@ -336,7 +348,7 @@ export default function JoinGroupPage() {
 
                 {isAuthenticated ? (
                   <Button
-                    className="w-full bg-gradient-to-r from-primary to-orange-500"
+                    className="w-full h-12 rounded-full"
                     size="lg"
                     onClick={handleJoinCrew}
                     disabled={joiningCrew}
@@ -348,17 +360,17 @@ export default function JoinGroupPage() {
                         Joining...
                       </>
                     ) : (
-                      "Join This Crew"
+                      <>Join this crew <ArrowRight className="w-5 h-5 ml-2" /></>
                     )}
                   </Button>
                 ) : (
                   <Button
-                    className="w-full bg-gradient-to-r from-primary to-orange-500"
+                    className="w-full h-12 rounded-full"
                     size="lg"
                     onClick={handleSignIn}
                     data-testid="button-sign-in-to-join"
                   >
-                    Sign In to Join
+                    Sign in to join
                   </Button>
                 )}
               </CardContent>
@@ -381,63 +393,40 @@ export default function JoinGroupPage() {
           animate={{ y: 0, opacity: 1 }}
           transition={{ duration: 0.4 }}
         >
-          <Card className="border-2">
-            <CardHeader className="text-center">
-              <motion.div 
-                className="text-4xl mb-2"
-                animate={{ rotate: [0, 10, -10, 0] }}
-                transition={{ duration: 1.5, repeat: Infinity }}
-              >
-                <Ticket className="w-10 h-10 mx-auto text-primary" />
-              </motion.div>
-              <CardTitle className="text-2xl" data-testid="text-join-title">
-                {crewPreview ? "Or Join a Party Instead" : "Join the Party!"}
-              </CardTitle>
-              <CardDescription>
-                {crewPreview ? "Enter a different code to join an anonymous party" : "Got a secret code? Let's get you in!"}
-              </CardDescription>
+          <Card className="editorial-card !p-0">
+            <CardHeader className="text-center pb-4">
+              <div className="font-mono text-[10px] tracking-[0.18em] uppercase text-muted-foreground" data-testid="text-join-title">
+                {crewPreview ? "Or join a different party" : "Enter the code"}
+              </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pb-7 px-7">
               {needsAuth ? (
                 <div className="space-y-4 text-center">
                   <p className="text-muted-foreground">
                     This is a crew invite code. You need to sign in to join a crew.
                   </p>
-                  <Button 
-                    className="w-full bg-gradient-to-r from-primary to-orange-500"
-                    size="lg"
-                    onClick={handleSignIn}
-                    data-testid="button-sign-in-to-join"
-                  >
-                    Sign In to Join
+                  <Button className="w-full h-12 rounded-full" size="lg" onClick={handleSignIn} data-testid="button-sign-in-to-join">
+                    Sign in to join
                   </Button>
-                  <Button
-                    variant="outline"
-                    className="w-full"
-                    onClick={() => setNeedsAuth(false)}
-                    data-testid="button-try-different-code"
-                  >
-                    Try a Different Code
+                  <Button variant="outline" className="w-full h-12 rounded-full" onClick={() => setNeedsAuth(false)} data-testid="button-try-different-code">
+                    Try a different code
                   </Button>
                 </div>
               ) : (
                 <>
                   <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
                       <FormField
                         control={form.control}
                         name="code"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="flex items-center gap-2">
-                              <Ticket className="w-4 h-4 text-primary" />
-                              Secret Party Code
-                            </FormLabel>
+                            <FormLabel className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground">Party code</FormLabel>
                             <FormControl>
-                              <Input 
-                                placeholder="ABC123" 
+                              <Input
+                                placeholder="ABC123"
                                 maxLength={6}
-                                className="text-center text-2xl tracking-[0.3em] font-mono uppercase border-2 bg-muted/50"
+                                className="text-center text-3xl tracking-[0.3em] font-mono uppercase h-16"
                                 {...field}
                                 onChange={(e) => field.onChange(e.target.value.toUpperCase())}
                                 data-testid="input-group-code"
@@ -447,53 +436,37 @@ export default function JoinGroupPage() {
                           </FormItem>
                         )}
                       />
-
                       <FormField
                         control={form.control}
                         name="memberName"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel className="flex items-center gap-2">
-                              <User className="w-4 h-4 text-accent" />
-                              Your Name
-                            </FormLabel>
+                            <FormLabel className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground">Your name</FormLabel>
                             <FormControl>
-                              <Input 
-                                placeholder="What should we call you?" 
-                                className="border-2"
-                                {...field}
-                                data-testid="input-member-name"
-                              />
+                              <Input placeholder="What should we call you?" className="h-11" {...field} data-testid="input-member-name" />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
                         )}
                       />
-
-                      <Button 
-                        type="submit" 
-                        className="w-full bg-gradient-to-r from-primary to-orange-500" 
-                        size="lg"
-                        disabled={joinMutation.isPending}
-                        data-testid="button-submit-join"
-                      >
+                      <Button type="submit" className="w-full h-12 rounded-full" size="lg" disabled={joinMutation.isPending} data-testid="button-submit-join">
                         {joinMutation.isPending ? (
                           <>
                             <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                             Joining the fun...
                           </>
                         ) : (
-                          "Jump In!"
+                          <>Jump in <ArrowRight className="w-5 h-5 ml-2" /></>
                         )}
                       </Button>
                     </form>
                   </Form>
 
-                  <div className="mt-6 text-center">
+                  <div className="mt-6 pt-5 text-center border-t border-border">
                     <p className="text-sm text-muted-foreground">
                       No code yet?{" "}
-                      <Link href="/create" className="text-primary font-medium hover:underline" data-testid="link-create-instead">
-                        Start your own party!
+                      <Link href="/create" className="font-medium underline decoration-[hsl(var(--paprika))] decoration-2 underline-offset-2 hover:text-[hsl(var(--paprika))]" data-testid="link-create-instead">
+                        Start your own
                       </Link>
                     </p>
                   </div>

@@ -560,7 +560,7 @@ export default function SwipePage() {
               <div className="flex flex-col gap-2">
                 <Button
                   size="lg"
-                  className="w-full bg-gradient-to-r from-primary to-orange-500"
+                  className="w-full"
                   onClick={() => setLocation(`/group/${params.id}/matches`)}
                   data-testid="button-see-matches-now"
                 >
@@ -610,7 +610,7 @@ export default function SwipePage() {
                 <Link href={`/group/${params.id}/matches`}>
                   <Button
                     size="lg"
-                    className="w-full bg-gradient-to-r from-primary to-orange-500"
+                    className="w-full"
                     onClick={() => setShowMatchCelebration(false)}
                   >
                     <PartyPopper className="w-5 h-5 mr-2" />
@@ -956,7 +956,7 @@ export default function SwipePage() {
                 <div className="flex flex-col gap-3 items-center">
                   {matches.length > 0 && (
                     <Link href={`/group/${params.id}/matches`}>
-                      <Button size="lg" className="bg-gradient-to-r from-primary to-orange-500" data-testid="button-view-matches">
+                      <Button size="lg" className="" data-testid="button-view-matches">
                         See Your Matches!
                         <ChevronRight className="w-5 h-5 ml-2" />
                       </Button>
@@ -966,7 +966,7 @@ export default function SwipePage() {
                     <Button
                       size="lg"
                       variant={matches.length > 0 ? "outline" : "default"}
-                      className={matches.length > 0 ? "" : "bg-gradient-to-r from-primary to-orange-500"}
+                      className={matches.length > 0 ? "" : ""}
                       onClick={() => loadMoreMutation.mutate()}
                       disabled={loadMoreMutation.isPending}
                       data-testid="button-load-more"

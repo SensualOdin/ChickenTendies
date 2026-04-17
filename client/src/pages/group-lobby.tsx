@@ -324,7 +324,7 @@ export default function GroupLobby() {
             <Flame className="w-4 h-4 text-primary-foreground" />
           </div>
           <div className="flex flex-col">
-            <span className="font-bold bg-gradient-to-r from-primary to-orange-500 bg-clip-text text-transparent leading-tight">ChickenTinders</span>
+            <span className="font-serif font-bold tracking-tight leading-tight">ChickenTinders</span>
             <span className="text-xs text-muted-foreground hidden sm:block">Swipe Together, Dine Together</span>
           </div>
         </div>
@@ -457,7 +457,7 @@ export default function GroupLobby() {
           {isHost ? (
             <Button
               size="lg"
-              className="w-full bg-gradient-to-r from-primary to-orange-500 shadow-lg shadow-primary/30"
+              className="w-full rounded-full h-12"
               onClick={handleContinue}
               disabled={group.members.length < 1}
               data-testid="button-continue"

@@ -2,84 +2,78 @@
 @tailwind components;
 @tailwind utilities;
 
-/* LIGHT MODE */
+/* LIGHT MODE — EDITORIAL (cream / paprika / sage / butter) */
 :root {
   --keyboard-height: 0px;
-  --button-outline: rgba(0,0,0, .10);
+  --button-outline: rgba(0,0,0, .12);
   --badge-outline: rgba(0,0,0, .05);
 
   /* Automatic computation of border around primary / danger buttons */
   --opaque-button-border-intensity: -8; /* In terms of percentages */
 
   /* Backgrounds applied on top of other backgrounds when hovered/active */
-  --elevate-1: rgba(0,0,0, .03);
-  --elevate-2: rgba(0,0,0, .08);
+  --elevate-1: rgba(31,24,20, .04);
+  --elevate-2: rgba(31,24,20, .09);
 
-  --background: 35 50% 98%;
+  /* Editorial palette (raw refs, also exposed as utilities below) */
+  --cream:       36 47% 93%;  /* #F5EFE4 */
+  --cream-2:     37 42% 88%;  /* #EDE4D3 */
+  --ink:         24 20% 10%;  /* #1F1814 */
+  --ink-2:       20 19% 19%;  /* #3A2F28 */
+  --paprika:     10 63% 48%;  /* #C8462C */
+  --paprika-deep:12 68% 38%;  /* #A3371F */
+  --sage:        90 16% 43%;  /* #6B7F5C */
+  --butter:      42 77% 60%;  /* #E8B84A */
 
-  --foreground: 25 30% 12%;
+  --background: var(--cream);
+  --foreground: var(--ink);
 
-  --border: 35 25% 85%;
+  /* Borders/inputs: solid pre-mixed values (tailwind <alpha-value> doesn't allow inline alpha in source var) */
+  --border: 35 18% 82%;   /* 12% ink on cream */
 
-  --card: 0 0% 100%;
+  --card: var(--cream-2);
+  --card-foreground: var(--ink);
+  --card-border: 35 18% 82%;
 
-  --card-foreground: 25 30% 12%;
+  --sidebar: var(--cream-2);
+  --sidebar-foreground: var(--ink);
+  --sidebar-border: 35 18% 82%;
+  --sidebar-primary: var(--paprika);
+  --sidebar-primary-foreground: 36 47% 96%;
+  --sidebar-accent: var(--cream-2);
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-ring: var(--paprika);
 
-  --card-border: 35 25% 88%;
+  --popover: var(--cream);
+  --popover-foreground: var(--ink);
+  --popover-border: 35 18% 82%;
 
-  --sidebar: 35 35% 95%;
+  --primary: var(--paprika);
+  --primary-foreground: 36 47% 96%;
 
-  --sidebar-foreground: 25 25% 18%;
+  --secondary: var(--cream-2);
+  --secondary-foreground: var(--ink);
 
-  --sidebar-border: 35 25% 85%;
+  --muted: var(--cream-2);
+  --muted-foreground: 20 19% 32%;
 
-  --sidebar-primary: 350 85% 60%;
+  --accent: var(--sage);
+  --accent-foreground: 36 47% 96%;
 
-  --sidebar-primary-foreground: 0 0% 100%;
+  --destructive: 10 63% 48%;
+  --destructive-foreground: 36 47% 96%;
 
-  --sidebar-accent: 35 45% 90%;
+  --input: 33 19% 81%;  /* 14% ink on cream */
+  --ring: var(--paprika);
+  --chart-1: var(--paprika);
+  --chart-2: var(--sage);
+  --chart-3: var(--butter);
+  --chart-4: 200 40% 50%;
+  --chart-5: 280 35% 55%;
 
-  --sidebar-accent-foreground: 25 25% 18%;
-
-  --sidebar-ring: 350 85% 60%;
-
-  --popover: 0 0% 100%;
-
-  --popover-foreground: 25 30% 12%;
-
-  --popover-border: 35 25% 85%;
-
-  --primary: 350 85% 60%;
-
-  --primary-foreground: 0 0% 100%;
-
-  --secondary: 35 30% 90%;
-
-  --secondary-foreground: 25 25% 18%;
-
-  --muted: 35 25% 92%;
-
-  --muted-foreground: 25 15% 40%;
-
-  --accent: 150 75% 42%;
-
-  --accent-foreground: 0 0% 100%;
-
-  --destructive: 0 85% 55%;
-
-  --destructive-foreground: 0 0% 100%;
-
-  --input: 30 20% 85%;
-  --ring: 16 90% 55%;
-  --chart-1: 16 90% 55%;
-  --chart-2: 142 70% 45%;
-  --chart-3: 45 93% 58%;
-  --chart-4: 200 80% 55%;
-  --chart-5: 280 65% 60%;
-
-  --font-sans: 'Plus Jakarta Sans', 'Inter', sans-serif;
-  --font-serif: Georgia, serif;
-  --font-mono: Menlo, monospace;
+  --font-sans: 'Inter Tight', 'Inter', system-ui, sans-serif;
+  --font-serif: 'Fraunces', Georgia, serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
   --radius: .625rem;
   --shadow-2xs: 0 1px 2px 0 rgb(0 0 0 / 0.03);
   --shadow-xs: 0 1px 3px 0 rgb(0 0 0 / 0.04);
@@ -124,76 +118,62 @@
 }
 
 .dark {
-  --button-outline: rgba(255,255,255, .10);
-  --badge-outline: rgba(255,255,255, .05);
+  --button-outline: rgba(245,239,228, .10);
+  --badge-outline: rgba(245,239,228, .05);
 
   --opaque-button-border-intensity: 9;  /* In terms of percentages */
 
-  /* Backgrounds applied on top of other backgrounds when hovered/active */
-  --elevate-1: rgba(255,255,255, .04);
-  --elevate-2: rgba(255,255,255, .09);
+  --elevate-1: rgba(245,239,228, .05);
+  --elevate-2: rgba(245,239,228, .10);
 
-  --background: 25 15% 7%;
+  /* Editorial dark (ink bg, cream fg, paprika accent) */
+  --cream:       36 47% 93%;
+  --cream-2:     37 42% 88%;
+  --ink:         24 20% 10%;
+  --ink-2:       20 19% 19%;
+  --paprika:     10 63% 48%;
+  --paprika-deep:12 68% 38%;
+  --sage:        90 18% 50%;
+  --butter:      42 77% 60%;
 
-  --foreground: 35 20% 92%;
+  --background: var(--ink);
+  --foreground: var(--cream);
+  --border: 20 15% 22%;
+  --card: var(--ink-2);
+  --card-foreground: var(--cream);
+  --card-border: 20 15% 25%;
 
-  --border: 25 12% 18%;
+  --sidebar: var(--ink-2);
+  --sidebar-foreground: var(--cream);
+  --sidebar-border: 20 15% 22%;
+  --sidebar-primary: var(--paprika);
+  --sidebar-primary-foreground: 36 47% 96%;
+  --sidebar-accent: 20 15% 18%;
+  --sidebar-accent-foreground: var(--cream);
+  --sidebar-ring: var(--paprika);
 
-  --card: 25 12% 11%;
+  --popover: var(--ink-2);
+  --popover-foreground: var(--cream);
+  --popover-border: 20 15% 25%;
 
-  --card-foreground: 35 20% 92%;
+  --primary: var(--paprika);
+  --primary-foreground: 36 47% 96%;
+  --secondary: 20 15% 20%;
+  --secondary-foreground: var(--cream);
+  --muted: 20 15% 18%;
+  --muted-foreground: 36 18% 72%;
+  --accent: var(--sage);
+  --accent-foreground: 36 47% 96%;
+  --destructive: 10 63% 48%;
+  --destructive-foreground: 36 47% 96%;
 
-  --card-border: 25 12% 20%;
-
-  --sidebar: 25 12% 9%;
-
-  --sidebar-foreground: 35 18% 85%;
-
-  --sidebar-border: 25 12% 18%;
-
-  --sidebar-primary: 350 85% 60%;
-
-  --sidebar-primary-foreground: 0 0% 100%;
-
-  --sidebar-accent: 25 12% 16%;
-
-  --sidebar-accent-foreground: 35 18% 90%;
-
-  --sidebar-ring: 350 85% 60%;
-
-  --popover: 25 12% 11%;
-
-  --popover-foreground: 35 20% 92%;
-
-  --popover-border: 25 12% 20%;
-
-  --primary: 350 85% 60%;
-
-  --primary-foreground: 0 0% 100%;
-
-  --secondary: 25 12% 18%;
-
-  --secondary-foreground: 35 18% 90%;
-
-  --muted: 25 10% 15%;
-
-  --muted-foreground: 25 10% 55%;
-
-  --accent: 150 75% 42%;
-
-  --accent-foreground: 0 0% 100%;
-
-  --destructive: 0 75% 50%;
-
-  --destructive-foreground: 0 0% 100%;
-
-  --input: 20 12% 25%;
-  --ring: 16 90% 55%;
-  --chart-1: 16 90% 55%;
-  --chart-2: 142 70% 45%;
-  --chart-3: 45 93% 58%;
-  --chart-4: 200 80% 55%;
-  --chart-5: 280 65% 60%;
+  --input: 20 15% 25%;
+  --ring: var(--paprika);
+  --chart-1: var(--paprika);
+  --chart-2: var(--sage);
+  --chart-3: var(--butter);
+  --chart-4: 200 40% 55%;
+  --chart-5: 280 35% 60%;
 
   --shadow-2xs: 0 1px 2px 0 rgb(0 0 0 / 0.2);
   --shadow-xs: 0 1px 3px 0 rgb(0 0 0 / 0.25);
@@ -213,11 +193,114 @@
 
   body {
     @apply font-sans antialiased bg-background text-foreground;
+    background-image:
+      radial-gradient(1200px 600px at 85% -10%, hsl(var(--paprika) / 0.07), transparent 60%),
+      radial-gradient(900px 500px at -10% 40%, hsl(var(--sage) / 0.07), transparent 60%);
+    background-attachment: fixed;
   }
 
   html {
     -webkit-tap-highlight-color: transparent;
   }
+
+  /* Editorial display headings — apply .editorial-display or .font-serif */
+  .editorial-display {
+    font-family: 'Fraunces', Georgia, serif;
+    font-weight: 500;
+    letter-spacing: -0.03em;
+    line-height: 1.02;
+    text-wrap: balance;
+    font-variation-settings: "SOFT" 50, "WONK" 1;
+  }
+  .editorial-display em {
+    font-style: italic;
+    font-weight: 400;
+    color: hsl(var(--paprika));
+    font-variation-settings: "SOFT" 100, "WONK" 1;
+  }
+}
+
+/* Editorial primitives available globally */
+@layer components {
+  .editorial-page {
+    position: relative;
+    min-height: 100vh;
+    background-color: hsl(var(--background));
+    background-image:
+      radial-gradient(1200px 600px at 85% -10%, hsl(var(--paprika) / 0.08), transparent 60%),
+      radial-gradient(900px 500px at -10% 40%, hsl(var(--sage) / 0.08), transparent 60%);
+    background-attachment: fixed;
+  }
+  /* Film-grain overlay (scoped so it doesn't stack on nested .editorial-page) */
+  .editorial-page::before {
+    content: "";
+    position: fixed; inset: 0;
+    pointer-events: none;
+    z-index: 100;
+    opacity: 0.5;
+    mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.12 0 0 0 0 0.09 0 0 0 0 0.08 0 0 0 0 0 0 0 0.06 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
+  }
+  .dark .editorial-page::before { opacity: 0.3; }
+
+  .editorial-container { max-width: 1240px; margin-left: auto; margin-right: auto; padding-left: 32px; padding-right: 32px; }
+  @media (max-width: 640px) { .editorial-container { padding-left: 20px; padding-right: 20px; } }
+
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 10px;
+    padding: 6px 12px;
+    border: 1px solid hsl(var(--ink) / 0.22);
+    border-radius: 999px;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: hsl(var(--ink-2));
+    background: hsl(var(--cream) / 0.6);
+  }
+  .dark .eyebrow { color: hsl(var(--cream)); border-color: hsl(var(--cream) / 0.22); background: hsl(var(--ink-2) / 0.6); }
+  .eyebrow .dot { width: 6px; height: 6px; border-radius: 50%; background: hsl(var(--sage)); box-shadow: 0 0 0 3px hsl(var(--sage) / 0.2); }
+
+  .section-num {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+  }
+  .mono-label {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+  }
+
+  /* Editorial button — pill, ink-on-cream default + paprika accent variant */
+  .btn-editorial {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 12px 18px;
+    background: hsl(var(--ink)); color: hsl(var(--cream));
+    border: 1px solid hsl(var(--ink));
+    border-radius: 999px;
+    font-family: 'Inter Tight', sans-serif;
+    font-weight: 500; font-size: 14px;
+    cursor: pointer;
+    transition: transform .15s ease, background .2s, border-color .2s, color .2s;
+    text-decoration: none;
+  }
+  .btn-editorial:hover { transform: translateY(-1px); }
+  .btn-editorial.btn-paprika { background: hsl(var(--paprika)); border-color: hsl(var(--paprika)); color: hsl(36 47% 96%); }
+  .btn-editorial.btn-paprika:hover { background: hsl(var(--paprika-deep)); border-color: hsl(var(--paprika-deep)); }
+  .btn-editorial.btn-ghost { background: transparent; color: hsl(var(--foreground)); border-color: hsl(var(--ink) / 0.25); }
+  .btn-editorial.btn-ghost:hover { background: hsl(var(--ink)); color: hsl(var(--cream)); }
+  .dark .btn-editorial.btn-ghost { color: hsl(var(--cream)); border-color: hsl(var(--cream) / 0.25); }
+  .dark .btn-editorial.btn-ghost:hover { background: hsl(var(--cream)); color: hsl(var(--ink)); }
+  .btn-editorial.btn-large { padding: 18px 28px; font-size: 16px; }
+
+  /* Editorial card */
+  .editorial-card {
+    background: hsl(var(--cream-2));
+    border: 1px solid hsl(var(--ink) / 0.12);
+    border-radius: 20px;
+    padding: 28px;
+    transition: transform .25s, box-shadow .25s;
+  }
+  .editorial-card:hover { transform: translateY(-3px); box-shadow: 0 14px 40px -20px hsl(var(--ink) / 0.25); }
+  .dark .editorial-card { background: hsl(var(--ink-2)); border-color: hsl(var(--cream) / 0.1); }
 }
 
 @layer utilities {

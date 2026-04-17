@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowRight, Shield, Users, Utensils, Mail } from "lucide-react";
+import { ArrowRight, Shield, Users, Utensils, Mail, ChevronLeft } from "lucide-react";
 import { motion } from "framer-motion";
 import { Link, useLocation } from "wouter";
 import { supabase } from "@/lib/supabase";
@@ -24,7 +24,6 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setError(null);
-
     try {
       if (isSignUp) {
         const { error } = await supabase.auth.signUp({ email, password });
@@ -49,7 +48,6 @@ export default function LoginPage() {
     }
     setLoading(true);
     setError(null);
-
     try {
       const { error } = await supabase.auth.signInWithOtp({ email });
       if (error) throw error;
@@ -64,12 +62,8 @@ export default function LoginPage() {
   const handleGoogleLogin = async () => {
     setLoading(true);
     setError(null);
-
     try {
       if (isNative()) {
-        // On native, we generate the OAuth URL and open it in the system browser.
-        // The redirect comes back via deep link (chickentinders://...) which the
-        // App.tsx deep link handler picks up and sets the Supabase session.
         const { data, error } = await supabase.auth.signInWithOAuth({
           provider: "google",
           options: {
@@ -78,15 +72,11 @@ export default function LoginPage() {
           },
         });
         if (error) throw error;
-        if (data.url) {
-          await Browser.open({ url: data.url });
-        }
+        if (data.url) await Browser.open({ url: data.url });
       } else {
         const { error } = await supabase.auth.signInWithOAuth({
           provider: "google",
-          options: {
-            redirectTo: `${window.location.origin}/dashboard`,
-          },
+          options: { redirectTo: `${window.location.origin}/dashboard` },
         });
         if (error) throw error;
       }
@@ -96,27 +86,36 @@ export default function LoginPage() {
     }
   };
 
+  const BrandHeader = () => (
+    <header className="editorial-container py-6 flex items-center justify-between safe-top">
+      <Link href="/" className="flex items-center gap-3" data-testid="link-home-from-login">
+        <img src={logoImage} alt="ChickenTinders" className="w-10 h-10 rounded-[10px] object-cover" data-testid="img-login-header-logo" />
+        <div>
+          <div className="font-serif font-bold text-xl tracking-tight leading-none">ChickenTinders</div>
+          <div className="font-mono text-[10px] tracking-[0.14em] uppercase opacity-55 mt-1">Swipe Together, Dine Together</div>
+        </div>
+      </Link>
+      <Link href="/" className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1" data-testid="link-back-home">
+        <ChevronLeft className="w-4 h-4" />
+        Back
+      </Link>
+    </header>
+  );
+
   if (magicLinkSent) {
     return (
-      <div className="min-h-screen bg-background flex flex-col safe-top safe-x safe-bottom">
-        <header className="flex items-center gap-2 p-4 md:p-6">
-          <Link href="/">
-            <Button variant="ghost" className="flex items-center gap-2">
-              <img src={logoImage} alt="ChickenTinders" className="w-8 h-8 rounded-lg object-cover shadow-md shadow-primary/20" />
-              <span className="text-lg font-bold bg-gradient-to-r from-primary to-orange-500 bg-clip-text text-transparent">
-                ChickenTinders
-              </span>
-            </Button>
-          </Link>
-        </header>
+      <div className="editorial-page min-h-screen flex flex-col safe-x">
+        <BrandHeader />
         <main className="flex-1 flex items-center justify-center px-4 pb-12">
-          <Card className="w-full max-w-md border-2">
-            <CardContent className="p-6 text-center space-y-4">
-              <Mail className="w-12 h-12 text-primary mx-auto" />
-              <h2 className="text-xl font-bold">Check your email</h2>
+          <Card className="w-full max-w-md editorial-card">
+            <CardContent className="p-8 text-center space-y-5">
+              <div className="w-14 h-14 mx-auto rounded-full grid place-items-center" style={{ background: "hsl(var(--paprika) / 0.12)" }}>
+                <Mail className="w-6 h-6" style={{ color: "hsl(var(--paprika))" }} />
+              </div>
+              <div className="section-num">Check your email</div>
+              <h2 className="editorial-display text-3xl">We sent you a link.</h2>
               <p className="text-muted-foreground">
-                We sent a {isSignUp ? "confirmation" : "login"} link to <strong>{email}</strong>.
-                Click the link to continue.
+                {isSignUp ? "Confirmation" : "Login"} link is in your inbox at <strong className="text-foreground">{email}</strong>.
               </p>
               <Button variant="ghost" onClick={() => { setMagicLinkSent(false); setIsSignUp(false); }}>
                 Back to sign in
@@ -129,19 +128,10 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col safe-top safe-x safe-bottom">
-      <header className="flex items-center gap-2 p-4 md:p-6">
-        <Link href="/">
-          <Button variant="ghost" className="flex items-center gap-2" data-testid="link-home-from-login">
-            <img src={logoImage} alt="ChickenTinders" className="w-8 h-8 rounded-lg object-cover shadow-md shadow-primary/20" data-testid="img-login-header-logo" />
-            <span className="text-lg font-bold bg-gradient-to-r from-primary to-orange-500 bg-clip-text text-transparent">
-              ChickenTinders
-            </span>
-          </Button>
-        </Link>
-      </header>
+    <div className="editorial-page min-h-screen flex flex-col safe-x">
+      <BrandHeader />
 
-      <main className="flex-1 flex items-center justify-center px-4 pb-12">
+      <main className="flex-1 flex items-center justify-center px-4 pb-16 pt-4 relative z-[1]">
         <div className="w-full max-w-md">
           <motion.div
             initial={{ y: 20, opacity: 0 }}
@@ -149,59 +139,30 @@ export default function LoginPage() {
             transition={{ duration: 0.4 }}
             className="text-center mb-8"
           >
-            <motion.img
-              src={logoImage}
-              alt="ChickenTinders logo"
-              className="w-20 h-20 rounded-2xl object-cover shadow-xl shadow-primary/30 mx-auto mb-4"
-              initial={{ scale: 0.8 }}
-              animate={{ scale: 1 }}
-              transition={{ delay: 0.1, type: "spring", stiffness: 200 }}
-              data-testid="img-login-logo"
-            />
-            <h1 className="text-2xl sm:text-3xl font-extrabold mb-2" data-testid="text-login-title">
-              Welcome to{" "}
-              <span className="bg-gradient-to-r from-primary to-orange-500 bg-clip-text text-transparent">
-                ChickenTinders
-              </span>
+            <div className="eyebrow mb-5 inline-flex">
+              <span className="dot"></span>
+              {isSignUp ? "Create your account" : "Welcome back"}
+            </div>
+            <h1 className="editorial-display text-5xl sm:text-6xl mb-4" data-testid="text-login-title">
+              {isSignUp ? (<>Let's <em>begin.</em></>) : (<>Sign <em>in.</em></>)}
             </h1>
-            <p className="text-muted-foreground" data-testid="text-login-subtitle">
-              Sign in to save your crews, track your taste, and never argue about dinner again.
+            <p className="text-muted-foreground max-w-xs mx-auto" data-testid="text-login-subtitle">
+              Save your crews, track your taste, and never argue about dinner again.
             </p>
           </motion.div>
 
           <motion.div
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.2, duration: 0.4 }}
+            transition={{ delay: 0.15, duration: 0.4 }}
           >
-            <Card className="border-2">
-              <CardContent className="p-6 space-y-6">
-                <div className="space-y-3">
-                  <div className="flex items-center gap-3 text-sm" data-testid="text-benefit-crews">
-                    <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                      <Users className="w-4 h-4 text-primary" />
-                    </div>
-                    <span className="text-muted-foreground">Create and manage your dining crews</span>
-                  </div>
-                  <div className="flex items-center gap-3 text-sm" data-testid="text-benefit-tracking">
-                    <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                      <Utensils className="w-4 h-4 text-primary" />
-                    </div>
-                    <span className="text-muted-foreground">Track restaurants you've visited together</span>
-                  </div>
-                  <div className="flex items-center gap-3 text-sm" data-testid="text-benefit-security">
-                    <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                      <Shield className="w-4 h-4 text-primary" />
-                    </div>
-                    <span className="text-muted-foreground">Your data stays secure with industry-standard auth</span>
-                  </div>
-                </div>
-
+            <Card className="editorial-card !p-0">
+              <CardContent className="p-7 space-y-6">
                 {/* Google OAuth */}
                 <Button
                   size="lg"
                   variant="outline"
-                  className="w-full text-base"
+                  className="w-full h-12 text-base rounded-full border-[1.5px]"
                   onClick={handleGoogleLogin}
                   disabled={loading}
                   data-testid="button-google-signin"
@@ -216,18 +177,15 @@ export default function LoginPage() {
                 </Button>
 
                 <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t" />
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-background px-2 text-muted-foreground">or</span>
+                  <div className="absolute inset-0 flex items-center"><span className="w-full border-t" /></div>
+                  <div className="relative flex justify-center">
+                    <span className="bg-card px-3 font-mono text-[10px] tracking-[0.16em] uppercase text-muted-foreground">Or with email</span>
                   </div>
                 </div>
 
-                {/* Email/Password form */}
                 <form onSubmit={handleEmailAuth} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
+                    <Label htmlFor="email" className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground">Email</Label>
                     <Input
                       id="email"
                       type="email"
@@ -235,10 +193,11 @@ export default function LoginPage() {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       required
+                      className="h-11"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="password">Password</Label>
+                    <Label htmlFor="password" className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground">Password</Label>
                     <Input
                       id="password"
                       type="password"
@@ -247,6 +206,7 @@ export default function LoginPage() {
                       onChange={(e) => setPassword(e.target.value)}
                       required
                       minLength={6}
+                      className="h-11"
                     />
                   </div>
 
@@ -257,47 +217,53 @@ export default function LoginPage() {
                   <Button
                     type="submit"
                     size="lg"
-                    className="w-full text-base bg-gradient-to-r from-primary to-orange-500"
+                    className="w-full h-12 text-base rounded-full"
                     disabled={loading}
                     data-testid="button-continue-signin"
                   >
-                    {loading ? "Loading..." : isSignUp ? "Create Account" : "Sign In"}
+                    {loading ? "Loading..." : isSignUp ? "Create account" : "Sign in"}
                     <ArrowRight className="w-5 h-5 ml-2" />
                   </Button>
                 </form>
 
-                <div className="flex flex-col gap-2 items-center">
+                <div className="flex flex-col gap-2 items-center pt-2 border-t border-border">
                   <button
                     type="button"
-                    className="text-xs text-primary hover:underline"
+                    className="text-sm text-primary hover:underline pt-3"
                     onClick={handleMagicLink}
                     disabled={loading}
                   >
-                    Send me a magic link instead
+                    Email me a magic link instead
                   </button>
                   <button
                     type="button"
-                    className="text-xs text-muted-foreground hover:underline"
+                    className="text-xs text-muted-foreground hover:text-foreground"
                     onClick={() => { setIsSignUp(!isSignUp); setError(null); }}
                   >
                     {isSignUp ? "Already have an account? Sign in" : "Don't have an account? Sign up"}
                   </button>
                 </div>
+
+                {/* Benefits strip */}
+                <div className="pt-5 border-t border-border">
+                  <div className="font-mono text-[10px] tracking-[0.16em] uppercase text-muted-foreground mb-3">What you unlock</div>
+                  <div className="space-y-2.5">
+                    <div className="flex items-center gap-3 text-sm" data-testid="text-benefit-crews">
+                      <Users className="w-4 h-4" style={{ color: "hsl(var(--paprika))" }} />
+                      <span className="text-muted-foreground">Saved crews that stick around</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-sm" data-testid="text-benefit-tracking">
+                      <Utensils className="w-4 h-4" style={{ color: "hsl(var(--sage))" }} />
+                      <span className="text-muted-foreground">History of where you've been</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-sm" data-testid="text-benefit-security">
+                      <Shield className="w-4 h-4" style={{ color: "hsl(var(--ink))" }} />
+                      <span className="text-muted-foreground">Secure, industry-standard auth</span>
+                    </div>
+                  </div>
+                </div>
               </CardContent>
             </Card>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.5 }}
-            className="text-center mt-6"
-          >
-            <Link href="/">
-              <Button variant="ghost" size="sm" data-testid="link-back-home">
-                Back to Home
-              </Button>
-            </Link>
           </motion.div>
         </div>
       </main>

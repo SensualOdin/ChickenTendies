@@ -99,7 +99,7 @@ export function CrewWalkthrough() {
               </div>
 
               <Button
-                className="w-full bg-gradient-to-r from-primary to-orange-500"
+                className="w-full"
                 onClick={handleDismiss}
                 data-testid="button-start-crews"
               >
