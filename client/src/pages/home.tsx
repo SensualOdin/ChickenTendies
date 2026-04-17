@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { useAuth } from "@/hooks/use-auth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import logoImage from "@assets/460272BC-3FCC-4927-8C2E-4C236353E7AB_1768880143398.png";
+import casaDelSolImage from "@assets/casa-del-sol-hero.jpg";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -491,8 +492,14 @@ export default function Home() {
                 </div>
               </div>
               <div className="swipe-card c1">
-                <div className="photo">
-                  <span className="photo-label">[ tacos · hero shot ]</span>
+                <div
+                  className="photo"
+                  style={{
+                    backgroundImage: `linear-gradient(180deg, rgba(0,0,0,0) 55%, rgba(31,24,20,0.25) 100%), url(${casaDelSolImage})`,
+                    backgroundSize: "cover",
+                    backgroundPosition: "center",
+                  }}
+                >
                   <div className="stamp">match!</div>
                 </div>
                 <div className="body">
