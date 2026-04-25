@@ -10,6 +10,7 @@ import { isAuthenticated, optionalAuth, registerAuthRoutes } from "./auth";
 import { registerSocialRoutes } from "./social-routes";
 import { sendPushToGroupMembers, saveGroupPushSubscription, getVapidPublicKey } from "./push";
 import { logAnalyticsEvent, logBatchAnalyticsEvents, getAnalyticsSummary, getCuisineDemand, getRestaurantAnalytics } from "./analytics";
+import { logLifecycleEvent } from "./lifecycle";
 import { analyticsEvents } from "@shared/models/social";
 import { db } from "./db";
 import { authStorage } from "./auth/storage";
@@ -295,6 +296,14 @@ export async function registerRoutes(
       const data = insertGroupSchema.parse(req.body);
       const result = await storage.createGroup(data);
       bindMemberToSession(req, res, result.group.id, result.memberId);
+      logLifecycleEvent("anonymous_party_created", {
+        groupId: result.group.id,
+        metadata: {
+          code: result.group.code,
+          name: result.group.name,
+          hostMemberId: result.memberId,
+        },
+      });
       const { leaderToken, ...groupWithoutToken } = result.group;
       res.json({
         group: groupWithoutToken,
@@ -327,6 +336,16 @@ export async function registerRoutes(
       if (member) {
         broadcast(result.group.id, { type: "member_joined", member }, result.memberId);
       }
+
+      logLifecycleEvent("anonymous_party_joined", {
+        groupId: result.group.id,
+        metadata: {
+          code: result.group.code,
+          memberId: result.memberId,
+          memberName: member?.name,
+          totalMembers: result.group.members.length,
+        },
+      });
 
       const { leaderToken: _, ...groupWithoutToken } = result.group;
       res.json({ ...result, group: groupWithoutToken });
@@ -590,6 +609,15 @@ export async function registerRoutes(
       broadcast(req.params.id, { type: "preferences_updated", preferences: validatedPreferences });
       broadcast(req.params.id, { type: "status_changed", status: "swiping" });
 
+      logLifecycleEvent("anonymous_party_started_swiping", {
+        groupId: req.params.id,
+        metadata: {
+          memberCount: updatedGroup.members.length,
+          cuisineTypes: validatedPreferences.cuisineTypes,
+          priceRange: validatedPreferences.priceRange,
+        },
+      });
+
       res.json(stripLeaderToken(updatedGroup));
     } catch (error) {
       res.status(400).json({ error: "Invalid request" });
@@ -851,6 +879,15 @@ export async function registerRoutes(
 
       // Clear votes
       matchVotes.delete(req.params.id);
+
+      logLifecycleEvent("anonymous_party_match_picked", {
+        groupId: req.params.id,
+        metadata: {
+          restaurantId,
+          restaurantName: restaurant.name,
+          memberCount: group.members.length,
+        },
+      });
 
       res.json({ success: true, restaurant });
     } catch (error) {
