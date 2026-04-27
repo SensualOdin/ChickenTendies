@@ -14,3 +14,9 @@ android/.gradle/
 android/build/
 android/app/build/
 android/local.properties
+
+# Signing keys — never commit
+*.keystore
+*.jks
+*.p12
+*.mobileprovision

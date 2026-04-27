@@ -3,6 +3,17 @@ import { enrichRestaurantsWithGoogle } from "./google-places";
 
 const YELP_API_KEY = process.env.YELP_API_KEY;
 const YELP_BASE_URL = "https://api.yelp.com/v3";
+const YELP_TIMEOUT_MS = 5000;
+
+async function fetchYelp(url: string, init: RequestInit = {}): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), YELP_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 interface YelpBusiness {
   id: string;
@@ -338,7 +349,7 @@ async function fetchYelpBusinessPhotos(businessIds: string[]): Promise<Map<strin
     const batch = businessIds.slice(i, i + BATCH_SIZE);
     const promises = batch.map(async (id) => {
       try {
-        const response = await fetch(`${YELP_BASE_URL}/businesses/${id}`, {
+        const response = await fetchYelp(`${YELP_BASE_URL}/businesses/${id}`, {
           headers: {
             "Authorization": `Bearer ${YELP_API_KEY}`,
             "Accept": "application/json"
@@ -442,7 +453,7 @@ export async function searchYelpRestaurantsByTerm(
   }
 
   try {
-    const response = await fetch(`${YELP_BASE_URL}/businesses/search?${params.toString()}`, {
+    const response = await fetchYelp(`${YELP_BASE_URL}/businesses/search?${params.toString()}`, {
       headers: {
         "Authorization": `Bearer ${YELP_API_KEY}`,
         "Accept": "application/json",
@@ -517,7 +528,7 @@ export async function fetchRestaurantsFromYelp(preferences: GroupPreferences, of
   try {
     const url = `${YELP_BASE_URL}/businesses/search?${params.toString()}`;
 
-    const response = await fetch(url, {
+    const response = await fetchYelp(url, {
       headers: {
         "Authorization": `Bearer ${YELP_API_KEY}`,
         "Accept": "application/json"

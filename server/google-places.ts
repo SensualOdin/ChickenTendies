@@ -6,6 +6,17 @@ const GOOGLE_PLACES_API_KEY = process.env.GOOGLE_PLACES_API_KEY;
 const GOOGLE_PLACES_URL = "https://places.googleapis.com/v1/places:searchText";
 
 const CACHE_TTL_HOURS = 24;
+const GOOGLE_PLACES_TIMEOUT_MS = 5000;
+
+async function fetchGooglePlaces(url: string, init: RequestInit = {}): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), GOOGLE_PLACES_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 interface GooglePlaceResult {
   rating?: number;
@@ -53,7 +64,7 @@ export async function lookupGooglePlace(
       };
     }
 
-    const response = await fetch(GOOGLE_PLACES_URL, {
+    const response = await fetchGooglePlaces(GOOGLE_PLACES_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

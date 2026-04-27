@@ -82,7 +82,7 @@ interface WSClient {
 const clients: Map<string, WSClient[]> = new Map();
 
 // In-memory vote storage: groupId -> Map<memberId, restaurantId>
-const matchVotes: Map<string, Map<string, string>> = new Map();
+export const matchVotes: Map<string, Map<string, string>> = new Map();
 
 function broadcast(groupId: string, message: WSMessage, excludeMemberId?: string) {
   const groupClients = clients.get(groupId) || [];
@@ -857,13 +857,17 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/groups/:id/undo-swipe", async (req: Request, res: Response) => {
+  app.post("/api/groups/:id/undo-swipe", swipeLimiter, async (req: Request, res: Response) => {
     try {
       const groupId = req.params.id;
       const { memberId, restaurantId } = req.body;
 
       if (!memberId || !restaurantId) {
         return res.status(400).json({ message: "memberId and restaurantId required" });
+      }
+
+      if (!verifyMemberIdentity(req, groupId, memberId)) {
+        return res.status(403).json({ error: "Session identity mismatch" });
       }
 
       await storage.deleteSwipe(groupId, memberId, restaurantId);
@@ -880,7 +884,15 @@ export async function registerRoutes(
   });
 
   // Vote for a matched restaurant
-  app.post("/api/groups/:id/vote-match", async (req, res) => {
+  const voteMatchLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 30,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Voting too fast, slow down" },
+  });
+
+  app.post("/api/groups/:id/vote-match", voteMatchLimiter, async (req, res) => {
     try {
       const { memberId, restaurantId } = req.body;
       if (!memberId || !restaurantId) {
@@ -931,6 +943,14 @@ export async function registerRoutes(
     const group = await storage.getGroup(req.params.id);
     if (!group) {
       res.status(404).json({ error: "Group not found" });
+      return;
+    }
+
+    // Only group members can read votes. Derive memberId from signed binding
+    // so the client doesn't need to pass anything extra.
+    const boundMemberId = getSessionMemberId(req, req.params.id);
+    if (!boundMemberId || !group.members.some((m) => m.id === boundMemberId)) {
+      res.status(403).json({ error: "Not a member of this group" });
       return;
     }
 
@@ -1044,7 +1064,15 @@ export async function registerRoutes(
   });
 
   // Nudge members who haven't swiped yet
-  app.post("/api/groups/:id/nudge", async (req, res) => {
+  const nudgeLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many nudges, slow down" },
+  });
+
+  app.post("/api/groups/:id/nudge", nudgeLimiter, async (req, res) => {
     const { restaurantId, fromMemberId } = req.body;
 
     if (!verifyMemberIdentity(req, req.params.id, fromMemberId)) {
@@ -1091,7 +1119,7 @@ export async function registerRoutes(
     memberId: z.string().min(1)
   });
 
-  app.post("/api/groups/:id/done-swiping", async (req, res) => {
+  app.post("/api/groups/:id/done-swiping", swipeLimiter, async (req, res) => {
     try {
       const { memberId } = doneSwipingSchema.parse(req.body);
 

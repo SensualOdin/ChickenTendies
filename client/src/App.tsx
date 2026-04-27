@@ -157,11 +157,17 @@ function App() {
   useEffect(() => {
     if (!isNative()) return;
 
-    // Status bar: transparent overlay so our gradient header shows through
-    StatusBar.setStyle({ style: Style.Light });
-    if (!isIOS()) {
-      StatusBar.setBackgroundColor({ color: "#00000000" });
-      StatusBar.setOverlaysWebView({ overlay: true });
+    // Status bar: transparent overlay so our gradient header shows through.
+    // Wrap in try/catch — on rare devices/Android variants the plugin can throw
+    // synchronously and we don't want that to take the whole app down.
+    try {
+      StatusBar.setStyle({ style: Style.Light });
+      if (!isIOS()) {
+        StatusBar.setBackgroundColor({ color: "#00000000" });
+        StatusBar.setOverlaysWebView({ overlay: true });
+      }
+    } catch (err) {
+      console.warn("[StatusBar] plugin unavailable:", err);
     }
 
     // Deep links: handle crew invite URLs and OAuth callbacks
