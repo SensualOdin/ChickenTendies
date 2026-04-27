@@ -1,4 +1,4 @@
-import type { Restaurant, GroupPreferences, CuisineType } from "@shared/schema";
+import type { Restaurant, RestaurantLocation, GroupPreferences, CuisineType } from "@shared/schema";
 import { enrichRestaurantsWithGoogle } from "./google-places";
 
 const YELP_API_KEY = process.env.YELP_API_KEY;
@@ -153,6 +153,173 @@ function isActualRestaurant(categories: Array<{ alias: string; title: string }>)
   );
 }
 
+// Strip generic chain-name suffixes / punctuation so different physical
+// locations of the same brand normalize to the same key. Tuned for what
+// Yelp actually returns (e.g. "Chipotle Mexican Grill", "Olive Garden
+// Italian Restaurant", "Coney Island Restaurant"). Conservative on
+// stripping — we'd rather under-cluster (show two cards) than wrongly
+// merge two unrelated restaurants that happen to share a word.
+function normalizeBrandKey(name: string): string {
+  let n = name
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "") // strip diacritics
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  // Strip leading "the "
+  if (n.startsWith("the ")) n = n.slice(4);
+
+  // Iteratively strip the most specific generic suffixes first. Order matters:
+  // longer/multi-word suffixes must run before single-word ones so e.g.
+  // "italian restaurant" doesn't get reduced to just stripping "restaurant".
+  const suffixes = [
+    " mexican grill",
+    " italian restaurant",
+    " american grill",
+    " bar and grill",
+    " bar grill",
+    " american kitchen",
+    " steak house",
+    " seafood restaurant",
+    " sushi bar",
+    " pizza co",
+    " pizza company",
+    " bbq",
+    " barbecue",
+    " kitchen",
+    " grill",
+    " restaurant",
+    " cafe",
+    " diner",
+    " house",
+    " co",
+  ];
+  for (const sfx of suffixes) {
+    if (n.endsWith(sfx)) {
+      n = n.slice(0, -sfx.length).trim();
+      break; // one pass — preserves "Joe's Diner" vs "Joe's"
+    }
+  }
+
+  return n;
+}
+
+// Reverse a clustered card back into its constituent locations so a fresh
+// clustering pass can include newly-arrived locations of the same brand.
+// Required because cache accumulates across multiple Yelp fetches: if batch 1
+// produced a Chipotle cluster and batch 2 brings 2 more Chipotles, we need to
+// flatten the cluster + add the new ones, then re-cluster to get an updated
+// brand card (and bump from "3 locations" to "5 locations").
+export function flattenClusters(restaurants: Restaurant[]): Restaurant[] {
+  const out: Restaurant[] = [];
+  for (const r of restaurants) {
+    if (!r.locations || r.locations.length <= 1) {
+      out.push(r);
+      continue;
+    }
+    // Re-emit each location as its own Restaurant. The primary keeps the
+    // imageUrl/photos/description/etc; secondary ones inherit those too
+    // (we don't have per-location photos from Yelp anyway).
+    for (const loc of r.locations) {
+      out.push({
+        ...r,
+        id: loc.id,
+        address: loc.address,
+        distance: loc.distance,
+        rating: loc.rating,
+        reviewCount: loc.reviewCount,
+        latitude: loc.latitude,
+        longitude: loc.longitude,
+        phone: loc.phone,
+        yelpUrl: loc.yelpUrl,
+        locations: undefined,
+      });
+    }
+  }
+  return out;
+}
+
+function restaurantToLocation(r: Restaurant): RestaurantLocation {
+  return {
+    id: r.id,
+    address: r.address,
+    distance: r.distance,
+    rating: r.rating,
+    reviewCount: r.reviewCount,
+    latitude: r.latitude,
+    longitude: r.longitude,
+    phone: r.phone,
+    yelpUrl: r.yelpUrl,
+  };
+}
+
+// Collapse repeated chain locations into a single brand card. Test users
+// reported the deck flooding with a dozen Coney Islands when their radius
+// was generous — every-other-swipe being the same brand is exhausting and
+// drowns out variety. Threshold of 3 means a brand needs at least three
+// nearby locations before we collapse — two locations of the same place
+// usually represent a real choice (e.g. east-side vs west-side), and we
+// don't want to over-cluster restaurants that just happen to share a word.
+//
+// The collapsed card uses the closest location as its primary (id, image,
+// distance, address) so swipes feel concrete rather than abstract. The
+// brand's full set of locations rides along on `locations[]` for the
+// post-match picker.
+export function clusterChainRestaurants(
+  restaurants: Restaurant[],
+  threshold: number = 3
+): Restaurant[] {
+  // Group by normalized brand key, preserving original order so the first
+  // occurrence's index sets the cluster's position in the result list.
+  const groups = new Map<string, Restaurant[]>();
+  const order: string[] = [];
+  for (const r of restaurants) {
+    const key = normalizeBrandKey(r.name);
+    if (!key) continue;
+    if (!groups.has(key)) {
+      groups.set(key, []);
+      order.push(key);
+    }
+    groups.get(key)!.push(r);
+  }
+
+  const out: Restaurant[] = [];
+  for (const key of order) {
+    const items = groups.get(key)!;
+    if (items.length < threshold) {
+      // Below the cluster threshold — emit as individual cards so users see
+      // the per-location detail (rating differences, etc.).
+      out.push(...items);
+      continue;
+    }
+
+    // Sort locations by distance ascending; the closest becomes the card's
+    // public face. Ties broken by rating so we lead with a place worth going.
+    const sorted = [...items].sort((a, b) => {
+      if (a.distance !== b.distance) return a.distance - b.distance;
+      return b.rating - a.rating;
+    });
+    const primary = sorted[0];
+
+    // Headline rating reflects the best-rated location in the cluster — we
+    // don't want a cluster's worst location to pull the brand below the
+    // group's minRating filter when at least one location clears it.
+    const bestRating = sorted.reduce((m, r) => Math.max(m, r.rating), 0);
+    const totalReviews = sorted.reduce((s, r) => s + r.reviewCount, 0);
+    const locations = sorted.map(restaurantToLocation);
+
+    out.push({
+      ...primary,
+      rating: bestRating,
+      reviewCount: totalReviews,
+      locations,
+    });
+  }
+  return out;
+}
+
 function shuffleArray<T>(array: T[]): T[] {
   const shuffled = [...array];
   for (let i = shuffled.length - 1; i > 0; i--) {
@@ -190,6 +357,117 @@ async function fetchYelpBusinessPhotos(businessIds: string[]): Promise<Map<strin
     await Promise.all(promises);
   }
   return photoMap;
+}
+
+function yelpBusinessToRestaurant(business: YelpBusiness): Restaurant {
+  const priceRange = yelpPriceToRange(business.price);
+  const distance = business.distance ? metersToMiles(business.distance) : 0;
+
+  const transactions = business.transactions || [];
+  const highlights: string[] = [];
+  const categoryAliases = business.categories.map(c => c.alias.toLowerCase());
+  const categoryTitles = business.categories.map(c => c.title.toLowerCase()).join(" ");
+
+  if (business.rating >= 4.5) highlights.push("Highly Rated");
+  if (business.review_count > 500) highlights.push("Popular Spot");
+
+  const isUpscale = priceRange === "$$$" || priceRange === "$$$$";
+  if (isUpscale && business.rating >= 4.0) highlights.push("Date Night");
+  if (categoryTitles.includes("brunch") || categoryTitles.includes("breakfast")) highlights.push("Brunch Spot");
+  if (categoryAliases.some(a => a.includes("burger") || a.includes("pizza") || a.includes("wings"))) {
+    highlights.push("Casual Eats");
+  }
+  if (categoryAliases.some(a => a.includes("sushi") || a.includes("ramen"))) {
+    highlights.push("Japanese Cuisine");
+  }
+
+  if (transactions.includes("reservation")) highlights.push("Reservations");
+  if (transactions.includes("delivery")) highlights.push("Delivery");
+  if (transactions.includes("pickup")) highlights.push("Pickup");
+
+  return {
+    id: business.id,
+    name: business.name,
+    cuisine: detectCuisineFromCategories(business.categories),
+    priceRange,
+    rating: business.rating,
+    reviewCount: business.review_count,
+    imageUrl: business.image_url || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=600&fit=crop",
+    photos: [],
+    address: `${business.location.address1}, ${business.location.city}`,
+    distance,
+    dietaryOptions: [],
+    description: `${business.categories.map(c => c.title).join(", ")}`,
+    yelpUrl: business.url,
+    latitude: business.coordinates?.latitude,
+    longitude: business.coordinates?.longitude,
+    phone: business.display_phone,
+    transactions,
+    highlights,
+  };
+}
+
+// Search Yelp by free-text term (e.g. "Olive Garden", "joe's diner") inside
+// the area defined by the group's existing preferences. Used when a member
+// wants to add a specific restaurant that the algorithmic search missed.
+//
+// We bypass the strict cuisine/price filters used by fetchRestaurantsFromYelp
+// — if a user types a name they want THAT place, even if its categories or
+// price band were excluded by the group's filters. The host can still kick a
+// suggestion later by removing it via the host UI if needed.
+export async function searchYelpRestaurantsByTerm(
+  term: string,
+  preferences: GroupPreferences,
+  limit: number = 5
+): Promise<Restaurant[]> {
+  if (!YELP_API_KEY) return [];
+
+  const trimmed = term.trim();
+  if (!trimmed) return [];
+
+  const radiusMeters = Math.min(Math.round(preferences.radius * 1609.34), 40000);
+
+  const params = new URLSearchParams({
+    term: trimmed,
+    radius: radiusMeters.toString(),
+    limit: Math.min(Math.max(limit, 1), 10).toString(),
+    sort_by: "best_match",
+  });
+
+  if (preferences.latitude !== undefined && preferences.longitude !== undefined) {
+    params.append("latitude", preferences.latitude.toString());
+    params.append("longitude", preferences.longitude.toString());
+  } else {
+    params.append("location", preferences.zipCode);
+  }
+
+  try {
+    const response = await fetch(`${YELP_BASE_URL}/businesses/search?${params.toString()}`, {
+      headers: {
+        "Authorization": `Bearer ${YELP_API_KEY}`,
+        "Accept": "application/json",
+      },
+    });
+
+    if (!response.ok) {
+      console.error("Yelp term-search error:", response.status, await response.text());
+      return [];
+    }
+
+    const data: YelpSearchResponse = await response.json();
+    const seen = new Set<string>();
+    const out: Restaurant[] = [];
+    for (const biz of data.businesses) {
+      if (seen.has(biz.id)) continue;
+      if (!isActualRestaurant(biz.categories)) continue;
+      seen.add(biz.id);
+      out.push(yelpBusinessToRestaurant(biz));
+    }
+    return out;
+  } catch (error) {
+    console.error("Error in Yelp term search:", error);
+    return [];
+  }
 }
 
 export async function fetchRestaurantsFromYelp(preferences: GroupPreferences, offset: number = 0): Promise<Restaurant[]> {
@@ -262,59 +540,7 @@ export async function fetchRestaurantsFromYelp(preferences: GroupPreferences, of
       }
 
       seenIds.add(business.id);
-
-      const priceRange = yelpPriceToRange(business.price);
-      const distance = business.distance ? metersToMiles(business.distance) : 0;
-
-      const transactions = business.transactions || [];
-      const highlights: string[] = [];
-      const categoryAliases = business.categories.map(c => c.alias.toLowerCase());
-      const categoryTitles = business.categories.map(c => c.title.toLowerCase()).join(" ");
-
-      // Quality indicators
-      if (business.rating >= 4.5) highlights.push("Highly Rated");
-      if (business.review_count > 500) highlights.push("Popular Spot");
-
-      // Vibe/occasion tags
-      const isUpscale = priceRange === "$$$" || priceRange === "$$$$";
-      const isRomantic = categoryTitles.includes("wine") || categoryTitles.includes("french") ||
-        categoryTitles.includes("italian") || categoryAliases.includes("cocktailbars");
-      if (isUpscale && business.rating >= 4.0) highlights.push("Date Night");
-      if (categoryTitles.includes("brunch") || categoryTitles.includes("breakfast")) highlights.push("Brunch Spot");
-      if (categoryAliases.some(a => a.includes("burger") || a.includes("pizza") || a.includes("wings"))) {
-        highlights.push("Casual Eats");
-      }
-      if (categoryAliases.some(a => a.includes("sushi") || a.includes("ramen"))) {
-        highlights.push("Japanese Cuisine");
-      }
-
-      // Service options
-      if (transactions.includes("reservation")) highlights.push("Reservations");
-      if (transactions.includes("delivery")) highlights.push("Delivery");
-      if (transactions.includes("pickup")) highlights.push("Pickup");
-
-      const restaurant: Restaurant = {
-        id: business.id,
-        name: business.name,
-        cuisine: detectCuisineFromCategories(business.categories),
-        priceRange,
-        rating: business.rating,
-        reviewCount: business.review_count,
-        imageUrl: business.image_url || "https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&h=600&fit=crop",
-        photos: [],
-        address: `${business.location.address1}, ${business.location.city}`,
-        distance,
-        dietaryOptions: [],
-        description: `${business.categories.map(c => c.title).join(", ")}`,
-        yelpUrl: business.url,
-        latitude: business.coordinates?.latitude,
-        longitude: business.coordinates?.longitude,
-        phone: business.display_phone,
-        transactions,
-        highlights,
-      };
-
-      restaurants.push(restaurant);
+      restaurants.push(yelpBusinessToRestaurant(business));
     }
   } catch (error) {
     console.error("Error fetching from Yelp:", error);
@@ -351,6 +577,15 @@ export async function fetchRestaurantsFromYelp(preferences: GroupPreferences, of
   if (filteredRestaurants.length === 0) {
     console.log("All restaurants filtered out — returning unfiltered Yelp results instead of mock data");
     filteredRestaurants = [...restaurants];
+  }
+
+  // Collapse chain floods (≥3 locations of the same brand) into one card
+  // each — a single Coney Island card with 8 locations rather than 8
+  // duplicate Coney Islands eating up the deck.
+  const beforeCluster = filteredRestaurants.length;
+  filteredRestaurants = clusterChainRestaurants(filteredRestaurants, 3);
+  if (beforeCluster !== filteredRestaurants.length) {
+    console.log(`Clustered chain locations: ${beforeCluster} → ${filteredRestaurants.length}`);
   }
 
   // Shuffle the results to provide variety in dense areas (where >20 matches exist)

@@ -27,6 +27,7 @@ import { ConversionPrompt } from "@/components/conversion-prompt";
 import { getLeaderToken } from "@/lib/leader-token";
 import confetti from "canvas-confetti";
 import type { Group, Restaurant, WSMessage } from "@shared/schema";
+import { ClusterLocationPicker } from "@/components/cluster-location-picker";
 
 type SessionAction = "directions" | "doordash" | "visited" | "reserve";
 
@@ -251,10 +252,14 @@ export default function MatchesPage() {
   });
 
   const pickMutation = useMutation({
-    mutationFn: async (restaurantId: string) => {
+    mutationFn: async ({
+      restaurantId,
+      pickedLocationId,
+    }: { restaurantId: string; pickedLocationId?: string }) => {
       const response = await apiRequest("POST", `/api/groups/${params.id}/pick-match`, {
         memberId,
         restaurantId,
+        pickedLocationId,
       });
       return response.json();
     },
@@ -721,27 +726,45 @@ export default function MatchesPage() {
                             )}
                           </AnimatePresence>
 
-                          {/* Lock It In — host only, available on every match */}
-                          {showLockIn && (
-                            <Button
-                              size="sm"
-                              variant={isTopPick ? "default" : "outline"}
-                              className={
-                                isTopPick
-                                  ? "w-full mb-3 bg-gradient-to-r from-yellow-500 to-orange-500 text-white font-bold shadow-lg"
-                                  : "w-full mb-3 border-yellow-500/40 text-yellow-700 dark:text-yellow-400 hover:bg-yellow-500/10"
+                          {/* Cluster (multi-location chain) — host picks
+                              the specific storefront before locking. Shown
+                              to non-hosts too so they can see "3 locations
+                              · host will pick one" and aren't confused
+                              about why their lock button vanished. */}
+                          {restaurant.locations && restaurant.locations.length > 1 ? (
+                            <ClusterLocationPicker
+                              restaurant={restaurant}
+                              isHost={isHost}
+                              isTopPick={isTopPick}
+                              isPending={pickMutation.isPending}
+                              onLock={(pickedLocationId) =>
+                                pickMutation.mutate({ restaurantId: restaurant.id, pickedLocationId })
                               }
-                              onClick={() => pickMutation.mutate(restaurant.id)}
-                              disabled={pickMutation.isPending}
-                              data-testid={`button-lock-${restaurant.id}`}
-                            >
-                              {pickMutation.isPending ? (
-                                <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                              ) : (
-                                <Lock className="w-4 h-4 mr-1" />
-                              )}
-                              {isTopPick ? "Lock It In!" : "Lock this one in"}
-                            </Button>
+                            />
+                          ) : (
+                            /* Lock It In — single-location matches still use the
+                               original one-tap button. Host only. */
+                            showLockIn && (
+                              <Button
+                                size="sm"
+                                variant={isTopPick ? "default" : "outline"}
+                                className={
+                                  isTopPick
+                                    ? "w-full mb-3 bg-gradient-to-r from-yellow-500 to-orange-500 text-white font-bold shadow-lg"
+                                    : "w-full mb-3 border-yellow-500/40 text-yellow-700 dark:text-yellow-400 hover:bg-yellow-500/10"
+                                }
+                                onClick={() => pickMutation.mutate({ restaurantId: restaurant.id })}
+                                disabled={pickMutation.isPending}
+                                data-testid={`button-lock-${restaurant.id}`}
+                              >
+                                {pickMutation.isPending ? (
+                                  <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                                ) : (
+                                  <Lock className="w-4 h-4 mr-1" />
+                                )}
+                                {isTopPick ? "Lock It In!" : "Lock this one in"}
+                              </Button>
+                            )
                           )}
 
                           {/* Non-host guidance after voting */}

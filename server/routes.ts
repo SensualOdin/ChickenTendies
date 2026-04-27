@@ -6,6 +6,7 @@ import { randomUUID, createHmac, timingSafeEqual } from "crypto";
 import { storage } from "./storage";
 import { insertGroupSchema, joinGroupSchema, groupPreferencesSchema, persistentGroups, diningSessions, users, anonymousGroups } from "@shared/schema";
 import type { WSMessage, Group, Restaurant, GroupMember } from "@shared/schema";
+import { searchYelpRestaurantsByTerm } from "./yelp";
 import { isAuthenticated, optionalAuth, registerAuthRoutes } from "./auth";
 import { registerSocialRoutes } from "./social-routes";
 import { sendPushToGroupMembers, saveGroupPushSubscription, getVapidPublicKey } from "./push";
@@ -40,6 +41,15 @@ const swipeLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Swiping too fast, slow down!" },
+});
+
+// Suggest is a Yelp-backed search per call — cap per-IP to avoid burning quota.
+const suggestLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many suggestions, slow down a sec." },
 });
 
 export const sessionUserMap: Map<string, string> = new Map();
@@ -667,6 +677,117 @@ export async function registerRoutes(
     res.json({ restaurants, loadedNew });
   });
 
+  // Search Yelp by free-text term within the group's existing search area.
+  // Returns up to 5 candidate restaurants the member can pick from. Used by
+  // the "Suggest a place" UI when the algorithmic results miss something the
+  // member specifically wants (test users asked for this — they narrowed
+  // radius to escape Coney Island spam, then lost their staple picks).
+  const suggestSearchSchema = z.object({
+    memberId: z.string().min(1),
+    query: z.string().min(2).max(80),
+  });
+
+  app.post("/api/groups/:id/restaurants/suggest", suggestLimiter, async (req, res) => {
+    try {
+      const groupId = String(req.params.id);
+      const { memberId, query } = suggestSearchSchema.parse(req.body);
+      if (!verifyMemberIdentity(req, groupId, memberId)) {
+        res.status(403).json({ error: "Session identity mismatch" });
+        return;
+      }
+
+      const group = await storage.getGroup(groupId);
+      if (!group) {
+        res.status(404).json({ error: "Group not found" });
+        return;
+      }
+      if (!group.preferences) {
+        res.status(400).json({ error: "Set preferences before suggesting restaurants" });
+        return;
+      }
+
+      const candidates = await searchYelpRestaurantsByTerm(query, group.preferences, 5);
+      res.json({ results: candidates });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: error.errors[0].message });
+      } else {
+        console.error("Error in /restaurants/suggest:", error);
+        res.status(500).json({ error: "Search failed" });
+      }
+    }
+  });
+
+  // Add a member-suggested restaurant to the group's deck. The client passes
+  // the full Restaurant object returned by /suggest — re-validating it via
+  // Zod keeps callers honest and prevents arbitrary data from polluting the
+  // cache. After adding, we reset every member's doneSwiping so the new card
+  // doesn't get silently skipped by people who'd already finished, and we
+  // broadcast a sync so existing connections see it immediately.
+  const suggestAddSchema = z.object({
+    memberId: z.string().min(1),
+    restaurant: z.object({
+      id: z.string().min(1),
+      name: z.string().min(1),
+    }).passthrough(),
+  });
+
+  app.post("/api/groups/:id/restaurants/add", suggestLimiter, async (req, res) => {
+    try {
+      const groupId = String(req.params.id);
+      const { memberId, restaurant } = suggestAddSchema.parse(req.body);
+      if (!verifyMemberIdentity(req, groupId, memberId)) {
+        res.status(403).json({ error: "Session identity mismatch" });
+        return;
+      }
+
+      const group = await storage.getGroup(groupId);
+      if (!group) {
+        res.status(404).json({ error: "Group not found" });
+        return;
+      }
+      const member = group.members.find(m => m.id === memberId);
+      if (!member) {
+        res.status(403).json({ error: "Member not in group" });
+        return;
+      }
+
+      const { added, restaurants } = await storage.addRestaurantToGroup(
+        groupId,
+        restaurant as Restaurant
+      );
+
+      if (!added) {
+        res.json({ added: false, restaurants });
+        return;
+      }
+
+      // Bring everyone back into the active swipe queue — anyone who was
+      // marked done needs to see the new option, otherwise it never enters
+      // the unanimous-match calculation.
+      const refreshedMembers = group.members.map(m => ({ ...m, doneSwiping: false }));
+      const refreshedGroup: Group = { ...group, members: refreshedMembers };
+      await storage.updateGroup(groupId, refreshedGroup);
+
+      const matches = await storage.getMatchesForGroup(groupId);
+      broadcast(groupId, {
+        type: "sync",
+        group: stripLeaderToken(refreshedGroup),
+        restaurants,
+        matches,
+      });
+
+      res.json({ added: true, restaurants, suggestedBy: member.name });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: error.errors[0].message });
+      } else {
+        console.error("Error in /restaurants/add:", error);
+        res.status(500).json({ error: "Failed to add restaurant" });
+      }
+    }
+  });
+
   app.post("/api/groups/:id/swipe", swipeLimiter, optionalAuth, async (req, res) => {
     try {
       const { restaurantId, liked, memberId, superLiked } = req.body;
@@ -831,7 +952,7 @@ export async function registerRoutes(
   // Host picks (locks in) a matched restaurant
   app.post("/api/groups/:id/pick-match", async (req, res) => {
     try {
-      const { memberId, restaurantId } = req.body;
+      const { memberId, restaurantId, pickedLocationId } = req.body;
       if (!memberId || !restaurantId) {
         res.status(400).json({ error: "memberId and restaurantId required" });
         return;
@@ -855,16 +976,43 @@ export async function registerRoutes(
       }
 
       const matches = await storage.getMatchesForGroup(req.params.id);
-      const restaurant = matches.find(r => r.id === restaurantId);
-      if (!restaurant) {
+      const matched = matches.find(r => r.id === restaurantId);
+      if (!matched) {
         res.status(404).json({ error: "Restaurant not in matches" });
         return;
+      }
+
+      // For chain clusters: if the host picked a specific location, overlay
+      // its address/coords/phone onto the matched brand so downstream UI
+      // (directions, share text, push body) refers to the actual storefront
+      // they're going to — not the cluster's "primary" placeholder.
+      let restaurant = matched;
+      let resolvedLocationId: string | undefined;
+      if (pickedLocationId && matched.locations && matched.locations.length > 0) {
+        const loc = matched.locations.find(l => l.id === pickedLocationId);
+        if (!loc) {
+          res.status(400).json({ error: "Picked location not part of this match" });
+          return;
+        }
+        restaurant = {
+          ...matched,
+          address: loc.address,
+          distance: loc.distance,
+          rating: loc.rating,
+          reviewCount: loc.reviewCount,
+          latitude: loc.latitude,
+          longitude: loc.longitude,
+          phone: loc.phone,
+          yelpUrl: loc.yelpUrl,
+        };
+        resolvedLocationId = loc.id;
       }
 
       // Broadcast pick to all members
       broadcast(req.params.id, {
         type: "match_picked",
         restaurant,
+        ...(resolvedLocationId ? { pickedLocationId: resolvedLocationId } : {}),
       });
 
       // Send push notification to members who may have closed the app.

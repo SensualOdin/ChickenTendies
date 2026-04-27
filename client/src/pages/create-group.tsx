@@ -16,6 +16,7 @@ import { ArrowLeft, Loader2, ArrowRight } from "lucide-react";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
 import logoImage from "@assets/460272BC-3FCC-4927-8C2E-4C236353E7AB_1768880143398.png";
+import { ActivePartyCard } from "@/components/active-party-card";
 
 export default function CreateGroup() {
   const [, setLocation] = useLocation();
@@ -80,6 +81,7 @@ export default function CreateGroup() {
           transition={{ duration: 0.4 }}
           className="w-full max-w-md"
         >
+          <ActivePartyCard />
           <div className="text-center mb-8">
             <div className="eyebrow mb-5 inline-flex">
               <span className="dot"></span>

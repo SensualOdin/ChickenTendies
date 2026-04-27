@@ -9,7 +9,7 @@ import type {
   JoinGroup 
 } from "@shared/schema";
 import { anonymousGroups, anonymousGroupSwipes, restaurantCache } from "@shared/schema";
-import { fetchRestaurantsFromYelp } from "./yelp";
+import { fetchRestaurantsFromYelp, clusterChainRestaurants, flattenClusters } from "./yelp";
 import { findUnanimousMatches } from "./match-logic";
 import { db } from "./db";
 import { eq, and, sql } from "drizzle-orm";
@@ -35,6 +35,7 @@ export interface IStorage {
   removeMember(groupId: string, memberId: string): Promise<Group | undefined>;
   getRestaurantsForGroup(groupId: string): Promise<Restaurant[]>;
   loadMoreRestaurants(groupId: string): Promise<Restaurant[]>;
+  addRestaurantToGroup(groupId: string, restaurant: Restaurant): Promise<{ added: boolean; restaurants: Restaurant[] }>;
   recordSwipe(groupId: string, memberId: string, restaurantId: string, liked: boolean): Promise<Swipe>;
   getSwipesForGroup(groupId: string): Promise<Swipe[]>;
   getMatchesForGroup(groupId: string): Promise<Restaurant[]>;
@@ -457,17 +458,23 @@ export class DbStorage implements IStorage {
     const [cached] = await db.select().from(restaurantCache)
       .where(eq(restaurantCache.groupId, groupId));
     const existingRestaurants = (cached?.restaurants as Restaurant[]) || [];
-    const existingIds = new Set(existingRestaurants.map(r => r.id));
-    
-    const newOffset = existingRestaurants.length;
-    
+    // Compare against the FLATTENED set: a chain location that already lives
+    // inside a cluster card shouldn't be re-added as a fresh restaurant.
+    const flatExisting = flattenClusters(existingRestaurants);
+    const existingIds = new Set(flatExisting.map(r => r.id));
+
+    const newOffset = flatExisting.length;
+
     try {
       const yelpRestaurants = await fetchRestaurantsFromYelp(group.preferences, newOffset);
-      
-      const newRestaurants = yelpRestaurants.filter(r => !existingIds.has(r.id));
-      
-      if (newRestaurants.length > 0) {
-        const combined = [...existingRestaurants, ...newRestaurants];
+      // fetchRestaurantsFromYelp already clusters within its result. Flatten
+      // again so we're combining only individual locations, then re-cluster
+      // across the union — this catches chains whose locations spread across
+      // separate Yelp pages and only become a "flood" in aggregate.
+      const flatNew = flattenClusters(yelpRestaurants).filter(r => !existingIds.has(r.id));
+
+      if (flatNew.length > 0) {
+        const combined = clusterChainRestaurants([...flatExisting, ...flatNew], 3);
         await this.cacheRestaurants(groupId, combined);
         return combined;
       }
@@ -476,6 +483,27 @@ export class DbStorage implements IStorage {
     }
 
     return existingRestaurants;
+  }
+
+  async addRestaurantToGroup(
+    groupId: string,
+    restaurant: Restaurant
+  ): Promise<{ added: boolean; restaurants: Restaurant[] }> {
+    const [cached] = await db
+      .select()
+      .from(restaurantCache)
+      .where(eq(restaurantCache.groupId, groupId));
+    const existing = (cached?.restaurants as Restaurant[]) || [];
+
+    if (existing.some(r => r.id === restaurant.id)) {
+      return { added: false, restaurants: existing };
+    }
+
+    // Prepend so it shows up next in the deck for everyone — a user-suggested
+    // place should jump the queue rather than be buried at the bottom.
+    const combined = [restaurant, ...existing];
+    await this.cacheRestaurants(groupId, combined);
+    return { added: true, restaurants: combined };
   }
 
   async recordSwipe(groupId: string, memberId: string, restaurantId: string, liked: boolean): Promise<Swipe> {

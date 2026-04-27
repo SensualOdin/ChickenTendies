@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { LayoutDashboard, LogOut } from "lucide-react";
 import { EditorialNav } from "@/components/editorial/nav";
+import { ActivePartyCard } from "@/components/active-party-card";
 
 // Page-specific styles — hero visual, bento layout, marquee animation.
 // Tokens (cream/ink/paprika/sage/butter) are HSL vars defined in index.css.
@@ -433,6 +434,13 @@ export default function Home() {
           <svg className="w-[18px] h-[18px] stroke-current fill-none stroke-2" viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 5l7 7-7 7" /></svg>
         </Link>
       </EditorialNav>
+
+      {/* REJOIN — surfaces an in-progress party from localStorage so users
+          who navigate back here can return to it in one tap. Renders nothing
+          if there's no active party. */}
+      <div className="editorial-container" style={{ paddingTop: 12 }}>
+        <ActivePartyCard />
+      </div>
 
       {/* HERO */}
       <section className="hero">

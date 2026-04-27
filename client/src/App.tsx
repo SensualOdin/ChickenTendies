@@ -213,6 +213,21 @@ function App() {
         return;
       }
 
+      // Custom URL schemes parse "host" as the first path segment, so
+      // chickentinders://group/abc123 lands as host="group", pathname="/abc123".
+      // Reconstruct the in-app route explicitly for known prefixes that match
+      // our wouter routes — otherwise users tapping a shared party link from
+      // outside the app end up at NotFound.
+      const groupMatch = url.href.match(/chickentinders:\/\/group\/([^/?#]+)(\/[^?#]*)?/);
+      if (groupMatch) {
+        const groupId = groupMatch[1];
+        const subPath = groupMatch[2] || "";
+        const path = `/group/${groupId}${subPath}`;
+        window.history.pushState(null, "", path);
+        window.dispatchEvent(new PopStateEvent("popstate"));
+        return;
+      }
+
       const path = url.pathname || url.href.replace(/^[^/]*:\/\//, "/");
       if (path && path !== "/") {
         window.history.pushState(null, "", path);

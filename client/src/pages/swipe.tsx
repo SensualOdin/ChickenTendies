@@ -16,11 +16,12 @@ import { useAuth } from "@/hooks/use-auth";
 import { useGroupPushNotifications } from "@/hooks/use-push-notifications";
 import { useAnalytics } from "@/hooks/use-analytics";
 import { isNative } from "@/lib/platform";
-import { Flame, ChevronRight, ChevronDown, ChevronUp, PartyPopper, Bell, Timer, Vote, Trophy, BellRing, X, Home, RefreshCw, ArrowLeft, ArrowRight, ArrowUp, Utensils, Heart, Sparkles, Undo2, MapPin, SlidersHorizontal } from "lucide-react";
+import { Flame, ChevronRight, ChevronDown, ChevronUp, PartyPopper, Bell, Timer, Vote, Trophy, BellRing, X, Home, RefreshCw, ArrowLeft, ArrowRight, ArrowUp, Utensils, Heart, Sparkles, Undo2, MapPin, SlidersHorizontal, Plus } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { Group, Restaurant, WSMessage } from "@shared/schema";
 import confetti from "canvas-confetti";
 import { SwipeWalkthrough } from "@/components/swipe-walkthrough";
+import { SuggestRestaurantModal } from "@/components/suggest-restaurant-modal";
 
 export default function SwipePage() {
   const params = useParams<{ id: string }>();
@@ -45,6 +46,7 @@ export default function SwipePage() {
   const [memberProgress, setMemberProgress] = useState<Record<string, { swipeCount: number; total: number }>>({});
   const [showPrefs, setShowPrefs] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
+  const [showSuggest, setShowSuggest] = useState(false);
   const [autoNavTimer, setAutoNavTimer] = useState<number | null>(null);
   // Imperative handle to the top SwipeCard so button taps and keyboard input
   // can play the same spring animation as a hand gesture.
@@ -525,6 +527,15 @@ export default function SwipePage() {
     <div className="h-[100dvh] bg-background flex flex-col relative safe-top safe-x">
       <SwipeWalkthrough />
 
+      {memberId && params.id && (
+        <SuggestRestaurantModal
+          groupId={params.id}
+          memberId={memberId}
+          open={showSuggest}
+          onOpenChange={setShowSuggest}
+        />
+      )}
+
       {/* Synchronized "everyone's done!" overlay. Fires on the server's
           `all_done_swiping` WS broadcast, counts down, and auto-navigates the
           whole group to /matches in unison. Tapping "See matches now" skips the
@@ -727,6 +738,17 @@ export default function SwipePage() {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          {memberId && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowSuggest(true)}
+              title="Suggest a restaurant"
+              data-testid="button-suggest-open"
+            >
+              <Plus className="w-5 h-5" />
+            </Button>
+          )}
           {currentRestaurant && group.members.length > 1 && (
             <Button
               variant="ghost"
@@ -1223,7 +1245,7 @@ export default function SwipePage() {
                 >
                   Keep Swiping
                 </Button>
-                <Button variant="default" onClick={() => setLocation("/dashboard")}>
+                <Button variant="default" onClick={() => setLocation(isAuthenticated ? "/dashboard" : "/")}>
                   Leave
                 </Button>
               </div>

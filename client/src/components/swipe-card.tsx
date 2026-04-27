@@ -382,7 +382,19 @@ export const SwipeCard = forwardRef<SwipeCardHandle, SwipeCardProps>(function Sw
             </div>
             <div className="flex items-center gap-1">
               <MapPin className="w-4 h-4" />
-              <span>{restaurant.distance.toFixed(1)} mi away</span>
+              <span>
+                {restaurant.distance.toFixed(1)} mi
+                {restaurant.locations && restaurant.locations.length > 1 ? (
+                  <>
+                    {" "}<span className="text-white/70">·</span>{" "}
+                    <span className="text-white/90">
+                      {restaurant.locations.length} locations
+                    </span>
+                  </>
+                ) : (
+                  " away"
+                )}
+              </span>
             </div>
             {restaurant.phone && (
               <div className="flex items-center gap-1">

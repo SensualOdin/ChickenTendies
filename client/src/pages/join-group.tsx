@@ -16,6 +16,7 @@ import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { useEffect, useState, useMemo } from "react";
 import logoImage from "@assets/460272BC-3FCC-4927-8C2E-4C236353E7AB_1768880143398.png";
+import { ActivePartyCard } from "@/components/active-party-card";
 
 interface CrewPreview {
   name: string;
@@ -278,6 +279,7 @@ export default function JoinGroupPage() {
       </header>
 
       <main className="flex-1 px-4 py-8 max-w-md w-full mx-auto safe-bottom relative z-[1]">
+        <ActivePartyCard />
         <div className="text-center mb-8">
           <div className="eyebrow mb-5 inline-flex">
             <span className="dot"></span>
