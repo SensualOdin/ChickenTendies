@@ -11,6 +11,7 @@ export function EditorialNav({ children }: { children?: ReactNode }) {
       <style>{`
         .editorial-nav {
           padding: 20px 0;
+          padding-top: calc(20px + env(safe-area-inset-top, 0px));
           border-bottom: 1px solid hsl(var(--ink) / 0.12);
           position: sticky; top: 0; z-index: 50;
           background: hsl(var(--cream) / 0.85);

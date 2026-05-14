@@ -282,9 +282,9 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="editorial-page min-h-screen safe-top safe-x">
+    <div className="editorial-page min-h-screen safe-x">
       <CrewWalkthrough />
-      <header className="flex items-center justify-between p-4 md:p-6 border-b border-border gap-2 relative z-[1] backdrop-blur-md bg-background/85 sticky top-0">
+      <header className="safe-top flex items-center justify-between p-4 md:p-6 border-b border-border gap-2 relative z-[1] backdrop-blur-md bg-background/85 sticky top-0">
         <Link href="/" className="flex items-center gap-3 shrink-0">
           <img src={logoImage} alt="ChickenTinders" className="w-10 h-10 rounded-[10px] object-cover" />
           <div className="hidden sm:block">
