@@ -384,6 +384,40 @@ export async function registerRoutes(
     res.json(groupWithoutToken);
   });
 
+  // Returns every anonymous-party the caller's signed binding cookie maps to.
+  // The client only persists one (groupId, memberId) pair in localStorage, so a
+  // tester who creates/joins a second party loses the UI handle for the first.
+  // The signed cookie still binds them to all of them — we just need to expose
+  // it so the home-screen affordance can offer a switcher.
+  app.get("/api/me/groups", async (req, res) => {
+    const bindings = getMemberBindings(req);
+    const entries = Object.entries(bindings);
+    if (entries.length === 0) {
+      res.json({ groups: [] });
+      return;
+    }
+
+    const results = await Promise.all(
+      entries.map(async ([groupId, memberId]) => {
+        const group = await storage.getGroup(groupId);
+        if (!group) return null;
+        if (!group.members.some(m => m.id === memberId)) return null;
+        return { group: stripLeaderToken(group), memberId };
+      })
+    );
+
+    const groups = results
+      .filter((r): r is { group: any; memberId: string } => r !== null)
+      // Most recent first — anon groups carry created_at; fall back to id stability.
+      .sort((a, b) => {
+        const aTime = a.group.createdAt ? new Date(a.group.createdAt).getTime() : 0;
+        const bTime = b.group.createdAt ? new Date(b.group.createdAt).getTime() : 0;
+        return bTime - aTime;
+      });
+
+    res.json({ groups });
+  });
+
   app.post("/api/groups/:id/join-session", isAuthenticated, async (req, res) => {
     try {
       const groupId = String(req.params.id);

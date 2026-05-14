@@ -1,50 +1,40 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
-import { ArrowRight, Users, X } from "lucide-react";
+import { ArrowRight, ChevronDown, Users, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { API_BASE, getAuthHeaders } from "@/lib/queryClient";
 import type { Group } from "@shared/schema";
 
 const GROUP_KEY = "grubmatch-group-id";
 const MEMBER_KEY = "grubmatch-member-id";
-const DISMISS_KEY_PREFIX = "ct-rejoin-dismissed:";
+const DISMISS_KEY = "ct-rejoin-dismissed-session";
+
+type Entry = { group: Group; memberId: string };
 
 type Status =
   | { kind: "loading" }
   | { kind: "absent" }
   | { kind: "dismissed" }
-  | { kind: "ready"; group: Group; memberId: string };
+  | { kind: "ready"; entries: Entry[] };
 
-// A persistent "you have a party in progress" affordance. The host or any
-// member who navigates back to /, /create, or /join after creating/joining
-// would otherwise see no path back to their party — their localStorage and
-// signed-cookie binding are intact, but no UI surfaces them. This card reads
-// the active party from localStorage, validates it server-side (which also
-// proves the cookie/header binding still matches a real member), and offers
-// a one-tap return.
+// Persistent "you have a party in progress" affordance. The home, create, and
+// join screens render this so a user who's already inside one (or several)
+// anonymous parties can hop back without re-entering a code.
 //
-// On a 403/404 response we treat the local pointer as stale and clear it —
-// the party may have been deleted, the user may have been kicked, or the
-// 24h cookie may have expired.
+// Source of truth is the signed `member-bindings` cookie/header — the same
+// thing `verifyMemberIdentity` checks on every mutating endpoint. We fetch
+// `GET /api/me/groups` which expands that map into live group records, so the
+// UI reflects ground truth even if localStorage was cleared or the user
+// joined a second party (which would otherwise overwrite the first).
 export function ActivePartyCard() {
   const [status, setStatus] = useState<Status>({ kind: "loading" });
+  const [expanded, setExpanded] = useState(false);
   const [, navigate] = useLocation();
 
   useEffect(() => {
     let cancelled = false;
 
-    const groupId = typeof window !== "undefined" ? localStorage.getItem(GROUP_KEY) : null;
-    const memberId = typeof window !== "undefined" ? localStorage.getItem(MEMBER_KEY) : null;
-
-    if (!groupId || !memberId) {
-      setStatus({ kind: "absent" });
-      return;
-    }
-
-    // Per-group dismissal so a user who explicitly hides the card on one
-    // party doesn't keep getting nagged by it. A new party (different id)
-    // shows the card again because the dismissal key includes the id.
-    if (sessionStorage.getItem(DISMISS_KEY_PREFIX + groupId)) {
+    if (typeof window !== "undefined" && sessionStorage.getItem(DISMISS_KEY)) {
       setStatus({ kind: "dismissed" });
       return;
     }
@@ -52,28 +42,37 @@ export function ActivePartyCard() {
     (async () => {
       try {
         const headers = await getAuthHeaders();
-        const res = await fetch(
-          `${API_BASE}/api/groups/${encodeURIComponent(groupId)}?memberId=${encodeURIComponent(memberId)}`,
-          { credentials: "include", headers }
-        );
+        const res = await fetch(`${API_BASE}/api/me/groups`, {
+          credentials: "include",
+          headers,
+        });
         if (cancelled) return;
 
-        if (res.status === 200) {
-          const group = (await res.json()) as Group;
-          setStatus({ kind: "ready", group, memberId });
+        if (!res.ok) {
+          setStatus({ kind: "absent" });
           return;
         }
 
-        // 403 (not a member) or 404 (group gone) — pointer is stale, clean up
-        // so we don't keep retrying on every navigation.
-        if (res.status === 403 || res.status === 404) {
+        const body = (await res.json()) as { groups: Entry[] };
+        const entries = body.groups ?? [];
+        if (entries.length === 0) {
+          // Server says we're not bound to any group anymore — clean up the
+          // single-slot pointer so other code paths don't act on stale state.
           localStorage.removeItem(GROUP_KEY);
           localStorage.removeItem(MEMBER_KEY);
+          setStatus({ kind: "absent" });
+          return;
         }
-        setStatus({ kind: "absent" });
+
+        // Keep localStorage in sync with the active (top) entry so legacy
+        // single-slot readers (swipe page, etc.) stay coherent.
+        const top = entries[0];
+        localStorage.setItem(GROUP_KEY, top.group.id);
+        localStorage.setItem(MEMBER_KEY, top.memberId);
+
+        setStatus({ kind: "ready", entries });
       } catch {
-        // Network errors shouldn't clear the pointer (might just be offline).
-        // Just hide the card for this render.
+        // Network errors shouldn't clear local pointers (offline, etc.).
         if (!cancelled) setStatus({ kind: "absent" });
       }
     })();
@@ -85,29 +84,23 @@ export function ActivePartyCard() {
 
   if (status.kind !== "ready") return null;
 
-  const { group, memberId } = status;
-  const me = group.members.find((m) => m.id === memberId);
-  const memberCount = group.members.length;
-  const otherCount = Math.max(0, memberCount - 1);
-  const subtitle =
-    group.status === "swiping"
-      ? "Swiping in progress"
-      : group.status === "completed"
-        ? "Match locked in"
-        : otherCount === 0
-          ? "Waiting for friends to join"
-          : `${otherCount} other${otherCount === 1 ? "" : "s"} in the party`;
-  const target =
-    group.status === "swiping"
-      ? `/group/${group.id}/swipe`
-      : group.status === "completed"
-        ? `/group/${group.id}/matches`
-        : `/group/${group.id}`;
+  const { entries } = status;
+  const primary = entries[0];
+  const others = entries.slice(1);
+  const hasMore = others.length > 0;
 
   const dismiss = (e: React.MouseEvent) => {
     e.stopPropagation();
-    sessionStorage.setItem(DISMISS_KEY_PREFIX + group.id, "1");
+    sessionStorage.setItem(DISMISS_KEY, "1");
     setStatus({ kind: "dismissed" });
+  };
+
+  const goTo = (entry: Entry) => {
+    // Promote the chosen group into the single-slot localStorage so swipe
+    // page / matches page (which still read the legacy keys) operate on it.
+    localStorage.setItem(GROUP_KEY, entry.group.id);
+    localStorage.setItem(MEMBER_KEY, entry.memberId);
+    navigate(targetFor(entry.group));
   };
 
   return (
@@ -193,44 +186,205 @@ export function ActivePartyCard() {
             transition: color .2s ease, background .2s ease;
           }
           .ct-rejoin-card .dismiss:hover { color: hsl(var(--cream)); background: hsl(var(--cream) / 0.12); }
+
+          .ct-rejoin-toggle {
+            display: inline-flex; align-items: center; gap: 6px;
+            margin-top: 8px;
+            padding: 6px 12px;
+            border-radius: 999px;
+            border: 1px solid hsl(var(--ink) / 0.2);
+            background: hsl(var(--ink) / 0.04);
+            color: hsl(var(--ink) / 0.75);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+            cursor: pointer;
+            transition: background .2s ease, border-color .2s ease, color .2s ease;
+          }
+          .ct-rejoin-toggle:hover { background: hsl(var(--ink) / 0.08); color: hsl(var(--ink)); border-color: hsl(var(--ink) / 0.4); }
+          .ct-rejoin-toggle .chev { transition: transform .2s ease; }
+          .ct-rejoin-toggle.open .chev { transform: rotate(180deg); }
+
+          .ct-rejoin-list {
+            margin-top: 8px;
+            display: flex; flex-direction: column; gap: 6px;
+          }
+          .ct-rejoin-row {
+            display: flex; align-items: center; gap: 12px;
+            padding: 10px 12px;
+            border-radius: 12px;
+            background: hsl(var(--ink));
+            border: 1px solid hsl(var(--cream) / 0.12);
+            color: hsl(var(--cream));
+            cursor: pointer;
+            transition: border-color .2s ease, transform .2s ease;
+          }
+          .ct-rejoin-row:hover { border-color: hsl(var(--cream) / 0.32); transform: translateY(-1px); }
+          .ct-rejoin-row .row-body { flex: 1; min-width: 0; }
+          .ct-rejoin-row .row-title {
+            font-family: 'Fraunces', serif;
+            font-weight: 600;
+            font-size: 14.5px;
+            line-height: 1.2;
+            color: hsl(var(--cream));
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          }
+          .ct-rejoin-row .row-sub {
+            font-size: 11.5px;
+            color: hsl(var(--cream) / 0.65);
+            margin-top: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          }
+          .ct-rejoin-row .row-go {
+            display: grid; place-items: center;
+            width: 28px; height: 28px;
+            border-radius: 999px;
+            background: hsl(var(--cream) / 0.1);
+            color: hsl(var(--cream));
+            flex-shrink: 0;
+          }
         `}</style>
-        <div
-          className="ct-rejoin-card"
-          role="button"
-          tabIndex={0}
-          onClick={() => navigate(target)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              navigate(target);
-            }
-          }}
-          data-testid="active-party-card"
-        >
-          <div className="badge">
-            <Users className="w-5 h-5" />
-          </div>
-          <div className="body">
-            <div className="label">
-              You're in a party{me?.isHost ? " · Host" : ""}
-            </div>
-            <div className="title">{group.name}</div>
-            <div className="sub">{subtitle}</div>
-          </div>
-          <div className="go" aria-hidden="true">
-            <ArrowRight className="w-4 h-4" />
-          </div>
+
+        <CardRow
+          entry={primary}
+          onClick={() => goTo(primary)}
+          onDismiss={dismiss}
+        />
+
+        {hasMore && (
           <button
             type="button"
-            className="dismiss"
-            onClick={dismiss}
-            aria-label="Hide for this session"
-            data-testid="active-party-card-dismiss"
+            className={`ct-rejoin-toggle${expanded ? " open" : ""}`}
+            onClick={() => setExpanded((v) => !v)}
+            aria-expanded={expanded}
+            data-testid="active-party-card-toggle"
           >
-            <X className="w-3.5 h-3.5" />
+            {expanded
+              ? "Hide other parties"
+              : `${others.length} other ${others.length === 1 ? "party" : "parties"}`}
+            <ChevronDown className="chev w-3.5 h-3.5" />
           </button>
-        </div>
+        )}
+
+        <AnimatePresence initial={false}>
+          {hasMore && expanded && (
+            <motion.div
+              key="list"
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.18 }}
+              className="ct-rejoin-list"
+              data-testid="active-party-card-list"
+            >
+              {others.map((entry) => (
+                <PartyRow
+                  key={entry.group.id}
+                  entry={entry}
+                  onClick={() => goTo(entry)}
+                />
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
     </AnimatePresence>
   );
+}
+
+function CardRow({
+  entry,
+  onClick,
+  onDismiss,
+}: {
+  entry: Entry;
+  onClick: () => void;
+  onDismiss: (e: React.MouseEvent) => void;
+}) {
+  const { group, memberId } = entry;
+  const me = group.members.find((m) => m.id === memberId);
+  const subtitle = subtitleFor(group);
+
+  return (
+    <div
+      className="ct-rejoin-card"
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      data-testid="active-party-card"
+    >
+      <div className="badge">
+        <Users className="w-5 h-5" />
+      </div>
+      <div className="body">
+        <div className="label">
+          You're in a party{me?.isHost ? " · Host" : ""}
+        </div>
+        <div className="title">{group.name}</div>
+        <div className="sub">{subtitle}</div>
+      </div>
+      <div className="go" aria-hidden="true">
+        <ArrowRight className="w-4 h-4" />
+      </div>
+      <button
+        type="button"
+        className="dismiss"
+        onClick={onDismiss}
+        aria-label="Hide for this session"
+        data-testid="active-party-card-dismiss"
+      >
+        <X className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
+}
+
+function PartyRow({ entry, onClick }: { entry: Entry; onClick: () => void }) {
+  const { group } = entry;
+  return (
+    <div
+      className="ct-rejoin-row"
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      data-testid={`active-party-card-row-${group.id}`}
+    >
+      <div className="row-body">
+        <div className="row-title">{group.name}</div>
+        <div className="row-sub">{subtitleFor(group)}</div>
+      </div>
+      <div className="row-go" aria-hidden="true">
+        <ArrowRight className="w-3.5 h-3.5" />
+      </div>
+    </div>
+  );
+}
+
+function subtitleFor(group: Group): string {
+  const memberCount = group.members.length;
+  const otherCount = Math.max(0, memberCount - 1);
+  if (group.status === "swiping") return `Swiping · ${memberCount} member${memberCount === 1 ? "" : "s"}`;
+  if (group.status === "completed") return "Match locked in";
+  return otherCount === 0 ? "Waiting for friends to join" : `${otherCount} other${otherCount === 1 ? "" : "s"} in the party`;
+}
+
+function targetFor(group: Group): string {
+  if (group.status === "swiping") return `/group/${group.id}/swipe`;
+  if (group.status === "completed") return `/group/${group.id}/matches`;
+  return `/group/${group.id}`;
 }
