@@ -1,5 +1,5 @@
 import { Switch, Route, useLocation, useParams } from "wouter";
-import { queryClient } from "./lib/queryClient";
+import { queryClient, API_BASE } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -53,6 +53,63 @@ function CrewJoinRedirect() {
       setLoc(`/join?code=${code}`);
     }
   }, [code, setLoc]);
+
+  return null;
+}
+
+// Native apps reopen at "/" (the WebView has no URL persistence the way a
+// browser tab does), so a guest mid-session would lose access to their group.
+// On first navigation to "/" per app launch, we validate the stored group via
+// the API and route the user back to the right place. Runs once per launch
+// (gated by sessionStorage, which a Capacitor WebView clears on app kill).
+function NativeActiveGroupRedirect() {
+  const [location, setLocation] = useLocation();
+  const [attempted, setAttempted] = useState(false);
+
+  useEffect(() => {
+    if (!isNative() || attempted) return;
+    if (location !== "/") return;
+    if (sessionStorage.getItem("chickentinders-resume-attempted") === "1") {
+      setAttempted(true);
+      return;
+    }
+
+    const groupId = localStorage.getItem("grubmatch-group-id");
+    const memberId = localStorage.getItem("grubmatch-member-id");
+    if (!groupId || !memberId) {
+      sessionStorage.setItem("chickentinders-resume-attempted", "1");
+      setAttempted(true);
+      return;
+    }
+
+    setAttempted(true);
+    sessionStorage.setItem("chickentinders-resume-attempted", "1");
+
+    fetch(`${API_BASE}/api/groups/${groupId}?memberId=${encodeURIComponent(memberId)}`)
+      .then(async (res) => {
+        if (res.status === 404 || res.status === 403) {
+          localStorage.removeItem("grubmatch-group-id");
+          localStorage.removeItem("grubmatch-member-id");
+          return null;
+        }
+        if (!res.ok) return null;
+        return res.json();
+      })
+      .then((group: { id: string; status: string } | null) => {
+        if (!group) return;
+        if (group.status === "completed") {
+          setLocation(`/group/${group.id}/matches`);
+        } else if (group.status === "swiping") {
+          setLocation(`/group/${group.id}/swipe`);
+        } else {
+          setLocation(`/group/${group.id}`);
+        }
+      })
+      .catch(() => {
+        // Network error: stay on Home; localStorage is preserved so the next
+        // launch can retry.
+      });
+  }, [location, setLocation, attempted]);
 
   return null;
 }
@@ -235,6 +292,7 @@ function App() {
           <Toaster />
           <PendingCrewJoinRedirect />
           <PendingConversionRedirect />
+          <NativeActiveGroupRedirect />
           <Router />
           <PWAInstallPrompt />
         </TooltipProvider>

@@ -221,37 +221,40 @@
 }
 
 @layer utilities {
+  /* On iOS, env(safe-area-inset-*) carries real values. On Android the WebView
+   * does not populate them, so MainActivity injects --android-safe-* in dp from
+   * the actual WindowInsets. max() picks whichever is non-zero on each platform. */
   .safe-top {
-    padding-top: env(safe-area-inset-top, 0px);
+    padding-top: max(env(safe-area-inset-top, 0px), var(--android-safe-top, 0px));
   }
   .safe-bottom {
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding-bottom: max(env(safe-area-inset-bottom, 0px), var(--android-safe-bottom, 0px));
   }
   .safe-left {
-    padding-left: env(safe-area-inset-left, 0px);
+    padding-left: max(env(safe-area-inset-left, 0px), var(--android-safe-left, 0px));
   }
   .safe-right {
-    padding-right: env(safe-area-inset-right, 0px);
+    padding-right: max(env(safe-area-inset-right, 0px), var(--android-safe-right, 0px));
   }
   .safe-x {
-    padding-left: env(safe-area-inset-left, 0px);
-    padding-right: env(safe-area-inset-right, 0px);
+    padding-left: max(env(safe-area-inset-left, 0px), var(--android-safe-left, 0px));
+    padding-right: max(env(safe-area-inset-right, 0px), var(--android-safe-right, 0px));
   }
   .safe-y {
-    padding-top: env(safe-area-inset-top, 0px);
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding-top: max(env(safe-area-inset-top, 0px), var(--android-safe-top, 0px));
+    padding-bottom: max(env(safe-area-inset-bottom, 0px), var(--android-safe-bottom, 0px));
   }
   .safe-all {
-    padding-top: env(safe-area-inset-top, 0px);
-    padding-bottom: env(safe-area-inset-bottom, 0px);
-    padding-left: env(safe-area-inset-left, 0px);
-    padding-right: env(safe-area-inset-right, 0px);
+    padding-top: max(env(safe-area-inset-top, 0px), var(--android-safe-top, 0px));
+    padding-bottom: max(env(safe-area-inset-bottom, 0px), var(--android-safe-bottom, 0px));
+    padding-left: max(env(safe-area-inset-left, 0px), var(--android-safe-left, 0px));
+    padding-right: max(env(safe-area-inset-right, 0px), var(--android-safe-right, 0px));
   }
   .min-h-screen-safe {
-    min-height: calc(100vh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    min-height: calc(100vh - max(env(safe-area-inset-top, 0px), var(--android-safe-top, 0px)) - max(env(safe-area-inset-bottom, 0px), var(--android-safe-bottom, 0px)));
   }
   .h-screen-safe {
-    height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    height: calc(100dvh - max(env(safe-area-inset-top, 0px), var(--android-safe-top, 0px)) - max(env(safe-area-inset-bottom, 0px), var(--android-safe-bottom, 0px)));
   }
 }
 
