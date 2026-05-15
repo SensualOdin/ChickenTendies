@@ -8,6 +8,14 @@ export const API_BASE = isNative()
   ? (import.meta.env.VITE_PRODUCTION_API_URL || "https://chickentinders.onrender.com")
   : (import.meta.env.VITE_API_URL || "");
 
+// Public canonical web URL used for share links (party invites, crew invites,
+// match share). On native, window.location.origin is "https://localhost"
+// (the WebView's bundled-asset origin) — useless to recipients. Always share
+// the production URL so the link works in any browser.
+export const SHARE_BASE_URL = isNative()
+  ? (import.meta.env.VITE_PUBLIC_WEB_URL || "https://chickentinders.app")
+  : window.location.origin;
+
 // CSRF token is cached in memory for the lifetime of the tab/app launch.
 // We refetch lazily on first mutation and on 403-CSRF_INVALID responses.
 let cachedCsrfToken: string | null = null;

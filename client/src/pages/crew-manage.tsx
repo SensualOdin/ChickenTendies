@@ -149,7 +149,7 @@ export default function CrewManage() {
 
   const copyInviteLink = () => {
     if (crew?.inviteCode) {
-      const link = `${window.location.origin}/join?code=${crew.inviteCode}`;
+      const link = `${SHARE_BASE_URL}/join?code=${crew.inviteCode}`;
       navigator.clipboard.writeText(link);
       setLinkCopied(true);
       toast({ title: "Copied!", description: "Invite link copied to clipboard" });
@@ -160,7 +160,7 @@ export default function CrewManage() {
   const shareInviteCode = async () => {
     if (!crew) return;
     
-    const joinUrl = `${window.location.origin}/join?code=${crew.inviteCode}`;
+    const joinUrl = `${SHARE_BASE_URL}/join?code=${crew.inviteCode}`;
     const shareMessage = `Join my crew "${crew.name}" on ChickenTinders: ${joinUrl}`;
     
     if (navigator.share) {

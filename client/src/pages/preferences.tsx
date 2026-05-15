@@ -171,11 +171,18 @@ export default function Preferences() {
       let latitude: number;
       let longitude: number;
 
+      // Restaurant search only needs ~city-block accuracy. enableHighAccuracy
+      // forces a true GPS lock (10–30s on cold start); turning it off lets the
+      // OS reuse cell-tower / wifi triangulation, usually under a second.
+      // maximumAge accepts a recent cached position so back-to-back requests
+      // skip the radio entirely.
+      const geoOptions = { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 };
+
       if (isNative()) {
         const position = await Promise.race([
-          Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 10000 }),
+          Geolocation.getCurrentPosition(geoOptions),
           new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error("Location request timed out")), 15000)
+            setTimeout(() => reject(new Error("Location request timed out")), 10000)
           ),
         ]);
         latitude = position.coords.latitude;
@@ -192,10 +199,7 @@ export default function Preferences() {
         }
 
         const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, {
-            enableHighAccuracy: true,
-            timeout: 10000,
-          });
+          navigator.geolocation.getCurrentPosition(resolve, reject, geoOptions);
         });
         latitude = position.coords.latitude;
         longitude = position.coords.longitude;

@@ -359,8 +359,8 @@ export default function MatchesPage() {
     const rating = (restaurant.combinedRating ?? restaurant.rating).toFixed(1);
     const inviteCode = (group as any)?.inviteCode;
     const shareUrl = inviteCode
-      ? `${window.location.origin}/crew/join/${inviteCode}`
-      : window.location.origin;
+      ? `${SHARE_BASE_URL}/crew/join/${inviteCode}`
+      : SHARE_BASE_URL;
     const shareText = `We matched on ${restaurant.name} (${rating} stars, ${restaurant.cuisine}, ${restaurant.priceRange}) on ChickenTinders!${inviteCode ? " Join our crew:" : ""}`;
 
     if (isNative()) {

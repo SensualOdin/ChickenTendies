@@ -53,9 +53,13 @@ interface SwipeCardProps {
 // Distance at which a manual drag commits as a swipe.
 const COMMIT_DISTANCE = 100;
 // Velocity (px/s) above which a flick commits even below the distance threshold.
-// This is the fix for the "slow 101px drag commits but fast 90px flick doesn't"
-// bug — Tinder-style apps rely on velocity-based commit for flick-feel.
-const COMMIT_VELOCITY = 550;
+// Tinder-style apps rely on velocity-based commit for flick-feel.
+const COMMIT_VELOCITY = 800;
+// Minimum offset that a velocity-based commit still has to clear. Without this
+// guard, a tap that lifts off with momentum (very common on touchscreens —
+// finger drift of 2–5 px + a 700+ px/s lift velocity) would commit as a swipe.
+// Real flicks travel well past 40 px before release.
+const VELOCITY_COMMIT_MIN_DISTANCE = 40;
 
 function triggerHaptic(action: SwipeAction) {
   if (isNative()) {
@@ -163,17 +167,28 @@ export const SwipeCard = forwardRef<SwipeCardHandle, SwipeCardProps>(function Sw
     const vx = info.velocity.x;
     const vy = info.velocity.y;
 
-    // Superlike: strong upward drag OR upward flick
-    if (info.offset.y < -COMMIT_DISTANCE || vy < -COMMIT_VELOCITY) {
+    // Superlike: strong upward drag OR upward flick (with min travel)
+    if (
+      info.offset.y < -COMMIT_DISTANCE ||
+      (vy < -COMMIT_VELOCITY && absY > VELOCITY_COMMIT_MIN_DISTANCE)
+    ) {
       playExit("superlike");
       return;
     }
-    // Horizontal commit: distance OR velocity crosses threshold
-    if (info.offset.x > COMMIT_DISTANCE || vx > COMMIT_VELOCITY) {
+    // Horizontal commit: distance OR (velocity AND minimum travel). The
+    // minimum-travel guard is what stops a stationary tap with lift-off
+    // momentum from being interpreted as a swipe.
+    if (
+      info.offset.x > COMMIT_DISTANCE ||
+      (vx > COMMIT_VELOCITY && absX > VELOCITY_COMMIT_MIN_DISTANCE)
+    ) {
       playExit("like");
       return;
     }
-    if (info.offset.x < -COMMIT_DISTANCE || vx < -COMMIT_VELOCITY) {
+    if (
+      info.offset.x < -COMMIT_DISTANCE ||
+      (vx < -COMMIT_VELOCITY && absX > VELOCITY_COMMIT_MIN_DISTANCE)
+    ) {
       playExit("dislike");
       return;
     }

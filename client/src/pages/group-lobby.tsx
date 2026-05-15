@@ -8,7 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Flame, Copy, Check, Users, ArrowRight, Loader2, PartyPopper, Sparkles, Clock, X, Crown, Settings, Send } from "lucide-react";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, SHARE_BASE_URL } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
 import { getLeaderToken } from "@/lib/leader-token";
 import { isNative } from "@/lib/platform";
@@ -214,7 +214,7 @@ export default function GroupLobby() {
   const shareCode = useCallback(async () => {
     if (!group) return;
 
-    const joinUrl = `${window.location.origin}/join?code=${group.code}`;
+    const joinUrl = `${SHARE_BASE_URL}/join?code=${group.code}`;
     const shareMessage = `Swipe right on dinner! Join my party on ChickenTinders: ${joinUrl}`;
 
     if (navigator.share) {
