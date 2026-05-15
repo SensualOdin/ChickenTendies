@@ -11,6 +11,19 @@ import { isNative } from "@/lib/platform";
 import { Browser } from "@capacitor/browser";
 import logoImage from "@assets/460272BC-3FCC-4927-8C2E-4C236353E7AB_1768880143398.png";
 
+// Where Supabase should send the user after they tap a confirmation /
+// magic-link email. On native we want the email to deep-link straight back
+// into the app via the custom URL scheme — going through the web /auth/callback
+// page is fragile because the PKCE code_verifier lives in the app's
+// localStorage (not the browser's), and some Android browsers refuse to
+// bounce custom-scheme URLs from JS. NOTE: this URL must be on the Supabase
+// project's "Redirect URLs" allowlist.
+function getEmailRedirectTo(): string {
+  return isNative()
+    ? "chickentinders://auth/callback"
+    : `${window.location.origin}/auth/callback`;
+}
+
 export default function LoginPage() {
   const [, setLocation] = useLocation();
   const [email, setEmail] = useState("");
@@ -26,8 +39,20 @@ export default function LoginPage() {
     setError(null);
     try {
       if (isSignUp) {
-        const { error } = await supabase.auth.signUp({ email, password });
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: { emailRedirectTo: getEmailRedirectTo() },
+        });
         if (error) throw error;
+        // Auto-confirm projects (Supabase setting "Enable email confirmations"
+        // off) return a session immediately and send NO email. Showing the
+        // "check your email" screen there strands the user forever waiting on
+        // a message that will never arrive.
+        if (data.session) {
+          setLocation("/dashboard");
+          return;
+        }
         setMagicLinkSent(true);
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -49,7 +74,10 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     try {
-      const { error } = await supabase.auth.signInWithOtp({ email });
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: getEmailRedirectTo() },
+      });
       if (error) throw error;
       setMagicLinkSent(true);
     } catch (err: any) {
