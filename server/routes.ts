@@ -7,6 +7,7 @@ import { storage } from "./storage";
 import { insertGroupSchema, joinGroupSchema, groupPreferencesSchema, persistentGroups, diningSessions, users, anonymousGroups } from "@shared/schema";
 import type { WSMessage, Group, Restaurant, GroupMember } from "@shared/schema";
 import { searchYelpRestaurantsByTerm } from "./yelp";
+import { getCachedGoogleReviews } from "./google-places";
 import { isAuthenticated, optionalAuth, registerAuthRoutes } from "./auth";
 import { registerSocialRoutes } from "./social-routes";
 import { sendPushToGroupMembers, saveGroupPushSubscription, getVapidPublicKey } from "./push";
@@ -416,6 +417,31 @@ export async function registerRoutes(
       });
 
     res.json({ groups });
+  });
+
+  // Lazily-fetched Google reviews for the swipe-card details panel. Kept off
+  // the search-time enrichment pass because the FieldMask "places.reviews"
+  // request is the priciest Google Places SKU — we only want to pay for it
+  // when a tester actually opens details. In-memory cache absorbs repeats.
+  app.get("/api/restaurants/reviews", async (req, res) => {
+    const name = typeof req.query.name === "string" ? req.query.name.trim() : "";
+    if (!name || name.length > 200) {
+      res.status(400).json({ message: "name required" });
+      return;
+    }
+    const address = typeof req.query.address === "string" ? req.query.address.trim() : undefined;
+    const lat = typeof req.query.lat === "string" ? parseFloat(req.query.lat) : undefined;
+    const lng = typeof req.query.lng === "string" ? parseFloat(req.query.lng) : undefined;
+    const validLat = lat !== undefined && Number.isFinite(lat) ? lat : undefined;
+    const validLng = lng !== undefined && Number.isFinite(lng) ? lng : undefined;
+
+    try {
+      const reviews = await getCachedGoogleReviews(name, address, validLat, validLng);
+      res.json({ reviews });
+    } catch (err) {
+      console.error("/api/restaurants/reviews failed:", err);
+      res.json({ reviews: [] });
+    }
   });
 
   app.post("/api/groups/:id/join-session", isAuthenticated, async (req, res) => {

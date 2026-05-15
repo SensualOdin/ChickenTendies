@@ -7,7 +7,7 @@ import {
   animate,
   MotionValue,
 } from "framer-motion";
-import { useState, useImperativeHandle, forwardRef, useMemo } from "react";
+import { useState, useImperativeHandle, forwardRef, useMemo, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -29,7 +29,8 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { openUrl } from "@/lib/open-url";
-import type { Restaurant } from "@shared/schema";
+import { API_BASE } from "@/lib/queryClient";
+import type { Restaurant, GoogleReview } from "@shared/schema";
 import { isNative } from "@/lib/platform";
 import { Haptics, ImpactStyle, NotificationType } from "@capacitor/haptics";
 import { useReducedMotion } from "@/hooks/use-reduced-motion";
@@ -100,6 +101,36 @@ export const SwipeCard = forwardRef<SwipeCardHandle, SwipeCardProps>(function Sw
 
   const [photoIndex, setPhotoIndex] = useState(0);
   const [showDetails, setShowDetails] = useState(false);
+  // Google reviews are lazy-fetched the first time the user opens details for
+  // this card. null = not yet requested; [] = fetched + empty; populated array
+  // = fetched + non-empty. Server has its own in-memory cache so re-opens
+  // after this component unmounts/remounts are still cheap.
+  const [reviews, setReviews] = useState<GoogleReview[] | null>(null);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!showDetails || reviews !== null || reviewsLoading) return;
+    let cancelled = false;
+    setReviewsLoading(true);
+    const params = new URLSearchParams({ name: restaurant.name });
+    if (restaurant.address) params.set("address", restaurant.address);
+    if (restaurant.latitude !== undefined) params.set("lat", String(restaurant.latitude));
+    if (restaurant.longitude !== undefined) params.set("lng", String(restaurant.longitude));
+    fetch(`${API_BASE}/api/restaurants/reviews?${params.toString()}`, { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : { reviews: [] }))
+      .then((data: { reviews?: GoogleReview[] }) => {
+        if (!cancelled) setReviews(data.reviews ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setReviews([]);
+      })
+      .finally(() => {
+        if (!cancelled) setReviewsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [showDetails, reviews, reviewsLoading, restaurant.name, restaurant.address, restaurant.latitude, restaurant.longitude]);
 
   const allPhotos =
     restaurant.photos && restaurant.photos.length > 0 ? restaurant.photos : [restaurant.imageUrl];
@@ -519,16 +550,77 @@ export const SwipeCard = forwardRef<SwipeCardHandle, SwipeCardProps>(function Sw
                   </div>
                 )}
 
-                {restaurant.yelpUrl && (
-                  <button
-                    type="button"
-                    className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm border rounded-lg hover:bg-muted transition-colors"
-                    onClick={() => openUrl(restaurant.yelpUrl!)}
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                    View on Yelp
-                  </button>
-                )}
+                <div className="space-y-2">
+                  <div className="text-xs font-mono uppercase tracking-[0.14em] text-muted-foreground">
+                    What people are saying
+                  </div>
+                  {reviewsLoading && (
+                    <div className="text-sm text-muted-foreground" data-testid="reviews-loading">
+                      Loading reviews…
+                    </div>
+                  )}
+                  {!reviewsLoading && reviews && reviews.length === 0 && (
+                    <div className="text-sm text-muted-foreground" data-testid="reviews-empty">
+                      No reviews yet — be the first by visiting!
+                    </div>
+                  )}
+                  {!reviewsLoading && reviews && reviews.length > 0 && (
+                    <div className="space-y-3" data-testid="reviews-list">
+                      {reviews.map((r, i) => (
+                        <div key={i} className="rounded-lg border bg-muted/30 p-3 space-y-1">
+                          <div className="flex items-center gap-2 text-xs">
+                            <Star className="w-3.5 h-3.5 fill-yellow-400 text-yellow-400" />
+                            <span className="font-bold">{r.rating.toFixed(1)}</span>
+                            {r.author && <span className="text-muted-foreground">· {r.author}</span>}
+                            {r.publishedAt && (
+                              <span className="text-muted-foreground/70 ml-auto">{r.publishedAt}</span>
+                            )}
+                          </div>
+                          <p className="text-sm text-foreground/90 line-clamp-4">{r.text}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2 pt-1">
+                  <div className="text-xs font-mono uppercase tracking-[0.14em] text-muted-foreground">
+                    Order or browse menu
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      className="flex flex-col items-center justify-center gap-1 py-3 text-xs border rounded-lg hover:bg-muted transition-colors"
+                      onClick={() => openUrl(`https://www.doordash.com/search?query=${encodeURIComponent(restaurant.name + (restaurant.address ? " " + restaurant.address : ""))}`)}
+                      data-testid="button-order-doordash"
+                    >
+                      <ShoppingBag className="w-4 h-4" />
+                      DoorDash
+                    </button>
+                    <button
+                      type="button"
+                      className="flex flex-col items-center justify-center gap-1 py-3 text-xs border rounded-lg hover:bg-muted transition-colors"
+                      onClick={() => openUrl(`https://www.ubereats.com/search?q=${encodeURIComponent(restaurant.name + (restaurant.address ? " " + restaurant.address : ""))}`)}
+                      data-testid="button-order-ubereats"
+                    >
+                      <Utensils className="w-4 h-4" />
+                      Uber Eats
+                    </button>
+                    {restaurant.yelpUrl ? (
+                      <button
+                        type="button"
+                        className="flex flex-col items-center justify-center gap-1 py-3 text-xs border rounded-lg hover:bg-muted transition-colors"
+                        onClick={() => openUrl(restaurant.yelpUrl!)}
+                        data-testid="button-order-yelp"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                        Yelp
+                      </button>
+                    ) : (
+                      <div />
+                    )}
+                  </div>
+                </div>
 
                 <button
                   type="button"

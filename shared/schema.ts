@@ -136,6 +136,19 @@ export const restaurantSchema = z.object({
 
 export type Restaurant = z.infer<typeof restaurantSchema>;
 
+// Lazily-fetched Google review surfaced in the swipe-card details panel. We
+// don't bake these into restaurantSchema — they'd bloat every search response
+// for content most users never expand. The client fetches via
+// GET /api/restaurants/reviews only when a card's details panel is opened.
+export const googleReviewSchema = z.object({
+  rating: z.number().min(0).max(5),
+  text: z.string(),
+  author: z.string().optional(),
+  publishedAt: z.string().optional(), // human-friendly relative time, e.g. "2 weeks ago"
+});
+
+export type GoogleReview = z.infer<typeof googleReviewSchema>;
+
 // Swipe
 export const swipeSchema = z.object({
   id: z.string(),
