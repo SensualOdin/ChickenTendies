@@ -38,3 +38,10 @@ services:
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
+      # Full Firebase Admin service-account JSON contents (the file you
+      # download from Firebase Console -> Project Settings -> Service
+      # Accounts -> Generate new private key). Multi-line value is fine in
+      # Render's UI. Without this, native push send is a no-op (web push
+      # still works). See docs/FCM-SETUP.md.
+      - key: FIREBASE_SERVICE_ACCOUNT_JSON
+        sync: false
