@@ -11,6 +11,7 @@ import {
   notifications,
   users,
   pushSubscriptions,
+  nativePushSubscriptions,
   diningHistory,
   userAchievements,
   achievementTypeEnum,
@@ -1378,15 +1379,40 @@ export function registerSocialRoutes(app: Express): void {
     try {
       const userId = getUserId(req);
       const { token, platform } = req.body;
-      if (!token || !platform) {
-        return res.status(400).json({ error: "Token and platform required" });
+      if (!token || typeof token !== "string" || !platform || (platform !== "android" && platform !== "ios")) {
+        return res.status(400).json({ error: "Token and platform (android|ios) required" });
       }
-      // Store native push token for future FCM/APNs integration
-      console.log(`Native push token registered: user=${userId} platform=${platform} token=${token.substring(0, 20)}...`);
+      // Upsert by token: the same physical device that re-installs gets a new
+      // user_id; the unique constraint on token would otherwise reject. Bind
+      // the token to the most-recent user.
+      await db
+        .insert(nativePushSubscriptions)
+        .values({ userId, token, platform })
+        .onConflictDoUpdate({
+          target: nativePushSubscriptions.token,
+          set: { userId, platform },
+        });
       res.json({ success: true });
     } catch (error) {
       console.error("Error registering native push token:", error);
       res.status(500).json({ error: "Failed to register push token" });
+    }
+  });
+
+  app.delete("/api/push/unsubscribe-native", isAuthenticated, async (req: Request, res: Response) => {
+    try {
+      const userId = getUserId(req);
+      const { token } = req.body;
+      if (!token || typeof token !== "string") {
+        return res.status(400).json({ error: "Token required" });
+      }
+      await db
+        .delete(nativePushSubscriptions)
+        .where(and(eq(nativePushSubscriptions.userId, userId), eq(nativePushSubscriptions.token, token)));
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error unregistering native push token:", error);
+      res.status(500).json({ error: "Failed to unregister push token" });
     }
   });
 

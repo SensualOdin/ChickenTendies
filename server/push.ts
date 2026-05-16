@@ -2,6 +2,7 @@ import webpush from "web-push";
 import { db } from "./db";
 import { pushSubscriptions, groupPushSubscriptions } from "@shared/schema";
 import { eq, inArray, and } from "drizzle-orm";
+import { sendNativePushToUser, sendNativePushToUsers } from "./fcm";
 
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY;
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY;
@@ -14,6 +15,8 @@ if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
   );
 }
 
+const webPushConfigured = !!(VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY);
+
 export function getVapidPublicKey(): string | undefined {
   return VAPID_PUBLIC_KEY;
 }
@@ -22,10 +25,20 @@ export async function sendPushNotification(
   userId: string,
   payload: { title: string; body: string; url?: string; data?: any }
 ): Promise<void> {
-  if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
-    console.log("VAPID keys not configured, skipping push notification");
-    return;
-  }
+  // Fan out to BOTH transports in parallel — same user might be on web AND
+  // have the mobile app installed. Each path no-ops gracefully when its
+  // transport isn't configured.
+  await Promise.all([
+    sendWebPushToUser(userId, payload),
+    sendNativePushToUser(userId, { title: payload.title, body: payload.body, data: payload.data }),
+  ]);
+}
+
+async function sendWebPushToUser(
+  userId: string,
+  payload: { title: string; body: string; url?: string; data?: any },
+): Promise<void> {
+  if (!webPushConfigured) return;
 
   try {
     const subscriptions = await db
@@ -54,7 +67,7 @@ export async function sendPushNotification(
       }
     }
   } catch (error) {
-    console.error("Error sending push notifications:", error);
+    console.error("Error sending web push notifications:", error);
   }
 }
 
@@ -62,9 +75,18 @@ export async function sendPushToUsers(
   userIds: string[],
   payload: { title: string; body: string; url?: string; data?: any }
 ): Promise<void> {
-  if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
-    return;
-  }
+  if (userIds.length === 0) return;
+  await Promise.all([
+    sendWebPushToUsers(userIds, payload),
+    sendNativePushToUsers(userIds, { title: payload.title, body: payload.body, data: payload.data }),
+  ]);
+}
+
+async function sendWebPushToUsers(
+  userIds: string[],
+  payload: { title: string; body: string; url?: string; data?: any },
+): Promise<void> {
+  if (!webPushConfigured) return;
 
   try {
     const subscriptions = await db
@@ -91,17 +113,20 @@ export async function sendPushToUsers(
       }
     }
   } catch (error) {
-    console.error("Error sending push notifications to users:", error);
+    console.error("Error sending web push notifications to users:", error);
   }
 }
 
+// Anonymous-party member notifications. group_push_subscriptions is keyed by
+// (groupId, memberId) and only ever holds web-push subs — anonymous members
+// don't have a user_id to map to a native FCM token. Authenticated members
+// in a crew session get native push via sendPushToUsers from the session
+// notify path; this function stays web-only.
 export async function sendPushToGroupMembers(
   groupId: string,
   payload: { title: string; body: string; url?: string; data?: any }
 ): Promise<void> {
-  if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
-    return;
-  }
+  if (!webPushConfigured) return;
 
   try {
     const subscriptions = await db

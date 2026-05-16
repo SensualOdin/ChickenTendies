@@ -20,3 +20,12 @@ android/local.properties
 *.jks
 *.p12
 *.mobileprovision
+
+# Firebase Admin service-account credentials — these are secrets. The full
+# JSON contents go in the FIREBASE_SERVICE_ACCOUNT_JSON env var on the
+# server, never in the repo. Note: google-services.json (the CLIENT
+# identifier in android/app/) is intentionally NOT ignored — the gradle
+# plugin needs it at build time.
+*-firebase-adminsdk-*.json
+firebase-service-account*.json
+serviceAccountKey.json

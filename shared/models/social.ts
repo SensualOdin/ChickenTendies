@@ -127,6 +127,23 @@ export const groupPushSubscriptions = pgTable("group_push_subscriptions", {
 export type GroupPushSubscription = typeof groupPushSubscriptions.$inferSelect;
 export type InsertGroupPushSubscription = typeof groupPushSubscriptions.$inferInsert;
 
+// Native push tokens (FCM for Android, APNs for iOS) registered by Capacitor's
+// PushNotifications plugin. Distinct from push_subscriptions because the
+// transport is different — these go through Firebase Admin SDK rather than
+// the Web Push protocol — and the credential shape is just an opaque token.
+export const nativePushSubscriptions = pgTable("native_push_subscriptions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  token: text("token").notNull().unique(),
+  platform: varchar("platform", { length: 10 }).notNull(), // "android" | "ios"
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("native_push_user_idx").on(table.userId),
+]);
+
+export type NativePushSubscription = typeof nativePushSubscriptions.$inferSelect;
+export type InsertNativePushSubscription = typeof nativePushSubscriptions.$inferInsert;
+
 export const diningHistory = pgTable("dining_history", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   groupId: varchar("group_id").notNull().references(() => persistentGroups.id),
