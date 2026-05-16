@@ -24,6 +24,24 @@ function getEmailRedirectTo(): string {
     : `${window.location.origin}/auth/callback`;
 }
 
+// Some testers reported the Create-account button greying out and spinning
+// forever. Supabase's SDK can hang on transient network conditions (no
+// built-in fetch timeout in older releases). Race every auth call against a
+// hard deadline so the spinner always resolves to either success or a real
+// error message.
+const AUTH_TIMEOUT_MS = 20_000;
+async function withTimeout<T>(p: Promise<T>, label: string): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`${label} is taking too long. Check your connection and try again.`)),
+        AUTH_TIMEOUT_MS,
+      ),
+    ),
+  ]);
+}
+
 export default function LoginPage() {
   const [, setLocation] = useLocation();
   const [email, setEmail] = useState("");
@@ -39,11 +57,14 @@ export default function LoginPage() {
     setError(null);
     try {
       if (isSignUp) {
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: { emailRedirectTo: getEmailRedirectTo() },
-        });
+        const { data, error } = await withTimeout(
+          supabase.auth.signUp({
+            email,
+            password,
+            options: { emailRedirectTo: getEmailRedirectTo() },
+          }),
+          "Sign-up",
+        );
         if (error) throw error;
         // Auto-confirm projects (Supabase setting "Enable email confirmations"
         // off) return a session immediately and send NO email. Showing the
@@ -55,7 +76,10 @@ export default function LoginPage() {
         }
         setMagicLinkSent(true);
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const { error } = await withTimeout(
+          supabase.auth.signInWithPassword({ email, password }),
+          "Sign-in",
+        );
         if (error) throw error;
         setLocation("/dashboard");
       }
@@ -74,10 +98,13 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     try {
-      const { error } = await supabase.auth.signInWithOtp({
-        email,
-        options: { emailRedirectTo: getEmailRedirectTo() },
-      });
+      const { error } = await withTimeout(
+        supabase.auth.signInWithOtp({
+          email,
+          options: { emailRedirectTo: getEmailRedirectTo() },
+        }),
+        "Magic-link send",
+      );
       if (error) throw error;
       setMagicLinkSent(true);
     } catch (err: any) {
@@ -186,6 +213,41 @@ export default function LoginPage() {
           >
             <Card className="editorial-card !p-0">
               <CardContent className="p-7 space-y-6">
+                {/* Tab-style mode switcher. Testers were missing the small
+                    "Don't have an account? Sign up" link at the bottom of
+                    the card, so the choice is now the first thing in the
+                    form, full-width and obvious. */}
+                <div
+                  role="tablist"
+                  aria-label="Sign in or sign up"
+                  className="grid grid-cols-2 rounded-full bg-muted p-1 text-sm font-medium"
+                >
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={!isSignUp}
+                    className={`rounded-full px-4 py-2 transition-colors ${
+                      !isSignUp ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"
+                    }`}
+                    onClick={() => { setIsSignUp(false); setError(null); }}
+                    data-testid="tab-signin"
+                  >
+                    Sign in
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={isSignUp}
+                    className={`rounded-full px-4 py-2 transition-colors ${
+                      isSignUp ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"
+                    }`}
+                    onClick={() => { setIsSignUp(true); setError(null); }}
+                    data-testid="tab-signup"
+                  >
+                    Sign up
+                  </button>
+                </div>
+
                 {/* Google OAuth */}
                 <Button
                   size="lg"
@@ -262,13 +324,6 @@ export default function LoginPage() {
                     disabled={loading}
                   >
                     Email me a magic link instead
-                  </button>
-                  <button
-                    type="button"
-                    className="text-xs text-muted-foreground hover:text-foreground"
-                    onClick={() => { setIsSignUp(!isSignUp); setError(null); }}
-                  >
-                    {isSignUp ? "Already have an account? Sign in" : "Don't have an account? Sign up"}
                   </button>
                 </div>
 

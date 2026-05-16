@@ -6,6 +6,15 @@ import { PushNotifications } from "@capacitor/push-notifications";
 
 type PermissionState = "default" | "granted" | "denied" | "unsupported";
 
+// Native push requires a Firebase project + google-services.json checked into
+// android/app/. Without it, Capacitor's PushNotifications.register() crashes
+// the native side when Firebase fails to initialize — testers on the
+// Play-store build saw the app close immediately after granting the
+// "Allow notifications" system prompt. Until we add the Firebase config,
+// gate native push behind an explicit opt-in env flag so the dashboard
+// "Enable Notifications" card stays hidden and register() is never called.
+const NATIVE_PUSH_ENABLED = import.meta.env.VITE_NATIVE_PUSH_ENABLED === "true";
+
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
@@ -24,7 +33,8 @@ export function usePushNotifications() {
   const [isLoading, setIsLoading] = useState(false);
   const [vapidKey, setVapidKey] = useState<string | null>(null);
 
-  const isPushSupported = isNative() || (
+  const isPushSupported = (isNative() && NATIVE_PUSH_ENABLED) || (
+    !isNative() &&
     typeof window !== "undefined" &&
     "serviceWorker" in navigator &&
     "PushManager" in window
@@ -36,7 +46,7 @@ export function usePushNotifications() {
       return;
     }
 
-    if (isNative()) {
+    if (isNative() && NATIVE_PUSH_ENABLED) {
       PushNotifications.checkPermissions().then(({ receive }) => {
         if (receive === "granted") setPermission("granted");
         else if (receive === "denied") setPermission("denied");
@@ -83,7 +93,7 @@ export function usePushNotifications() {
 
     setIsLoading(true);
 
-    if (isNative()) {
+    if (isNative() && NATIVE_PUSH_ENABLED) {
       try {
         const permResult = await PushNotifications.requestPermissions();
         if (permResult.receive === "granted") {

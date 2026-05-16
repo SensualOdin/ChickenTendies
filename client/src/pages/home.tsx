@@ -427,7 +427,7 @@ export default function Home() {
             </DropdownMenuContent>
           </DropdownMenu>
         ) : (
-          <Link href="/login" className="link" data-testid="button-login">Log in</Link>
+          <Link href="/login" className="btn-editorial btn-ghost" data-testid="button-login">Log in</Link>
         )}
         <Link href="/create" className="btn-editorial btn-paprika" data-testid="button-create-group-nav">
           Start a party
