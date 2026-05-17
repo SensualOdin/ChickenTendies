@@ -2,7 +2,7 @@ import webpush from "web-push";
 import { db } from "./db";
 import { pushSubscriptions, groupPushSubscriptions } from "@shared/schema";
 import { eq, inArray, and } from "drizzle-orm";
-import { sendNativePushToUser, sendNativePushToUsers } from "./fcm";
+import { sendNativePushToUser, sendNativePushToUsers, sendNativePushToGroup } from "./fcm";
 
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY;
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY;
@@ -117,14 +117,24 @@ async function sendWebPushToUsers(
   }
 }
 
-// Anonymous-party member notifications. group_push_subscriptions is keyed by
-// (groupId, memberId) and only ever holds web-push subs — anonymous members
-// don't have a user_id to map to a native FCM token. Authenticated members
-// in a crew session get native push via sendPushToUsers from the session
-// notify path; this function stays web-only.
+// Anonymous-party member notifications. group_push_subscriptions holds the
+// web-push subs (service-worker endpoints + VAPID keys);
+// group_native_push_subscriptions holds the FCM/APNs tokens. Fan out to
+// both so a member on the mobile app gets a push even when the app is
+// fully closed.
 export async function sendPushToGroupMembers(
   groupId: string,
   payload: { title: string; body: string; url?: string; data?: any }
+): Promise<void> {
+  await Promise.all([
+    sendWebPushToGroupMembers(groupId, payload),
+    sendNativePushToGroup(groupId, { title: payload.title, body: payload.body, data: payload.data }),
+  ]);
+}
+
+async function sendWebPushToGroupMembers(
+  groupId: string,
+  payload: { title: string; body: string; url?: string; data?: any },
 ): Promise<void> {
   if (!webPushConfigured) return;
 

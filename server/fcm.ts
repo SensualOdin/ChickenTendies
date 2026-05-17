@@ -1,6 +1,6 @@
 import admin from "firebase-admin";
 import { db } from "./db";
-import { nativePushSubscriptions } from "@shared/schema";
+import { nativePushSubscriptions, groupNativePushSubscriptions } from "@shared/schema";
 import { eq, inArray } from "drizzle-orm";
 
 // Server-side Firebase Cloud Messaging (Android) and APNs-via-FCM (iOS).
@@ -99,9 +99,12 @@ async function sendToTokens(tokens: string[], payload: NativePushPayload): Promi
 
   if (invalidTokens.length > 0) {
     try {
-      await db
-        .delete(nativePushSubscriptions)
-        .where(inArray(nativePushSubscriptions.token, invalidTokens));
+      // Prune from both stores — the same physical token can exist in either
+      // depending on how the device registered (user-scoped vs group-scoped).
+      await Promise.all([
+        db.delete(nativePushSubscriptions).where(inArray(nativePushSubscriptions.token, invalidTokens)),
+        db.delete(groupNativePushSubscriptions).where(inArray(groupNativePushSubscriptions.token, invalidTokens)),
+      ]);
     } catch (err) {
       console.error("Failed to prune invalid FCM tokens:", err);
     }
@@ -136,14 +139,21 @@ export async function sendNativePushToUser(userId: string, payload: NativePushPa
   }
 }
 
-// For anonymous-party notifications. The group_push_subscriptions table is
-// keyed by (groupId, memberId) for web; native tokens are user-scoped, so
-// we look up which userIds correspond to the group's members and fan out
-// to those tokens. Members who joined as anonymous (no user_id) won't have
-// a native token — they get web push or nothing.
-export async function sendNativePushToUsersInGroup(
-  userIds: string[],
-  payload: NativePushPayload,
-): Promise<void> {
-  return sendNativePushToUsers(userIds, payload);
+// Fan out to every native device that's registered against this group —
+// regardless of whether the member is signed in. Anonymous-party guests
+// register their FCM token tied to (groupId, memberId) when they enter the
+// lobby, so this is the path that wakes their phone when the host starts a
+// session.
+export async function sendNativePushToGroup(groupId: string, payload: NativePushPayload): Promise<void> {
+  if (!isFcmConfigured()) return;
+  try {
+    const subs = await db
+      .select({ token: groupNativePushSubscriptions.token })
+      .from(groupNativePushSubscriptions)
+      .where(eq(groupNativePushSubscriptions.groupId, groupId));
+    const tokens = Array.from(new Set(subs.map((s) => s.token))); // dedupe in case same device registered twice
+    await sendToTokens(tokens, payload);
+  } catch (err) {
+    console.error("sendNativePushToGroup failed:", err);
+  }
 }

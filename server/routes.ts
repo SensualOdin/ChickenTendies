@@ -4,7 +4,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import { z } from "zod";
 import { randomUUID, createHmac, timingSafeEqual } from "crypto";
 import { storage } from "./storage";
-import { insertGroupSchema, joinGroupSchema, groupPreferencesSchema, persistentGroups, diningSessions, users, anonymousGroups } from "@shared/schema";
+import { insertGroupSchema, joinGroupSchema, groupPreferencesSchema, persistentGroups, diningSessions, users, anonymousGroups, groupNativePushSubscriptions } from "@shared/schema";
 import type { WSMessage, Group, Restaurant, GroupMember } from "@shared/schema";
 import { searchYelpRestaurantsByTerm } from "./yelp";
 import { getCachedGoogleReviews } from "./google-places";
@@ -1270,6 +1270,49 @@ export async function registerRoutes(
       res.json({ success: true });
     } catch (error) {
       res.status(400).json({ error: "Invalid subscription data" });
+    }
+  });
+
+  // Native (FCM/APNs) sibling of the above. Anonymous-party guests on the
+  // mobile app register their device token tied to (groupId, memberId) so
+  // sendPushToGroupMembers can wake their phone when the host starts a
+  // session — the web-push path can't do that because Capacitor's WebView
+  // doesn't run service workers in the background.
+  app.post("/api/groups/:id/push/subscribe-native", async (req, res) => {
+    try {
+      const groupId = req.params.id;
+      const { memberId, token, platform } = req.body ?? {};
+      if (
+        !memberId || typeof memberId !== "string" ||
+        !token || typeof token !== "string" ||
+        (platform !== "android" && platform !== "ios")
+      ) {
+        return res.status(400).json({ error: "memberId, token, platform (android|ios) required" });
+      }
+      if (!verifyMemberIdentity(req, groupId, memberId)) {
+        return res.status(403).json({ error: "Session identity mismatch" });
+      }
+      const group = await storage.getGroup(groupId);
+      if (!group) return res.status(404).json({ error: "Group not found" });
+      if (!group.members.some(m => m.id === memberId)) {
+        return res.status(403).json({ error: "Member not in group" });
+      }
+
+      // Naive dedupe: drop any prior row for this exact (group, member,
+      // token) trio, then insert. Avoids unique-constraint gymnastics on a
+      // composite key while preventing duplicate rows for the same device.
+      await db.delete(groupNativePushSubscriptions).where(
+        and(
+          eq(groupNativePushSubscriptions.groupId, groupId),
+          eq(groupNativePushSubscriptions.memberId, memberId),
+          eq(groupNativePushSubscriptions.token, token),
+        )
+      );
+      await db.insert(groupNativePushSubscriptions).values({ groupId, memberId, token, platform });
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error registering group native push token:", error);
+      res.status(500).json({ error: "Failed to register push token" });
     }
   });
 

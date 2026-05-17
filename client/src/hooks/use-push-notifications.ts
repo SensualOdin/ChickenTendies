@@ -193,6 +193,67 @@ export function usePushNotifications() {
   };
 }
 
+// Auto-registers an FCM token tied to (groupId, memberId) so the server can
+// push notifications to this device when the host starts a session — even
+// when the app is fully closed. Pairs with the new
+// POST /api/groups/:id/push/subscribe-native endpoint.
+//
+// Designed to be called once from the lobby. It silently no-ops when:
+//   - we're on web (web push is handled by useGroupPushNotifications below),
+//   - native push is disabled at build time, or
+//   - groupId/memberId aren't ready yet.
+//
+// If the OS notification permission hasn't been requested before, this
+// triggers the system prompt. Testers in the v1.0.8 cohort were never
+// seeing the prompt because the only path that asked for it was the
+// dashboard "Enable Notifications" card — and they were joining parties
+// before ever landing on the dashboard.
+export function useGroupNativePush({ groupId, memberId }: { groupId: string | undefined; memberId: string | null }) {
+  useEffect(() => {
+    if (!isNative() || !NATIVE_PUSH_ENABLED || !groupId || !memberId) return;
+
+    let listener: { remove: () => Promise<void> } | null = null;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const perm = await PushNotifications.checkPermissions();
+        let receive = perm.receive;
+        if (receive === "prompt" || receive === "prompt-with-rationale") {
+          const req = await PushNotifications.requestPermissions();
+          receive = req.receive;
+        }
+        if (receive !== "granted" || cancelled) return;
+
+        listener = await PushNotifications.addListener("registration", async (token) => {
+          if (cancelled) return;
+          try {
+            const platform = (await import("@/lib/platform")).getPlatform();
+            const headers = await getAuthHeaders();
+            await fetch(`${API_BASE}/api/groups/${groupId}/push/subscribe-native`, {
+              method: "POST",
+              credentials: "include",
+              headers: { "Content-Type": "application/json", ...headers },
+              body: JSON.stringify({ memberId, token: token.value, platform }),
+            });
+          } catch (err) {
+            console.error("Failed to register group native push token:", err);
+          }
+        });
+
+        await PushNotifications.register();
+      } catch (err) {
+        console.error("Group native push setup failed:", err);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      listener?.remove().catch(() => {});
+    };
+  }, [groupId, memberId]);
+}
+
 interface UseGroupPushNotificationsOptions {
   groupId: string;
   memberId: string;

@@ -5,8 +5,21 @@ import type { User } from "@shared/models/auth";
 import { useEffect, useRef, useState } from "react";
 
 async function fetchUser(): Promise<User | null> {
-  const { data: { session } } = await supabase.auth.getSession();
+  let { data: { session } } = await supabase.auth.getSession();
   if (!session) return null;
+
+  // getSession() reads from storage but does NOT refresh the access token,
+  // even when it's expired. After a cold start of the app (Capacitor kills the
+  // WebView, autoRefresh isn't running), the access token can be hours past
+  // its 1-hour TTL. Without this guard, we'd send the expired token to
+  // /api/auth/user, get 401, and report the user as logged out — the bug
+  // testers hit as "logged in the first time, then exited and wasn't logged in."
+  const expiresAt = session.expires_at ? session.expires_at * 1000 : 0;
+  if (expiresAt > 0 && expiresAt < Date.now() + 60_000) {
+    const { data, error } = await supabase.auth.refreshSession();
+    if (error || !data.session) return null; // refresh token also dead — truly logged out
+    session = data.session;
+  }
 
   const response = await fetch(`${API_BASE}/api/auth/user`, {
     headers: {
@@ -15,7 +28,17 @@ async function fetchUser(): Promise<User | null> {
   });
 
   if (response.status === 401) {
-    return null;
+    // Last-ditch retry: the server rejected the token for some reason the
+    // expiry check didn't catch (clock skew, JWT revocation, etc.). Try one
+    // forced refresh + retry before giving up.
+    const { data, error } = await supabase.auth.refreshSession();
+    if (error || !data.session) return null;
+    const retry = await fetch(`${API_BASE}/api/auth/user`, {
+      headers: { Authorization: `Bearer ${data.session.access_token}` },
+    });
+    if (retry.status === 401) return null;
+    if (!retry.ok) throw new Error(`${retry.status}: ${retry.statusText}`);
+    return retry.json();
   }
 
   if (!response.ok) {

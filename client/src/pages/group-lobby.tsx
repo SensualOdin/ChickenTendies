@@ -10,6 +10,7 @@ import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { apiRequest, SHARE_BASE_URL } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
+import { useGroupNativePush } from "@/hooks/use-push-notifications";
 import { getLeaderToken } from "@/lib/leader-token";
 import { isNative } from "@/lib/platform";
 import type { Group, WSMessage, GroupMember } from "@shared/schema";
@@ -27,6 +28,12 @@ export default function GroupLobby() {
 
   const memberId = localStorage.getItem("grubmatch-member-id");
   const isHost = group?.members.find((m) => m.id === memberId)?.isHost ?? false;
+
+  // Native push: prompt for OS notification permission the first time this
+  // tester lands in a lobby, then bind their FCM token to (groupId, memberId)
+  // so a host-started session reaches them even when the app is closed.
+  // No-op on web — web push for the same flow runs in swipe.tsx already.
+  useGroupNativePush({ groupId: params.id, memberId });
   const storedLeaderToken = params.id ? getLeaderToken(params.id) : null;
 
   // Check if user has a stored leader token for this group
