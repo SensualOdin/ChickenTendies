@@ -17,13 +17,20 @@ declare module "http" {
   }
 }
 
-// CORS — allow frontend origin, localhost dev, and native Capacitor apps
+// CORS — allow frontend origin, localhost dev, and native Capacitor apps.
+// Includes the deployed frontend domains as fallbacks so the API still
+// answers if FRONTEND_URL ever gets unset in Render's env vars.
 const allowedOrigins = [
   process.env.FRONTEND_URL,
+  "https://chickentinders.app",
+  "https://www.chickentinders.app",
+  "https://chickentinders.onrender.com",
   "http://localhost:5173",
   "http://localhost:3000",
+  "http://localhost:5001",
   "capacitor://localhost",
   "https://localhost",
+  "ionic://localhost",
 ].filter(Boolean) as string[];
 
 app.use(cors({

@@ -55,6 +55,7 @@ const mockRestaurants: Restaurant[] = [
     rating: 4.5,
     reviewCount: 324,
     imageUrl: "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=800&h=600&fit=crop",
+    photos: [],
     address: "123 Main St",
     distance: 0.8,
     dietaryOptions: ["vegetarian"],
@@ -70,6 +71,7 @@ const mockRestaurants: Restaurant[] = [
     rating: 4.7,
     reviewCount: 512,
     imageUrl: "https://images.unsplash.com/photo-1579871494447-9811cf80d66c?w=800&h=600&fit=crop",
+    photos: [],
     address: "456 Oak Ave",
     distance: 1.2,
     dietaryOptions: ["gluten-free", "pescatarian"],
@@ -85,6 +87,7 @@ const mockRestaurants: Restaurant[] = [
     rating: 4.3,
     reviewCount: 287,
     imageUrl: "https://images.unsplash.com/photo-1565299585323-38d6b0865b47?w=800&h=600&fit=crop",
+    photos: [],
     address: "789 Elm St",
     distance: 0.5,
     dietaryOptions: ["vegetarian", "vegan"],
@@ -100,6 +103,7 @@ const mockRestaurants: Restaurant[] = [
     rating: 4.8,
     reviewCount: 456,
     imageUrl: "https://images.unsplash.com/photo-1544025162-d76694265947?w=800&h=600&fit=crop",
+    photos: [],
     address: "321 Pine Rd",
     distance: 2.1,
     dietaryOptions: [],
@@ -115,6 +119,7 @@ const mockRestaurants: Restaurant[] = [
     rating: 4.4,
     reviewCount: 198,
     imageUrl: "https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=800&h=600&fit=crop",
+    photos: [],
     address: "555 Spice Ln",
     distance: 1.5,
     dietaryOptions: ["vegetarian", "vegan", "gluten-free"],
@@ -130,6 +135,7 @@ const mockRestaurants: Restaurant[] = [
     rating: 4.2,
     reviewCount: 345,
     imageUrl: "https://images.unsplash.com/photo-1563245372-f21724e3856d?w=800&h=600&fit=crop",
+    photos: [],
     address: "888 Dragon Way",
     distance: 0.9,
     dietaryOptions: ["vegetarian"],
@@ -145,6 +151,7 @@ const mockRestaurants: Restaurant[] = [
     rating: 4.6,
     reviewCount: 267,
     imageUrl: "https://images.unsplash.com/photo-1544124065-6e44b000ca18?w=800&h=600&fit=crop",
+    photos: [],
     address: "222 Olive St",
     distance: 1.8,
     dietaryOptions: ["vegetarian", "gluten-free"],
@@ -160,6 +167,7 @@ const mockRestaurants: Restaurant[] = [
     rating: 4.4,
     reviewCount: 178,
     imageUrl: "https://images.unsplash.com/photo-1559314809-0d155014e29e?w=800&h=600&fit=crop",
+    photos: [],
     address: "444 Thai Ave",
     distance: 1.1,
     dietaryOptions: ["vegetarian", "vegan"],
@@ -175,6 +183,7 @@ const mockRestaurants: Restaurant[] = [
     rating: 4.5,
     reviewCount: 234,
     imageUrl: "https://images.unsplash.com/photo-1498654896293-37aacf113fd9?w=800&h=600&fit=crop",
+    photos: [],
     address: "777 Seoul Blvd",
     distance: 2.3,
     dietaryOptions: ["gluten-free"],
@@ -190,6 +199,7 @@ const mockRestaurants: Restaurant[] = [
     rating: 4.3,
     reviewCount: 567,
     imageUrl: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=800&h=600&fit=crop",
+    photos: [],
     address: "111 Burger Ln",
     distance: 0.4,
     dietaryOptions: ["vegetarian"],
@@ -205,6 +215,7 @@ const mockRestaurants: Restaurant[] = [
     rating: 4.6,
     reviewCount: 423,
     imageUrl: "https://images.unsplash.com/photo-1574071318508-1cdbab80d002?w=800&h=600&fit=crop",
+    photos: [],
     address: "333 Pizza Way",
     distance: 0.7,
     dietaryOptions: ["vegetarian"],
@@ -220,6 +231,7 @@ const mockRestaurants: Restaurant[] = [
     rating: 4.7,
     reviewCount: 289,
     imageUrl: "https://images.unsplash.com/photo-1559339352-11d035aa65de?w=800&h=600&fit=crop",
+    photos: [],
     address: "999 Harbor Dr",
     distance: 3.2,
     dietaryOptions: ["gluten-free", "pescatarian"],
@@ -385,7 +397,9 @@ export class DbStorage implements IStorage {
 
   async getRestaurantsForGroup(groupId: string): Promise<Restaurant[]> {
     const group = await this.getGroup(groupId);
-    if (!group || !group.preferences) return mockRestaurants;
+    // Don't leak staging fake data to real users — wait for preferences so
+    // the Yelp/Places search runs with real inputs.
+    if (!group || !group.preferences) return [];
 
     const [cached] = await db.select().from(restaurantCache)
       .where(eq(restaurantCache.groupId, groupId));

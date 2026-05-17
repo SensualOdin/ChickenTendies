@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "./use-auth";
-import { apiRequest, API_BASE } from "@/lib/queryClient";
+import { apiRequest, API_BASE, getAuthHeaders } from "@/lib/queryClient";
 import { isNative } from "@/lib/platform";
 import { PushNotifications } from "@capacitor/push-notifications";
 

@@ -77,7 +77,7 @@ export function useNotifications() {
             },
           },
           "Join"
-        ) as ToastActionElement;
+        ) as unknown as ToastActionElement;
       }
 
       toast(toastOptions);

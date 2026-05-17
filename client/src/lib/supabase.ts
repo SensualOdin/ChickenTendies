@@ -17,4 +17,21 @@ if (!supabaseUrl || !supabaseAnonKey) {
   );
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Pin to PKCE explicitly. With Capacitor we open the auth URL in a system
+// browser (SFSafariViewController / Chrome Custom Tabs) and return via a
+// chickentinders:// deep link with `?code=...`. PKCE is the supported flow
+// for that pattern — the code_verifier is stored in THIS WebView's
+// localStorage and stays put across the deep-link round trip, so the
+// subsequent exchangeCodeForSession call works.
+//
+// detectSessionInUrl: false because App.tsx handles deep-link callbacks
+// itself; otherwise the SDK would race with our handler and double-process
+// the auth code.
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    flowType: 'pkce',
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: false,
+  },
+});
