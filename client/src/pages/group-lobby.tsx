@@ -12,7 +12,7 @@ import { apiRequest, SHARE_BASE_URL } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
 import { useGroupNativePush } from "@/hooks/use-push-notifications";
 import { getLeaderToken } from "@/lib/leader-token";
-import { isNative } from "@/lib/platform";
+import { useGroupWebSocket } from "@/hooks/use-group-websocket";
 import type { Group, WSMessage, GroupMember } from "@shared/schema";
 
 export default function GroupLobby() {
@@ -21,7 +21,6 @@ export default function GroupLobby() {
   const { toast } = useToast();
   const { isAuthenticated } = useAuth();
   const [copied, setCopied] = useState(false);
-  const [ws, setWs] = useState<WebSocket | null>(null);
   const [group, setGroup] = useState<Group | null>(null);
   const [hasLeaderToken, setHasLeaderToken] = useState(false);
   const [isReclaiming, setIsReclaiming] = useState(false);
@@ -97,115 +96,52 @@ export default function GroupLobby() {
     }
   }, [group?.status, params.id, setLocation]);
 
-  useEffect(() => {
-    if (!params.id || !memberId) return;
-
-    let socket: WebSocket | null = null;
-    let reconnectTimeout: NodeJS.Timeout | null = null;
-    let reconnectAttempts = 0;
-    const maxReconnectAttempts = 10;
-    let isClosedIntentionally = false;
-
-    const connect = () => {
-      const wsBase = isNative()
-        ? "wss://chickentinders.onrender.com"
-        : `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}`;
-
-      const apiUrl = import.meta.env.VITE_API_URL || "";
-      let wsUrl: string;
-      if (!isNative() && apiUrl) {
-        const url = new URL(apiUrl);
-        const wsProtocol = url.protocol === "https:" ? "wss:" : "ws:";
-        wsUrl = `${wsProtocol}//${url.host}/ws?groupId=${params.id}&memberId=${memberId}`;
+  const handleWsMessage = useCallback((message: WSMessage) => {
+    if (message.type === "sync") {
+      setGroup(message.group);
+    } else if (message.type === "member_joined") {
+      setGroup((prev) => {
+        if (!prev) return null;
+        if (prev.members.some(m => m.id === message.member.id)) return prev;
+        return { ...prev, members: [...prev.members, message.member] };
+      });
+      toast({
+        title: "New party member!",
+        description: `${message.member.name} just joined the fun!`,
+      });
+    } else if (message.type === "member_removed") {
+      if (message.memberId === memberId) {
+        toast({
+          title: "Removed from group",
+          description: "You have been removed from this group.",
+          variant: "destructive",
+        });
+        setLocation("/");
       } else {
-        wsUrl = `${wsBase}/ws?groupId=${params.id}&memberId=${memberId}`;
+        setGroup((prev) => {
+          if (!prev) return null;
+          return { ...prev, members: prev.members.filter(m => m.id !== message.memberId) };
+        });
+        toast({
+          title: "Member left",
+          description: `${message.memberName} has left the group.`,
+        });
       }
-      socket = new WebSocket(wsUrl);
+    } else if (message.type === "status_changed") {
+      if (message.status === "swiping") {
+        setLocation(`/group/${params.id}/swipe`);
+      }
+    } else if (message.type === "preferences_updated") {
+      setGroup((prev) => (prev ? { ...prev, preferences: message.preferences } : null));
+    }
+  }, [memberId, toast, setLocation, params.id]);
 
-      socket.onopen = () => {
-        console.log("WebSocket connected");
-        reconnectAttempts = 0;
-      };
-
-      socket.onmessage = (event) => {
-        const message: WSMessage = JSON.parse(event.data);
-
-        if (message.type === "sync") {
-          setGroup(message.group);
-        } else if (message.type === "member_joined") {
-          setGroup((prev) => {
-            if (!prev) return null;
-            if (prev.members.some(m => m.id === message.member.id)) {
-              return prev;
-            }
-            return {
-              ...prev,
-              members: [...prev.members, message.member],
-            };
-          });
-          toast({
-            title: "New party member!",
-            description: `${message.member.name} just joined the fun!`,
-          });
-        } else if (message.type === "member_removed") {
-          if (message.memberId === memberId) {
-            toast({
-              title: "Removed from group",
-              description: "You have been removed from this group.",
-              variant: "destructive",
-            });
-            setLocation("/");
-          } else {
-            setGroup((prev) => {
-              if (!prev) return null;
-              return {
-                ...prev,
-                members: prev.members.filter(m => m.id !== message.memberId),
-              };
-            });
-            toast({
-              title: "Member left",
-              description: `${message.memberName} has left the group.`,
-            });
-          }
-        } else if (message.type === "status_changed") {
-          if (message.status === "swiping") {
-            setLocation(`/group/${params.id}/swipe`);
-          }
-        } else if (message.type === "preferences_updated") {
-          setGroup((prev) => {
-            if (!prev) return null;
-            return { ...prev, preferences: message.preferences };
-          });
-        }
-      };
-
-      socket.onclose = () => {
-        if (isClosedIntentionally) return;
-
-        if (reconnectAttempts < maxReconnectAttempts) {
-          reconnectAttempts++;
-          const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
-          console.log(`WebSocket closed, reconnecting in ${delay}ms (attempt ${reconnectAttempts})`);
-          reconnectTimeout = setTimeout(connect, delay);
-        }
-      };
-
-      socket.onerror = (error) => {
-        console.error("WebSocket error:", error);
-      };
-
-      setWs(socket);
-    };
-
-    connect();
-
-    return () => {
-      isClosedIntentionally = true;
-      if (reconnectTimeout) clearTimeout(reconnectTimeout);
-      if (socket) socket.close();
-    };
-  }, [params.id, memberId, toast, setLocation]);
+  useGroupWebSocket({
+    groupId: params.id,
+    memberId: memberId ?? undefined,
+    onMessage: handleWsMessage,
+    label: "Lobby",
+  });
 
   const copyCode = useCallback(async () => {
     if (!group) return;

@@ -15,6 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { useGroupPushNotifications } from "@/hooks/use-push-notifications";
 import { useAnalytics } from "@/hooks/use-analytics";
+import { useGroupWebSocket } from "@/hooks/use-group-websocket";
 import { isNative } from "@/lib/platform";
 import { Flame, ChevronRight, ChevronDown, ChevronUp, PartyPopper, Bell, Timer, Vote, Trophy, BellRing, X, Home, RefreshCw, ArrowLeft, ArrowRight, ArrowUp, Utensils, Heart, Sparkles, Undo2, MapPin, SlidersHorizontal, Plus } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -27,7 +28,6 @@ export default function SwipePage() {
   const params = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const [ws, setWs] = useState<WebSocket | null>(null);
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [matches, setMatches] = useState<Restaurant[]>([]);
@@ -41,7 +41,6 @@ export default function SwipePage() {
   const [lastSwipe, setLastSwipe] = useState<{ restaurant: Restaurant; index: number } | null>(null);
   const [visitedRestaurantIds, setVisitedRestaurantIds] = useState<Set<string>>(new Set());
   const [showNotificationPrompt, setShowNotificationPrompt] = useState(true);
-  const [wsConnected, setWsConnected] = useState(true);
   const [showExitConfirm, setShowExitConfirm] = useState(false);
   const [memberProgress, setMemberProgress] = useState<Record<string, { swipeCount: number; total: number }>>({});
   const [showPrefs, setShowPrefs] = useState(false);
@@ -135,140 +134,71 @@ export default function SwipePage() {
     }
   }, [initialRestaurants]);
 
-  useEffect(() => {
-    if (!params.id || !memberId) return;
-
-    let socket: WebSocket | null = null;
-    let reconnectTimeout: NodeJS.Timeout | null = null;
-    let reconnectAttempts = 0;
-    const maxReconnectAttempts = 10;
-    let isClosedIntentionally = false;
-
-    const connect = () => {
-      const wsBase = isNative()
-        ? "wss://chickentinders.onrender.com"
-        : `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}`;
-
-      const apiUrl = import.meta.env.VITE_API_URL || "";
-      let wsUrl: string;
-      if (!isNative() && apiUrl) {
-        const url = new URL(apiUrl);
-        const wsProtocol = url.protocol === "https:" ? "wss:" : "ws:";
-        wsUrl = `${wsProtocol}//${url.host}/ws?groupId=${params.id}&memberId=${memberId}`;
-      } else {
-        wsUrl = `${wsBase}/ws?groupId=${params.id}&memberId=${memberId}`;
+  const handleWsMessage = useCallback((message: WSMessage) => {
+    if (message.type === "sync") {
+      setGroup(message.group);
+      const swipedIds = getSwipedIds();
+      const unswipedRestaurants = message.restaurants.filter((r: Restaurant) => !swipedIds.has(r.id));
+      setRestaurants(unswipedRestaurants);
+      setMatches(message.matches);
+    } else if (message.type === "match_found") {
+      setMatches((prev) => [...prev, message.restaurant]);
+      setLatestMatch(message.restaurant);
+      setShowMatchCelebration(true);
+      const duration = 3000;
+      const end = Date.now() + duration;
+      const colors = ['#ff6b6b', '#feca57', '#48dbfb', '#ff9ff3', '#54a0ff'];
+      const frame = () => {
+        confetti({ particleCount: 3, angle: 60, spread: 55, origin: { x: 0, y: 0.7 }, colors });
+        confetti({ particleCount: 3, angle: 120, spread: 55, origin: { x: 1, y: 0.7 }, colors });
+        if (Date.now() < end) requestAnimationFrame(frame);
+      };
+      frame();
+    } else if (message.type === "nudge") {
+      if (!message.targetMemberIds || (memberId && message.targetMemberIds.includes(memberId))) {
+        toast({
+          title: `${message.fromMemberName} is hungry!`,
+          description: `They're waiting for you to swipe on ${message.restaurantName}`,
+        });
       }
-      socket = new WebSocket(wsUrl);
+    } else if (message.type === "member_done_swiping") {
+      setGroup((prev) => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          members: prev.members.map(m =>
+            m.id === message.memberId ? { ...m, doneSwiping: true } : m
+          ),
+        };
+      });
+      if (message.memberId !== memberId) {
+        toast({
+          title: `${message.memberName} finished swiping!`,
+          description: "They're waiting for everyone else",
+        });
+      }
+    } else if (message.type === "member_progress") {
+      setMemberProgress(prev => ({
+        ...prev,
+        [message.memberId]: { swipeCount: message.swipeCount, total: message.totalRestaurants },
+      }));
+    } else if (message.type === "all_done_swiping") {
+      // Everyone's finished. Kick off a short countdown that auto-navigates
+      // the whole group to /matches together, so a table of four friends
+      // arrive at the decision screen at the same moment instead of each
+      // wandering there individually. The countdown (not an instant redirect)
+      // gives the user a 3-second "we're about to look!" beat and a chance
+      // to opt out if they were mid-reading.
+      setAutoNavTimer(3);
+    }
+  }, [memberId, toast]);
 
-      socket.onopen = () => {
-        console.log("Swipe WebSocket connected");
-        reconnectAttempts = 0;
-        setWsConnected(true);
-      };
-
-      socket.onmessage = (event) => {
-        const message: WSMessage = JSON.parse(event.data);
-
-        if (message.type === "sync") {
-          setGroup(message.group);
-          const swipedIds = getSwipedIds();
-          const unswipedRestaurants = message.restaurants.filter((r: Restaurant) => !swipedIds.has(r.id));
-          setRestaurants(unswipedRestaurants);
-          setMatches(message.matches);
-        } else if (message.type === "match_found") {
-          setMatches((prev) => [...prev, message.restaurant]);
-          setLatestMatch(message.restaurant);
-          setShowMatchCelebration(true);
-          const duration = 3000;
-          const end = Date.now() + duration;
-          const colors = ['#ff6b6b', '#feca57', '#48dbfb', '#ff9ff3', '#54a0ff'];
-
-          const frame = () => {
-            confetti({
-              particleCount: 3,
-              angle: 60,
-              spread: 55,
-              origin: { x: 0, y: 0.7 },
-              colors,
-            });
-            confetti({
-              particleCount: 3,
-              angle: 120,
-              spread: 55,
-              origin: { x: 1, y: 0.7 },
-              colors,
-            });
-            if (Date.now() < end) {
-              requestAnimationFrame(frame);
-            }
-          };
-          frame();
-        } else if (message.type === "nudge") {
-          if (!message.targetMemberIds || message.targetMemberIds.includes(memberId)) {
-            toast({
-              title: `${message.fromMemberName} is hungry!`,
-              description: `They're waiting for you to swipe on ${message.restaurantName}`,
-            });
-          }
-        } else if (message.type === "member_done_swiping") {
-          setGroup((prev) => {
-            if (!prev) return null;
-            return {
-              ...prev,
-              members: prev.members.map(m =>
-                m.id === message.memberId ? { ...m, doneSwiping: true } : m
-              ),
-            };
-          });
-          if (message.memberId !== memberId) {
-            toast({
-              title: `${message.memberName} finished swiping!`,
-              description: "They're waiting for everyone else",
-            });
-          }
-        } else if (message.type === "member_progress") {
-          setMemberProgress(prev => ({
-            ...prev,
-            [message.memberId]: { swipeCount: message.swipeCount, total: message.totalRestaurants },
-          }));
-        } else if (message.type === "all_done_swiping") {
-          // Everyone's finished. Kick off a short countdown that auto-navigates
-          // the whole group to /matches together, so a table of four friends
-          // arrive at the decision screen at the same moment instead of each
-          // wandering there individually. The countdown (not an instant redirect)
-          // gives the user a 3-second "we're about to look!" beat and a chance
-          // to opt out if they were mid-reading.
-          setAutoNavTimer(3);
-        }
-      };
-
-      socket.onclose = () => {
-        setWsConnected(false);
-        if (isClosedIntentionally) return;
-
-        if (reconnectAttempts < maxReconnectAttempts) {
-          reconnectAttempts++;
-          const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
-          console.log(`Swipe WebSocket closed, reconnecting in ${delay}ms (attempt ${reconnectAttempts})`);
-          reconnectTimeout = setTimeout(connect, delay);
-        }
-      };
-
-      socket.onerror = (error) => {
-        console.error("Swipe WebSocket error:", error);
-      };
-
-      setWs(socket);
-    };
-
-    connect();
-
-    return () => {
-      isClosedIntentionally = true;
-      if (reconnectTimeout) clearTimeout(reconnectTimeout);
-      if (socket) socket.close();
-    };
-  }, [params.id, memberId]);
+  const { connected: wsConnected } = useGroupWebSocket({
+    groupId: params.id,
+    memberId: memberId ?? undefined,
+    onMessage: handleWsMessage,
+    label: "Swipe",
+  });
 
   const swipeMutation = useMutation({
     mutationFn: async ({ restaurantId, liked, superLiked }: { restaurantId: string; liked: boolean; superLiked: boolean }) => {

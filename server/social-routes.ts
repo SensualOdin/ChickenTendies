@@ -99,7 +99,14 @@ function getUserClaims(req: Request): { sub: string; first_name?: string; last_n
   return { sub: user?.id || "", email: user?.email };
 }
 
-const sessionRestaurantCache: Map<string, Restaurant[]> = new Map();
+import { TtlMap } from "./ttl-map";
+
+// Sessions wrap up in minutes; 6h upper bound + bounded entry count keeps
+// abandoned sessions from leaking memory on Render.
+const sessionRestaurantCache = new TtlMap<string, Restaurant[]>({
+  ttlMs: 6 * 60 * 60 * 1000,
+  maxEntries: 20_000,
+});
 
 async function requireCrewMembership(userId: string, groupId: string, res: Response): Promise<boolean> {
   const [group] = await db
@@ -169,7 +176,7 @@ export function registerSocialRoutes(app: Express): void {
 
   app.get("/api/crews/preview/:inviteCode", crewPreviewLimiter, async (req: Request, res: Response) => {
     try {
-      const { inviteCode } = req.params;
+      const { inviteCode } = req.params as { inviteCode: string };
       const [group] = await db
         .select()
         .from(persistentGroups)
@@ -360,7 +367,7 @@ export function registerSocialRoutes(app: Express): void {
   app.post("/api/friends/:id/accept", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = getUserId(req);
-      const friendshipId = req.params.id;
+      const friendshipId = (req.params.id as string);
       
       const [updated] = await db
         .update(friendships)
@@ -388,7 +395,7 @@ export function registerSocialRoutes(app: Express): void {
   app.post("/api/friends/:id/reject", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = getUserId(req);
-      const friendshipId = req.params.id;
+      const friendshipId = (req.params.id as string);
       
       const [updated] = await db
         .update(friendships)
@@ -416,7 +423,7 @@ export function registerSocialRoutes(app: Express): void {
   app.delete("/api/friends/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = getUserId(req);
-      const friendId = req.params.id;
+      const friendId = (req.params.id as string);
       
       await db
         .delete(friendships)
@@ -598,7 +605,7 @@ export function registerSocialRoutes(app: Express): void {
   app.get("/api/crews/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = getUserId(req);
-      const groupId = req.params.id;
+      const groupId = (req.params.id as string);
       if (!(await requireCrewMembership(userId, groupId, res))) return;
       
       const [group] = await db
@@ -627,7 +634,7 @@ export function registerSocialRoutes(app: Express): void {
   app.post("/api/crews/:id/members", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = getUserId(req);
-      const groupId = req.params.id;
+      const groupId = (req.params.id as string);
       const { memberId } = req.body;
       
       const [group] = await db
@@ -676,7 +683,7 @@ export function registerSocialRoutes(app: Express): void {
   app.delete("/api/crews/:id/members/:memberId", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = getUserId(req);
-      const { id: groupId, memberId } = req.params;
+      const { id: groupId, memberId } = req.params as { id: string; memberId: string };
       
       const [group] = await db
         .select()
@@ -710,7 +717,7 @@ export function registerSocialRoutes(app: Express): void {
   app.delete("/api/crews/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = getUserId(req);
-      const groupId = req.params.id;
+      const groupId = (req.params.id as string);
       
       const [group] = await db
         .select()
@@ -753,7 +760,7 @@ export function registerSocialRoutes(app: Express): void {
   app.get("/api/crews/:id/sessions", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = getUserId(req);
-      const groupId = req.params.id;
+      const groupId = (req.params.id as string);
       if (!(await requireCrewMembership(userId, groupId, res))) return;
       
       const sessions = await db
@@ -794,7 +801,7 @@ export function registerSocialRoutes(app: Express): void {
   app.post("/api/crews/:id/sessions", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = getUserId(req);
-      const groupId = req.params.id;
+      const groupId = (req.params.id as string);
       if (!(await requireCrewMembership(userId, groupId, res))) return;
       const { preferences } = req.body;
       
@@ -883,7 +890,7 @@ export function registerSocialRoutes(app: Express): void {
   app.get("/api/sessions/:id", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = getUserId(req);
-      const sessionId = req.params.id;
+      const sessionId = (req.params.id as string);
       
       const [session] = await db
         .select()
@@ -911,7 +918,7 @@ export function registerSocialRoutes(app: Express): void {
   app.get("/api/sessions/:id/restaurants", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = getUserId(req);
-      const sessionId = req.params.id;
+      const sessionId = (req.params.id as string);
       if (!(await requireSessionMembership(userId, sessionId, res))) return;
       
       let restaurants = sessionRestaurantCache.get(sessionId);
@@ -943,7 +950,7 @@ export function registerSocialRoutes(app: Express): void {
   app.get("/api/crews/:id/visited-restaurants", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = getUserId(req);
-      const groupId = req.params.id;
+      const groupId = (req.params.id as string);
       if (!(await requireCrewMembership(userId, groupId, res))) return;
       
       const sessions = await db
@@ -970,7 +977,7 @@ export function registerSocialRoutes(app: Express): void {
   app.post("/api/sessions/:id/swipe", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = getUserId(req);
-      const sessionId = req.params.id;
+      const sessionId = (req.params.id as string);
       if (!(await requireSessionMembership(userId, sessionId, res))) return;
       const { restaurantId, liked, superLiked = false, restaurantData } = req.body;
       
@@ -1077,7 +1084,7 @@ export function registerSocialRoutes(app: Express): void {
   app.get("/api/sessions/:id/swipes", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = getUserId(req);
-      const sessionId = req.params.id;
+      const sessionId = (req.params.id as string);
       if (!(await requireSessionMembership(userId, sessionId, res))) return;
       
       const swipes = await db
@@ -1095,7 +1102,7 @@ export function registerSocialRoutes(app: Express): void {
   app.get("/api/sessions/:id/matches", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = getUserId(req);
-      const sessionId = req.params.id;
+      const sessionId = (req.params.id as string);
       if (!(await requireSessionMembership(userId, sessionId, res))) return;
       
       const matches = await db
@@ -1114,7 +1121,7 @@ export function registerSocialRoutes(app: Express): void {
   app.post("/api/sessions/:id/visited", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = getUserId(req);
-      const sessionId = req.params.id;
+      const sessionId = (req.params.id as string);
       if (!(await requireSessionMembership(userId, sessionId, res))) return;
       const { restaurantId, restaurantData } = req.body;
       
@@ -1165,7 +1172,7 @@ export function registerSocialRoutes(app: Express): void {
   app.post("/api/crews/:id/complete-session", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = getUserId(req);
-      const groupId = req.params.id;
+      const groupId = (req.params.id as string);
       if (!(await requireCrewMembership(userId, groupId, res))) return;
       const { restaurantId, action } = req.body;
 
@@ -1318,7 +1325,7 @@ export function registerSocialRoutes(app: Express): void {
   app.post("/api/notifications/:id/read", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = getUserId(req);
-      const notificationId = req.params.id;
+      const notificationId = (req.params.id as string);
       
       await db
         .update(notifications)
@@ -1442,7 +1449,7 @@ export function registerSocialRoutes(app: Express): void {
   app.get("/api/crews/:id/history", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = getUserId(req);
-      const groupId = req.params.id;
+      const groupId = (req.params.id as string);
       if (!(await requireCrewMembership(userId, groupId, res))) return;
       
       const history = await db
@@ -1461,7 +1468,7 @@ export function registerSocialRoutes(app: Express): void {
   app.post("/api/crews/:id/history", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = getUserId(req);
-      const groupId = req.params.id;
+      const groupId = (req.params.id as string);
       if (!(await requireCrewMembership(userId, groupId, res))) return;
       const { sessionId, restaurantId, restaurantName, restaurantData, rating, notes } = req.body;
       
@@ -1682,7 +1689,10 @@ export function registerSocialRoutes(app: Express): void {
         ORDER BY week
       `);
 
-      const weeklyTrend = (weeklyTrendRows.rows || []).map((row: any) => ({
+      // postgres-js result is an iterable RowList — the rows ARE the array,
+      // there is no `.rows` property. Previous `.rows || []` always evaluated to []
+      // so the weeklyTrend chart silently rendered empty.
+      const weeklyTrend = Array.from(weeklyTrendRows).map((row: any) => ({
         week: row.week,
         crews_created: Number(row.crews_created || 0),
         sessions_completed: Number(row.sessions_completed || 0),
@@ -1761,7 +1771,7 @@ export function registerSocialRoutes(app: Express): void {
   app.post("/api/groups/:id/convert-to-crew", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = getUserId(req);
-      const groupId = req.params.id;
+      const groupId = (req.params.id as string);
       const { crewName } = req.body;
 
       const group = await storage.getGroup(groupId);

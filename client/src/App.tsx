@@ -100,27 +100,91 @@ function PendingConversionRedirect() {
 // and redirects native users back into the app via deep link.
 function AuthCallback() {
   const [, setLocation] = useLocation();
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const hash = window.location.hash;
-    if (hash && hash.includes("access_token")) {
-      // If running inside the native app, Supabase will pick up the tokens automatically
-      if (isNative()) {
+    let cancelled = false;
+    // If neither flow completes within 8s, surface an error instead of
+    // hanging on the spinner forever.
+    const safetyTimer = setTimeout(() => {
+      if (!cancelled) {
+        setError("Sign-in is taking longer than expected. You can keep waiting or try again.");
+      }
+    }, 8000);
+
+    const completeAuth = async () => {
+      const params = new URLSearchParams(window.location.search);
+      const hash = window.location.hash;
+
+      // PKCE: ?code=... in query string. We disabled detectSessionInUrl on
+      // the Supabase client so we always handle the exchange here.
+      const code = params.get("code");
+      if (code) {
+        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+        if (cancelled) return;
+        if (exchangeError) {
+          setError(`Sign-in failed: ${exchangeError.message}`);
+          return;
+        }
         setLocation("/dashboard");
         return;
       }
-      // On web (reached after OAuth redirect from native flow), redirect to the native app
-      const deepLink = `chickentinders://auth/callback${hash}`;
-      window.location.href = deepLink;
-    } else {
-      // No tokens, just go to dashboard (Supabase may have already set the session)
+
+      // Implicit flow: #access_token=... in hash. On native, hand the hash
+      // off via deep link so the WebView session can pick it up.
+      if (hash && hash.includes("access_token")) {
+        if (isNative()) {
+          setLocation("/dashboard");
+          return;
+        }
+        const hashParams = new URLSearchParams(hash.substring(1));
+        const accessToken = hashParams.get("access_token");
+        const refreshToken = hashParams.get("refresh_token");
+        if (accessToken && refreshToken) {
+          const { error: setErr } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          if (cancelled) return;
+          if (setErr) {
+            setError(`Sign-in failed: ${setErr.message}`);
+            return;
+          }
+        }
+        setLocation("/dashboard");
+        return;
+      }
+
+      // No auth tokens present — just go home.
       setLocation("/dashboard");
-    }
+    };
+
+    completeAuth().catch((err) => {
+      if (!cancelled) setError(err?.message ?? "Sign-in failed");
+    });
+
+    return () => {
+      cancelled = true;
+      clearTimeout(safetyTimer);
+    };
   }, [setLocation]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background">
-      <p className="text-muted-foreground">Signing you in...</p>
+    <div className="min-h-screen flex items-center justify-center bg-background p-6 text-center">
+      {error ? (
+        <div className="space-y-3">
+          <p className="text-destructive">{error}</p>
+          <button
+            type="button"
+            className="text-primary underline"
+            onClick={() => setLocation("/login")}
+          >
+            Back to sign in
+          </button>
+        </div>
+      ) : (
+        <p className="text-muted-foreground">Signing you in...</p>
+      )}
     </div>
   );
 }
@@ -190,7 +254,10 @@ function App() {
           window.dispatchEvent(new PopStateEvent("popstate"));
         };
 
-        // Try PKCE flow first (code in query params)
+        // Try PKCE flow first (code in query params). The code_verifier was
+        // stored in THIS WebView's localStorage when signInWithOAuth was
+        // called — the system browser session has its own context, but the
+        // WebView's storage stays put across the deep-link round trip.
         const code = url.searchParams.get("code");
         if (code) {
           const { error } = await supabase.auth.exchangeCodeForSession(code);
@@ -198,6 +265,7 @@ function App() {
             navigateToDashboard();
             return;
           }
+          console.error("[Auth] PKCE exchange failed:", error.message);
         }
 
         // Try implicit flow (tokens in hash)
@@ -212,10 +280,14 @@ function App() {
             navigateToDashboard();
             return;
           }
+          console.error("[Auth] setSession failed:", error.message);
         }
 
-        // Fallback: navigate to dashboard, auth state listener may pick it up
-        navigateToDashboard();
+        // If we got here, neither flow completed. Bounce back to login
+        // so the user isn't stuck on a half-loaded dashboard.
+        console.error("[Auth] No usable auth params in deep link:", url.href);
+        window.history.pushState(null, "", "/login?error=auth_callback_failed");
+        window.dispatchEvent(new PopStateEvent("popstate"));
         return;
       }
 

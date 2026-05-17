@@ -12,8 +12,8 @@ export async function setupVite(server: Server, app: Express) {
   const serverOptions = {
     middlewareMode: true,
     hmr: { server, path: "/vite-hmr", clientPort: 5001 },
-    allowedHosts: true,
-  };
+    allowedHosts: true as const,
+  } as const;
 
   const vite = await createViteServer({
     ...viteConfig,

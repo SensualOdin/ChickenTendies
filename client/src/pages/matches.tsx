@@ -3,7 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { apiRequest, queryClient, API_BASE } from "@/lib/queryClient";
+import { apiRequest, queryClient, API_BASE, SHARE_BASE_URL } from "@/lib/queryClient";
 import { openUrl } from "@/lib/open-url";
 import { isNative } from "@/lib/platform";
 import { Share } from "@capacitor/share";
@@ -23,6 +23,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { useGroupWebSocket } from "@/hooks/use-group-websocket";
 import { ConversionPrompt } from "@/components/conversion-prompt";
 import { getLeaderToken } from "@/lib/leader-token";
 import confetti from "canvas-confetti";
@@ -83,7 +84,6 @@ export default function MatchesPage() {
   // Which match card currently has its voter list expanded inline (tap the
   // avatar cluster to toggle). Only one at a time to keep the layout tight.
   const [expandedVotersFor, setExpandedVotersFor] = useState<string | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
 
   const memberId = localStorage.getItem("grubmatch-member-id");
 
@@ -111,83 +111,32 @@ export default function MatchesPage() {
     }
   }, [initialVotes]);
 
-  // WebSocket connection for real-time vote updates
-  useEffect(() => {
-    if (!params.id || !memberId) return;
-
-    let socket: WebSocket | null = null;
-    let reconnectTimeout: NodeJS.Timeout | null = null;
-    let reconnectAttempts = 0;
-    const maxReconnectAttempts = 10;
-    let isClosedIntentionally = false;
-
-    const connect = () => {
-      const wsBase = isNative()
-        ? "wss://chickentinders.onrender.com"
-        : `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}`;
-
-      const apiUrl = import.meta.env.VITE_API_URL || "";
-      let wsUrl: string;
-      if (!isNative() && apiUrl) {
-        const url = new URL(apiUrl);
-        const wsProtocol = url.protocol === "https:" ? "wss:" : "ws:";
-        wsUrl = `${wsProtocol}//${url.host}/ws?groupId=${params.id}&memberId=${memberId}`;
-      } else {
-        wsUrl = `${wsBase}/ws?groupId=${params.id}&memberId=${memberId}`;
-      }
-      socket = new WebSocket(wsUrl);
-
-      socket.onopen = () => {
-        reconnectAttempts = 0;
-      };
-
-      socket.onmessage = (event) => {
-        const message: WSMessage = JSON.parse(event.data);
-
-        if (message.type === "match_vote") {
-          setVotes(prev => {
-            const next = { ...prev };
-            // Remove member's old vote from any restaurant
-            for (const rId of Object.keys(next)) {
-              next[rId] = next[rId].filter(v => v.memberId !== message.memberId);
-              if (next[rId].length === 0) delete next[rId];
-            }
-            // Add new vote
-            if (!next[message.restaurantId]) next[message.restaurantId] = [];
-            next[message.restaurantId].push({ memberId: message.memberId, memberName: message.memberName });
-            return next;
-          });
-        } else if (message.type === "match_picked") {
-          setPickedRestaurant(message.restaurant);
-          fireConfetti();
-        } else if (message.type === "match_found") {
-          // New match while on this page — refetch
-          queryClient.invalidateQueries({ queryKey: ["/api/groups", params.id, "matches"] });
+  const handleWsMessage = useCallback((message: WSMessage) => {
+    if (message.type === "match_vote") {
+      setVotes(prev => {
+        const next = { ...prev };
+        for (const rId of Object.keys(next)) {
+          next[rId] = next[rId].filter(v => v.memberId !== message.memberId);
+          if (next[rId].length === 0) delete next[rId];
         }
-      };
+        if (!next[message.restaurantId]) next[message.restaurantId] = [];
+        next[message.restaurantId].push({ memberId: message.memberId, memberName: message.memberName });
+        return next;
+      });
+    } else if (message.type === "match_picked") {
+      setPickedRestaurant(message.restaurant);
+      fireConfetti();
+    } else if (message.type === "match_found") {
+      queryClient.invalidateQueries({ queryKey: ["/api/groups", params.id, "matches"] });
+    }
+  }, [params.id]);
 
-      socket.onclose = () => {
-        if (isClosedIntentionally) return;
-        if (reconnectAttempts < maxReconnectAttempts) {
-          reconnectAttempts++;
-          const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
-          reconnectTimeout = setTimeout(connect, delay);
-        }
-      };
-
-      socket.onerror = () => {};
-
-      wsRef.current = socket;
-    };
-
-    connect();
-
-    return () => {
-      isClosedIntentionally = true;
-      if (reconnectTimeout) clearTimeout(reconnectTimeout);
-      if (socket) socket.close();
-    };
-  }, [params.id, memberId]);
+  useGroupWebSocket({
+    groupId: params.id,
+    memberId: memberId ?? undefined,
+    onMessage: handleWsMessage,
+    label: "Matches",
+  });
 
   // Sort matches by vote count descending
   const sortedMatches = useMemo(() => {

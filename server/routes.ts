@@ -19,6 +19,11 @@ import { authStorage } from "./auth/storage";
 import { eq, and, inArray } from "drizzle-orm";
 import rateLimit from "express-rate-limit";
 import { generateCsrfToken, issueCsrfCookie, csrfMiddleware } from "./csrf";
+import { TtlMap } from "./ttl-map";
+
+// Dining sessions wrap up in minutes; 6h is the upper bound. Bounded so
+// abandoned sessions don't grow these caches forever on Render.
+const SESSION_TTL_MS = 6 * 60 * 60 * 1000;
 
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -34,6 +39,14 @@ const createGroupLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many groups created, please try again later" },
+});
+
+const analyticsLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many analytics events" },
 });
 
 const swipeLimiter = rateLimit({
@@ -53,7 +66,10 @@ const suggestLimiter = rateLimit({
   message: { error: "Too many suggestions, slow down a sec." },
 });
 
-export const sessionUserMap: Map<string, string> = new Map();
+export const sessionUserMap = new TtlMap<string, string>({
+  ttlMs: SESSION_TTL_MS,
+  maxEntries: 50_000,
+});
 export let appWss: InstanceType<typeof WebSocketServer> | null = null;
 
 async function isAdminUser(req: any, res: any, next: any) {
@@ -83,7 +99,10 @@ interface WSClient {
 const clients: Map<string, WSClient[]> = new Map();
 
 // In-memory vote storage: groupId -> Map<memberId, restaurantId>
-export const matchVotes: Map<string, Map<string, string>> = new Map();
+export const matchVotes = new TtlMap<string, Map<string, string>>({
+  ttlMs: SESSION_TTL_MS,
+  maxEntries: 20_000,
+});
 
 function broadcast(groupId: string, message: WSMessage, excludeMemberId?: string) {
   const groupClients = clients.get(groupId) || [];
@@ -366,7 +385,7 @@ export async function registerRoutes(
   });
 
   app.get("/api/groups/:id", async (req, res) => {
-    const group = await storage.getGroup(req.params.id);
+    const group = await storage.getGroup((req.params.id as string));
     if (!group) {
       res.status(404).json({ error: "Group not found" });
       return;
@@ -446,7 +465,7 @@ export async function registerRoutes(
 
   app.post("/api/groups/:id/join-session", isAuthenticated, async (req, res) => {
     try {
-      const groupId = String(req.params.id);
+      const groupId = String((req.params.id as string));
       const userId = req.supabaseUser?.id || "";
 
       const [persistentGroup] = await db
@@ -583,7 +602,7 @@ export async function registerRoutes(
         return;
       }
 
-      const group = await storage.getGroup(req.params.id);
+      const group = await storage.getGroup((req.params.id as string));
       if (!group) {
         res.status(404).json({ error: "Group not found" });
         return;
@@ -606,7 +625,7 @@ export async function registerRoutes(
         : null;
 
       if (existingMember) {
-        bindMemberToSession(req, res, req.params.id, existingMember.id);
+        bindMemberToSession(req, res, (req.params.id as string), existingMember.id);
         const { leaderToken: _, ...groupWithoutToken } = group;
         res.json({ group: groupWithoutToken, memberId: existingMember.id, rejoined: true });
         return;
@@ -627,12 +646,12 @@ export async function registerRoutes(
       updatedMembers.push(newHost);
 
       const updatedGroup = { ...group, members: updatedMembers };
-      await storage.updateGroup(req.params.id, updatedGroup);
+      await storage.updateGroup((req.params.id as string), updatedGroup);
 
       // Broadcast member joined
-      broadcast(req.params.id, { type: "member_joined", member: newHost }, memberId);
+      broadcast((req.params.id as string), { type: "member_joined", member: newHost }, memberId);
 
-      bindMemberToSession(req, res, req.params.id, memberId);
+      bindMemberToSession(req, res, (req.params.id as string), memberId);
       const { leaderToken: _, ...groupWithoutToken } = updatedGroup;
       res.json({ group: groupWithoutToken, memberId, rejoined: false });
     } catch (error) {
@@ -645,14 +664,14 @@ export async function registerRoutes(
     try {
       const { hostMemberId, preferences } = req.body;
 
-      if (!verifyMemberIdentity(req, req.params.id, hostMemberId)) {
+      if (!verifyMemberIdentity(req, (req.params.id as string), hostMemberId)) {
         res.status(403).json({ error: "Session identity mismatch" });
         return;
       }
 
       const validatedPreferences = groupPreferencesSchema.parse(preferences);
 
-      const group = await storage.getGroup(req.params.id);
+      const group = await storage.getGroup((req.params.id as string));
       if (!group) {
         res.status(404).json({ error: "Group not found" });
         return;
@@ -664,23 +683,23 @@ export async function registerRoutes(
         return;
       }
 
-      const updatedGroup = await storage.updateGroupPreferences(req.params.id, validatedPreferences);
+      const updatedGroup = await storage.updateGroupPreferences((req.params.id as string), validatedPreferences);
       if (!updatedGroup) {
         res.status(500).json({ error: "Failed to update preferences" });
         return;
       }
 
       // Clear any previous match votes
-      matchVotes.delete(req.params.id);
+      matchVotes.delete((req.params.id as string));
 
       // Update status to swiping
-      await storage.updateGroupStatus(req.params.id, "swiping");
+      await storage.updateGroupStatus((req.params.id as string), "swiping");
 
-      broadcast(req.params.id, { type: "preferences_updated", preferences: validatedPreferences });
-      broadcast(req.params.id, { type: "status_changed", status: "swiping" });
+      broadcast((req.params.id as string), { type: "preferences_updated", preferences: validatedPreferences });
+      broadcast((req.params.id as string), { type: "status_changed", status: "swiping" });
 
       logLifecycleEvent("anonymous_party_started_swiping", {
-        groupId: req.params.id,
+        groupId: (req.params.id as string),
         metadata: {
           memberCount: updatedGroup.members.length,
           cuisineTypes: validatedPreferences.cuisineTypes,
@@ -695,7 +714,7 @@ export async function registerRoutes(
   });
 
   app.get("/api/groups/:id/restaurants", async (req, res) => {
-    const restaurants = await storage.getRestaurantsForGroup(req.params.id);
+    const restaurants = await storage.getRestaurantsForGroup((req.params.id as string));
     res.json(restaurants);
   });
 
@@ -708,24 +727,24 @@ export async function registerRoutes(
       res.status(400).json({ error: "memberId required" });
       return;
     }
-    if (!verifyMemberIdentity(req, req.params.id, memberId)) {
+    if (!verifyMemberIdentity(req, (req.params.id as string), memberId)) {
       res.status(403).json({ error: "Session identity mismatch" });
       return;
     }
 
-    const existingCount = (await storage.getRestaurantsForGroup(req.params.id)).length;
-    const restaurants = await storage.loadMoreRestaurants(req.params.id);
+    const existingCount = (await storage.getRestaurantsForGroup((req.params.id as string))).length;
+    const restaurants = await storage.loadMoreRestaurants((req.params.id as string));
     const newCount = restaurants.length;
     const loadedNew = newCount > existingCount;
 
     if (loadedNew) {
-      const group = await storage.getGroup(req.params.id);
+      const group = await storage.getGroup((req.params.id as string));
       if (group) {
         for (const member of group.members) {
           member.doneSwiping = false;
         }
-        const matches = await storage.getMatchesForGroup(req.params.id);
-        broadcast(req.params.id, {
+        const matches = await storage.getMatchesForGroup((req.params.id as string));
+        broadcast((req.params.id as string), {
           type: "sync",
           group,
           restaurants,
@@ -749,7 +768,7 @@ export async function registerRoutes(
 
   app.post("/api/groups/:id/restaurants/suggest", suggestLimiter, async (req, res) => {
     try {
-      const groupId = String(req.params.id);
+      const groupId = String((req.params.id as string));
       const { memberId, query } = suggestSearchSchema.parse(req.body);
       if (!verifyMemberIdentity(req, groupId, memberId)) {
         res.status(403).json({ error: "Session identity mismatch" });
@@ -794,7 +813,7 @@ export async function registerRoutes(
 
   app.post("/api/groups/:id/restaurants/add", suggestLimiter, async (req, res) => {
     try {
-      const groupId = String(req.params.id);
+      const groupId = String((req.params.id as string));
       const { memberId, restaurant } = suggestAddSchema.parse(req.body);
       if (!verifyMemberIdentity(req, groupId, memberId)) {
         res.status(403).json({ error: "Session identity mismatch" });
@@ -857,36 +876,36 @@ export async function registerRoutes(
         return;
       }
 
-      if (!verifyMemberIdentity(req, req.params.id, memberId)) {
+      if (!verifyMemberIdentity(req, (req.params.id as string), memberId)) {
         res.status(403).json({ error: "Session identity mismatch" });
         return;
       }
 
-      const swipe = await storage.recordSwipe(req.params.id, memberId, restaurantId, liked);
+      const swipe = await storage.recordSwipe((req.params.id as string), memberId, restaurantId, liked);
 
       const authUserId = (req as any).supabaseUser?.id;
       if (authUserId) {
         const action = superLiked ? "super_like" : liked ? "swipe_right" : "swipe_left";
         logAnalyticsEvent({
           userId: authUserId,
-          sessionId: req.params.id,
+          sessionId: (req.params.id as string),
           restaurantId,
           action,
         }).catch(() => { });
       }
 
-      broadcast(req.params.id, {
+      broadcast((req.params.id as string), {
         type: "swipe_made",
         memberId,
         restaurantId
       }, memberId);
 
       if (liked) {
-        const matches = await storage.getMatchesForGroup(req.params.id);
+        const matches = await storage.getMatchesForGroup((req.params.id as string));
         const matchedRestaurant = matches.find(r => r.id === restaurantId);
 
         if (matchedRestaurant) {
-          broadcast(req.params.id, {
+          broadcast((req.params.id as string), {
             type: "match_found",
             restaurant: matchedRestaurant
           });
@@ -896,10 +915,10 @@ export async function registerRoutes(
       res.json(swipe);
 
       // Broadcast swipe progress to group
-      const groupClients = clients.get(req.params.id);
+      const groupClients = clients.get((req.params.id as string));
       if (groupClients) {
-        const swipeCount = await storage.getSwipeCountForMember(req.params.id, memberId);
-        const totalRestaurants = await storage.getRestaurantCountForGroup(req.params.id);
+        const swipeCount = await storage.getSwipeCountForMember((req.params.id as string), memberId);
+        const totalRestaurants = await storage.getRestaurantCountForGroup((req.params.id as string));
         const progressMsg = JSON.stringify({
           type: "member_progress",
           memberId,
@@ -919,7 +938,7 @@ export async function registerRoutes(
 
   app.post("/api/groups/:id/undo-swipe", swipeLimiter, async (req: Request, res: Response) => {
     try {
-      const groupId = req.params.id;
+      const groupId = (req.params.id as string);
       const { memberId, restaurantId } = req.body;
 
       if (!memberId || !restaurantId) {
@@ -939,7 +958,7 @@ export async function registerRoutes(
   });
 
   app.get("/api/groups/:id/matches", async (req, res) => {
-    const matches = await storage.getMatchesForGroup(req.params.id);
+    const matches = await storage.getMatchesForGroup((req.params.id as string));
     res.json(matches);
   });
 
@@ -960,12 +979,12 @@ export async function registerRoutes(
         return;
       }
 
-      if (!verifyMemberIdentity(req, req.params.id, memberId)) {
+      if (!verifyMemberIdentity(req, (req.params.id as string), memberId)) {
         res.status(403).json({ error: "Session identity mismatch" });
         return;
       }
 
-      const group = await storage.getGroup(req.params.id);
+      const group = await storage.getGroup((req.params.id as string));
       if (!group) {
         res.status(404).json({ error: "Group not found" });
         return;
@@ -977,15 +996,23 @@ export async function registerRoutes(
         return;
       }
 
-      // Record vote (one per member, can change)
-      if (!matchVotes.has(req.params.id)) {
-        matchVotes.set(req.params.id, new Map());
+      // Reject votes for restaurants that aren't actually matched in this group.
+      // Without this, a member can broadcast a fake "match_vote" for any string.
+      const matches = await storage.getMatchesForGroup((req.params.id as string));
+      if (!matches.some(r => r.id === restaurantId)) {
+        res.status(400).json({ error: "Restaurant is not a match for this group" });
+        return;
       }
-      const groupVotes = matchVotes.get(req.params.id)!;
+
+      // Record vote (one per member, can change)
+      if (!matchVotes.has((req.params.id as string))) {
+        matchVotes.set((req.params.id as string), new Map());
+      }
+      const groupVotes = matchVotes.get((req.params.id as string))!;
       groupVotes.set(memberId, restaurantId);
 
       // Broadcast vote to all members
-      broadcast(req.params.id, {
+      broadcast((req.params.id as string), {
         type: "match_vote",
         memberId,
         memberName: member.name,
@@ -1000,7 +1027,7 @@ export async function registerRoutes(
 
   // Get current match votes for a group
   app.get("/api/groups/:id/match-votes", async (req, res) => {
-    const group = await storage.getGroup(req.params.id);
+    const group = await storage.getGroup((req.params.id as string));
     if (!group) {
       res.status(404).json({ error: "Group not found" });
       return;
@@ -1008,13 +1035,13 @@ export async function registerRoutes(
 
     // Only group members can read votes. Derive memberId from signed binding
     // so the client doesn't need to pass anything extra.
-    const boundMemberId = getSessionMemberId(req, req.params.id);
+    const boundMemberId = getSessionMemberId(req, (req.params.id as string));
     if (!boundMemberId || !group.members.some((m) => m.id === boundMemberId)) {
       res.status(403).json({ error: "Not a member of this group" });
       return;
     }
 
-    const groupVotes = matchVotes.get(req.params.id);
+    const groupVotes = matchVotes.get((req.params.id as string));
     const votes: Record<string, { memberId: string; memberName: string }[]> = {};
 
     if (groupVotes) {
@@ -1038,12 +1065,12 @@ export async function registerRoutes(
         return;
       }
 
-      if (!verifyMemberIdentity(req, req.params.id, memberId)) {
+      if (!verifyMemberIdentity(req, (req.params.id as string), memberId)) {
         res.status(403).json({ error: "Session identity mismatch" });
         return;
       }
 
-      const group = await storage.getGroup(req.params.id);
+      const group = await storage.getGroup((req.params.id as string));
       if (!group) {
         res.status(404).json({ error: "Group not found" });
         return;
@@ -1055,7 +1082,7 @@ export async function registerRoutes(
         return;
       }
 
-      const matches = await storage.getMatchesForGroup(req.params.id);
+      const matches = await storage.getMatchesForGroup((req.params.id as string));
       const matched = matches.find(r => r.id === restaurantId);
       if (!matched) {
         res.status(404).json({ error: "Restaurant not in matches" });
@@ -1089,7 +1116,7 @@ export async function registerRoutes(
       }
 
       // Broadcast pick to all members
-      broadcast(req.params.id, {
+      broadcast((req.params.id as string), {
         type: "match_picked",
         restaurant,
         ...(resolvedLocationId ? { pickedLocationId: resolvedLocationId } : {}),
@@ -1098,18 +1125,18 @@ export async function registerRoutes(
       // Send push notification to members who may have closed the app.
       // Fire-and-forget, but swallow errors to avoid unhandled promise rejections
       // crashing the Node process if the push service is down.
-      sendPushToGroupMembers(req.params.id, {
+      sendPushToGroupMembers((req.params.id as string), {
         title: `${restaurant.name} is locked in!`,
         body: `${group.name} is going to ${restaurant.name}. Let's eat!`,
-        url: `/group/${req.params.id}/matches`,
-        data: { groupId: req.params.id, type: "match_picked", restaurantId },
+        url: `/group/${(req.params.id as string)}/matches`,
+        data: { groupId: (req.params.id as string), type: "match_picked", restaurantId },
       }).catch((err) => console.error("[push] match_picked failed:", err));
 
       // Clear votes
-      matchVotes.delete(req.params.id);
+      matchVotes.delete((req.params.id as string));
 
       logLifecycleEvent("anonymous_party_match_picked", {
-        groupId: req.params.id,
+        groupId: (req.params.id as string),
         metadata: {
           restaurantId,
           restaurantName: restaurant.name,
@@ -1135,19 +1162,19 @@ export async function registerRoutes(
   app.post("/api/groups/:id/nudge", nudgeLimiter, async (req, res) => {
     const { restaurantId, fromMemberId } = req.body;
 
-    if (!verifyMemberIdentity(req, req.params.id, fromMemberId)) {
+    if (!verifyMemberIdentity(req, (req.params.id as string), fromMemberId)) {
       res.status(403).json({ error: "Session identity mismatch" });
       return;
     }
 
-    const group = await storage.getGroup(req.params.id);
+    const group = await storage.getGroup((req.params.id as string));
     if (!group) {
       res.status(404).json({ error: "Group not found" });
       return;
     }
 
     const fromMember = group.members.find(m => m.id === fromMemberId);
-    const restaurants = await storage.getRestaurantsForGroup(req.params.id);
+    const restaurants = await storage.getRestaurantsForGroup((req.params.id as string));
     const restaurant = restaurants.find(r => r.id === restaurantId);
 
     if (!fromMember || !restaurant) {
@@ -1155,7 +1182,7 @@ export async function registerRoutes(
       return;
     }
 
-    const membersToNudge = await storage.getMembersWhoHaventSwiped(req.params.id, restaurantId);
+    const membersToNudge = await storage.getMembersWhoHaventSwiped((req.params.id as string), restaurantId);
     const nudgeTargets = membersToNudge.filter(m => m.id !== fromMemberId);
 
     // Send nudge to all members who haven't swiped (except the sender)
@@ -1166,7 +1193,7 @@ export async function registerRoutes(
       targetMemberIds: nudgeTargets.map(m => m.id),
     };
 
-    broadcast(req.params.id, nudgeMessage, fromMemberId);
+    broadcast((req.params.id as string), nudgeMessage, fromMemberId);
 
     res.json({
       success: true,
@@ -1183,18 +1210,18 @@ export async function registerRoutes(
     try {
       const { memberId } = doneSwipingSchema.parse(req.body);
 
-      if (!verifyMemberIdentity(req, req.params.id, memberId)) {
+      if (!verifyMemberIdentity(req, (req.params.id as string), memberId)) {
         res.status(403).json({ error: "Session identity mismatch" });
         return;
       }
 
-      const result = await storage.markMemberDoneSwiping(req.params.id, memberId);
+      const result = await storage.markMemberDoneSwiping((req.params.id as string), memberId);
       if (!result) {
         res.status(404).json({ error: "Group or member not found" });
         return;
       }
 
-      broadcast(req.params.id, {
+      broadcast((req.params.id as string), {
         type: "member_done_swiping",
         memberId: result.member.id,
         memberName: result.member.name
@@ -1205,15 +1232,15 @@ export async function registerRoutes(
       if (allDone && result.group.members.length > 0) {
         // Send push notification to all group members (fire-and-forget with
         // error capture to prevent unhandled rejection crashes).
-        sendPushToGroupMembers(req.params.id, {
+        sendPushToGroupMembers((req.params.id as string), {
           title: "Everyone's done swiping!",
           body: `Your group "${result.group.name}" has finished swiping. Check out your matches!`,
-          url: `/group/${req.params.id}/matches`,
-          data: { groupId: req.params.id, type: "all_done_swiping" }
+          url: `/group/${(req.params.id as string)}/matches`,
+          data: { groupId: (req.params.id as string), type: "all_done_swiping" }
         }).catch((err) => console.error("[push] all_done_swiping failed:", err));
 
         // Also broadcast via WebSocket for users who are still on the page
-        broadcast(req.params.id, { type: "all_done_swiping" });
+        broadcast((req.params.id as string), { type: "all_done_swiping" });
       }
 
       res.json({ success: true, group: result.group });
@@ -1246,7 +1273,7 @@ export async function registerRoutes(
   app.post("/api/groups/:id/push/subscribe", async (req, res) => {
     try {
       const { memberId, subscription } = groupPushSubscribeSchema.parse(req.body);
-      const groupId = req.params.id;
+      const groupId = (req.params.id as string);
 
       if (!verifyMemberIdentity(req, groupId, memberId)) {
         res.status(403).json({ error: "Session identity mismatch" });
@@ -1280,7 +1307,7 @@ export async function registerRoutes(
   // doesn't run service workers in the background.
   app.post("/api/groups/:id/push/subscribe-native", async (req, res) => {
     try {
-      const groupId = req.params.id;
+      const groupId = (req.params.id as string);
       const { memberId, token, platform } = req.body ?? {};
       if (
         !memberId || typeof memberId !== "string" ||
@@ -1334,12 +1361,12 @@ export async function registerRoutes(
 
       const { memberId, memberName, reaction, restaurantId } = parsed.data;
 
-      if (!verifyMemberIdentity(req, req.params.id, memberId)) {
+      if (!verifyMemberIdentity(req, (req.params.id as string), memberId)) {
         res.status(403).json({ error: "Session identity mismatch" });
         return;
       }
 
-      const group = await storage.getGroup(req.params.id);
+      const group = await storage.getGroup((req.params.id as string));
       if (!group) {
         res.status(404).json({ error: "Group not found" });
         return;
@@ -1352,7 +1379,7 @@ export async function registerRoutes(
         return;
       }
 
-      broadcast(req.params.id, {
+      broadcast((req.params.id as string), {
         type: "live_reaction",
         memberId,
         memberName: member.name,
@@ -1368,7 +1395,7 @@ export async function registerRoutes(
 
   // Remove a member from the group (host only)
   app.delete("/api/groups/:id/members/:memberId", async (req, res) => {
-    const { id: groupId, memberId: targetMemberId } = req.params;
+    const { id: groupId, memberId: targetMemberId } = req.params as { id: string; memberId: string };
     const { hostMemberId } = req.body;
 
     if (!verifyMemberIdentity(req, groupId, hostMemberId)) {
@@ -1418,14 +1445,14 @@ export async function registerRoutes(
     try {
       const { hostMemberId, preferences } = req.body;
 
-      if (!verifyMemberIdentity(req, req.params.id, hostMemberId)) {
+      if (!verifyMemberIdentity(req, (req.params.id as string), hostMemberId)) {
         res.status(403).json({ error: "Session identity mismatch" });
         return;
       }
 
       const validatedPreferences = groupPreferencesSchema.parse(preferences);
 
-      const group = await storage.getGroup(req.params.id);
+      const group = await storage.getGroup((req.params.id as string));
       if (!group) {
         res.status(404).json({ error: "Group not found" });
         return;
@@ -1438,13 +1465,13 @@ export async function registerRoutes(
         return;
       }
 
-      const updatedGroup = await storage.updateGroupPreferences(req.params.id, validatedPreferences);
+      const updatedGroup = await storage.updateGroupPreferences((req.params.id as string), validatedPreferences);
       if (!updatedGroup) {
         res.status(500).json({ error: "Failed to update preferences" });
         return;
       }
 
-      broadcast(req.params.id, { type: "preferences_updated", preferences: validatedPreferences });
+      broadcast((req.params.id as string), { type: "preferences_updated", preferences: validatedPreferences });
 
       res.json({ success: true, group: stripLeaderToken(updatedGroup) });
     } catch (error) {
@@ -1452,7 +1479,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/analytics/events", async (req, res) => {
+  app.post("/api/analytics/events", analyticsLimiter, optionalAuth, async (req, res) => {
     try {
       const { events } = req.body;
       if (!Array.isArray(events) || events.length === 0) {
@@ -1463,8 +1490,33 @@ export async function registerRoutes(
         res.status(400).json({ error: "Max 50 events per batch" });
         return;
       }
-      await logBatchAnalyticsEvents(events);
-      res.json({ success: true, count: events.length });
+
+      // Pin userId to the authenticated user (server-side). Previously the
+      // client supplied userId in the body, so an unauthenticated caller could
+      // flood/poison the analytics store with arbitrary userIds.
+      const authUserId = (req as any).supabaseUser?.id ?? null;
+      const sanitized = events
+        .filter((e: any) => e && typeof e.restaurantId === "string" && typeof e.action === "string")
+        .map((e: any) => ({
+          userId: authUserId,
+          sessionId: typeof e.sessionId === "string" ? e.sessionId : null,
+          restaurantId: e.restaurantId,
+          restaurantName: typeof e.restaurantName === "string" ? e.restaurantName : null,
+          action: e.action,
+          cuisineTags: Array.isArray(e.cuisineTags) ? e.cuisineTags : null,
+          priceRange: typeof e.priceRange === "string" ? e.priceRange : null,
+          distanceMiles: typeof e.distanceMiles === "number" ? e.distanceMiles : null,
+          userLat: typeof e.userLat === "string" ? e.userLat : null,
+          userLng: typeof e.userLng === "string" ? e.userLng : null,
+        }));
+
+      if (sanitized.length === 0) {
+        res.status(400).json({ error: "No valid events" });
+        return;
+      }
+
+      await logBatchAnalyticsEvents(sanitized);
+      res.json({ success: true, count: sanitized.length });
     } catch (error) {
       res.status(500).json({ error: "Failed to log events" });
     }
@@ -1515,7 +1567,7 @@ export async function registerRoutes(
 
   app.get("/api/analytics/restaurant/:restaurantId", isAuthenticated, isAdminUser, async (req, res) => {
     try {
-      const restaurantId = Array.isArray(req.params.restaurantId) ? req.params.restaurantId[0] : req.params.restaurantId;
+      const restaurantId = Array.isArray((req.params.restaurantId as string)) ? (req.params.restaurantId as string)[0] : (req.params.restaurantId as string);
       const result = await getRestaurantAnalytics(restaurantId);
       if (!result) {
         res.json({ message: "No data available for this restaurant" });

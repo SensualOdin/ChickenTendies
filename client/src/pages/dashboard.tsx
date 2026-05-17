@@ -540,8 +540,17 @@ export default function Dashboard() {
                     const success = await subscribe();
                     if (success) {
                       toast({ title: "Notifications enabled!", description: "You'll be notified when sessions start." });
-                    } else if (permission === "denied") {
-                      toast({ title: "Notifications blocked", description: "Please enable notifications in your browser settings.", variant: "destructive" });
+                    } else {
+                      // `permission` is captured before subscribe() updated it, so read
+                      // the live value from Notification.permission instead of the stale state.
+                      const denied = typeof Notification !== "undefined" && Notification.permission === "denied";
+                      toast({
+                        title: denied ? "Notifications blocked" : "Couldn't enable notifications",
+                        description: denied
+                          ? "Please enable notifications in your device or browser settings."
+                          : "Please try again in a moment.",
+                        variant: "destructive",
+                      });
                     }
                   }}
                   disabled={pushLoading}

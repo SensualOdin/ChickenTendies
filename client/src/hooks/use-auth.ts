@@ -48,12 +48,21 @@ async function fetchUser(): Promise<User | null> {
   return response.json();
 }
 
+function detectInboundAuth(): boolean {
+  if (typeof window === "undefined") return false;
+  // Implicit flow returns tokens in the URL hash, PKCE returns ?code=...
+  // We want the loading spinner in either case so the dashboard doesn't
+  // briefly flash "please sign in" before Supabase finishes exchanging.
+  return (
+    window.location.hash.includes("access_token") ||
+    window.location.hash.includes("type=recovery") ||
+    new URLSearchParams(window.location.search).has("code")
+  );
+}
+
 export function useAuth() {
   const queryClient = useQueryClient();
-  // Add local loading state to handle the split second where Supabase is parsing the URL hash
-  const [isRestoringSession, setIsRestoringSession] = useState(
-    () => window.location.hash.includes("access_token")
-  );
+  const [isRestoringSession, setIsRestoringSession] = useState(detectInboundAuth);
 
   // Keep a ref mirror of isRestoringSession so the auth-state-change listener
   // can read the latest value without being re-subscribed on every flip (which
@@ -105,7 +114,16 @@ export function useAuth() {
       }
     });
 
-    return () => subscription.unsubscribe();
+    // Safety net: if SIGNED_IN never fires (e.g. PKCE exchange fails),
+    // give up after a few seconds so the UI doesn't hang on the spinner.
+    const restoreTimeout = setTimeout(() => {
+      setIsRestoringSession(false);
+    }, 5000);
+
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(restoreTimeout);
+    };
   }, [queryClient]);
 
   const logoutMutation = useMutation({
