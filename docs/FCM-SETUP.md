@@ -63,10 +63,12 @@ Easiest path: open Supabase SQL editor, paste the file contents, run.
 After the four pieces above are in place, the next AAB build needs:
 
 ```
-VITE_NATIVE_PUSH_ENABLED=true npm run build:client
-npx cap sync android
+npm run build:android
 cd android && ./gradlew bundleRelease
 ```
+
+`build:android` bakes in `VITE_NATIVE_PUSH_ENABLED=true` and runs `cap sync android`,
+so you can't forget the flag. (Same goes for iOS: `npm run build:ios`.)
 
 Bump `versionCode` first.
 

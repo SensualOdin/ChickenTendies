@@ -17,7 +17,9 @@
     "cap:sync": "npx cap sync",
     "cap:open:ios": "npx cap open ios",
     "cap:open:android": "npx cap open android",
-    "cap:build": "npm run build && npx cap sync"
+    "cap:build": "npm run build && npx cap sync",
+    "build:android": "node script/preflight-native-build.mjs && VITE_NATIVE_PUSH_ENABLED=true vite build && npx cap sync android",
+    "build:ios": "node script/preflight-native-build.mjs && VITE_NATIVE_PUSH_ENABLED=true vite build && npx cap sync ios"
   },
   "dependencies": {
     "@capacitor/android": "^8.1.0",

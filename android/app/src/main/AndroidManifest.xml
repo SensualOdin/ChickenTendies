@@ -35,6 +35,16 @@
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- FCM defaults for notifications delivered while the app is killed.
+             Server payload sets channelId="default"; declaring the same id
+             here keeps FCM from falling back to the generic "Misc" channel. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="default" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/notification_color" />
     </application>
 
     <!-- Permissions -->
