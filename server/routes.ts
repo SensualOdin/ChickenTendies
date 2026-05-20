@@ -962,6 +962,48 @@ export async function registerRoutes(
     res.json(matches);
   });
 
+  app.get("/api/groups/:id/partial-matches", async (req, res) => {
+    try {
+      const partials = await storage.getPartialMatchesForGroup((req.params.id as string));
+      res.json(partials);
+    } catch (error) {
+      console.error("Error fetching partial matches:", error);
+      res.status(500).json({ error: "Failed to fetch partial matches" });
+    }
+  });
+
+  // A holdout taps "I'm in" on a partial-match card. Flips their swipe to a
+  // like; if that completes unanimity, broadcasts match_found so the card
+  // jumps into the main matches list on every client.
+  app.post("/api/groups/:id/agree-partial-match", swipeLimiter, optionalAuth, async (req, res) => {
+    try {
+      const groupId = (req.params.id as string);
+      const { memberId, restaurantId } = req.body as { memberId?: string; restaurantId?: string };
+
+      if (!memberId || !restaurantId) {
+        return res.status(400).json({ error: "memberId and restaurantId required" });
+      }
+      if (!verifyMemberIdentity(req, groupId, memberId)) {
+        return res.status(403).json({ error: "Session identity mismatch" });
+      }
+
+      await storage.flipSwipeToLike(groupId, memberId, restaurantId);
+
+      broadcast(groupId, { type: "swipe_made", memberId, restaurantId });
+
+      const matches = await storage.getMatchesForGroup(groupId);
+      const newMatch = matches.find(r => r.id === restaurantId);
+      if (newMatch) {
+        broadcast(groupId, { type: "match_found", restaurant: newMatch });
+      }
+
+      res.json({ success: true, becameUnanimous: !!newMatch });
+    } catch (error) {
+      console.error("Error agreeing to partial match:", error);
+      res.status(500).json({ error: "Failed to agree to partial match" });
+    }
+  });
+
   // Vote for a matched restaurant
   const voteMatchLimiter = rateLimit({
     windowMs: 60 * 1000,

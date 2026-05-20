@@ -34,6 +34,12 @@ type SessionAction = "directions" | "doordash" | "visited" | "reserve";
 
 type VoteMap = Record<string, { memberId: string; memberName: string }[]>;
 
+type PartialMatch = {
+  restaurant: Restaurant;
+  likedBy: Array<{ memberId: string; memberName: string }>;
+  notYetLiked: Array<{ memberId: string; memberName: string }>;
+};
+
 function generateCalendarUrl(restaurant: Restaurant, groupName: string) {
   const today = new Date();
   const dinnerDate = new Date(today);
@@ -105,6 +111,14 @@ export default function MatchesPage() {
     staleTime: 0,
   });
 
+  // Restaurants ≥2 members liked but not unanimous. Lets a holdout flip their
+  // swipe once they see who's already on board.
+  const { data: partialMatches } = useQuery<PartialMatch[]>({
+    queryKey: ["/api/groups", params.id, "partial-matches"],
+    enabled: !!params.id,
+    staleTime: 0,
+  });
+
   useEffect(() => {
     if (initialVotes?.votes) {
       setVotes(initialVotes.votes);
@@ -128,6 +142,12 @@ export default function MatchesPage() {
       fireConfetti();
     } else if (message.type === "match_found") {
       queryClient.invalidateQueries({ queryKey: ["/api/groups", params.id, "matches"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/groups", params.id, "partial-matches"] });
+    } else if (message.type === "swipe_made") {
+      // Any swipe could change who's liked what — refresh the partials list
+      // so holdouts see new "almost matches" appear and existing ones update
+      // their avatar clusters.
+      queryClient.invalidateQueries({ queryKey: ["/api/groups", params.id, "partial-matches"] });
     }
   }, [params.id]);
 
@@ -197,6 +217,32 @@ export default function MatchesPage() {
       });
       // Refetch votes to reset state
       queryClient.invalidateQueries({ queryKey: ["/api/groups", params.id, "match-votes"] });
+    },
+  });
+
+  const agreePartialMutation = useMutation({
+    mutationFn: async (restaurantId: string) => {
+      const response = await apiRequest(
+        "POST",
+        `/api/groups/${params.id}/agree-partial-match`,
+        { memberId, restaurantId },
+      );
+      return response.json() as Promise<{ success: boolean; becameUnanimous: boolean }>;
+    },
+    onSuccess: (data) => {
+      // Server already broadcasts swipe_made + match_found; our WS handler
+      // invalidates both query keys. Toast for the holdout's own feedback.
+      if (data.becameUnanimous) {
+        toast({ title: "Match!", description: "You sealed the deal." });
+      }
+    },
+    onError: () => {
+      toast({
+        title: "Couldn't agree",
+        description: "Something went wrong. Try again!",
+        variant: "destructive",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/groups", params.id, "partial-matches"] });
     },
   });
 
@@ -854,6 +900,142 @@ export default function MatchesPage() {
                 </Button>
               </CardContent>
             </Card>
+          </motion.div>
+        )}
+
+        {/* Almost matches — restaurants ≥2 people liked but not unanimous.
+            Surfaces the names of who's in so a holdout can flip their swipe. */}
+        {partialMatches && partialMatches.length > 0 && group && (
+          <motion.div
+            className="mt-8"
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.4 }}
+          >
+            <div className="mb-3">
+              <h2 className="text-lg font-bold flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-primary" />
+                Almost there
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                Tap "I'm in" to seal these
+              </p>
+            </div>
+            <div className="space-y-2">
+              {partialMatches.map((pm) => {
+                const total = pm.likedBy.length + pm.notYetLiked.length;
+                const iAlreadyLiked = pm.likedBy.some(m => m.memberId === memberId);
+                const inFlight = agreePartialMutation.isPending
+                  && agreePartialMutation.variables === pm.restaurant.id;
+
+                return (
+                  <Card
+                    key={pm.restaurant.id}
+                    className="overflow-hidden border-2 border-dashed border-primary/30"
+                  >
+                    <div className="flex items-stretch">
+                      <div
+                        className="w-20 sm:w-28 shrink-0 bg-cover bg-center"
+                        style={{ backgroundImage: `url(${pm.restaurant.imageUrl})` }}
+                      />
+                      <CardContent className="flex-1 p-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <h3 className="text-base font-bold truncate" data-testid={`text-partial-name-${pm.restaurant.id}`}>
+                              {pm.restaurant.name}
+                            </h3>
+                            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                              <span>{pm.restaurant.cuisine}</span>
+                              <span>•</span>
+                              <span>{pm.restaurant.priceRange}</span>
+                              <span>•</span>
+                              <div className="flex items-center gap-0.5">
+                                <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
+                                <span>{(pm.restaurant.combinedRating ?? pm.restaurant.rating).toFixed(1)}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <Badge variant="outline" className="text-[10px] shrink-0">
+                            {pm.likedBy.length}/{total}
+                          </Badge>
+                        </div>
+
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                          <span className="text-muted-foreground">In:</span>
+                          <div className="flex -space-x-1">
+                            {pm.likedBy.map((m) => {
+                              const isMe = m.memberId === memberId;
+                              return (
+                                <div
+                                  key={m.memberId}
+                                  title={`${m.memberName}${isMe ? " (you)" : ""}`}
+                                  className={`w-5 h-5 rounded-full border-2 border-background flex items-center justify-center text-[9px] font-bold ${
+                                    isMe
+                                      ? "bg-primary text-white ring-1 ring-primary/40"
+                                      : "bg-green-500/80 text-white"
+                                  }`}
+                                >
+                                  {m.memberName.charAt(0).toUpperCase()}
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <span className="text-muted-foreground ml-1">
+                            {pm.likedBy.map(m => m.memberId === memberId ? "You" : m.memberName).join(", ")}
+                          </span>
+                        </div>
+
+                        {pm.notYetLiked.length > 0 && (
+                          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+                            <span className="text-muted-foreground">Waiting on:</span>
+                            <div className="flex -space-x-1">
+                              {pm.notYetLiked.map((m) => (
+                                <div
+                                  key={m.memberId}
+                                  title={m.memberName}
+                                  className="w-5 h-5 rounded-full border-2 border-background bg-muted text-muted-foreground flex items-center justify-center text-[9px] font-bold opacity-70"
+                                >
+                                  {m.memberName.charAt(0).toUpperCase()}
+                                </div>
+                              ))}
+                            </div>
+                            <span className="text-muted-foreground ml-1">
+                              {pm.notYetLiked.map(m => m.memberName).join(", ")}
+                            </span>
+                          </div>
+                        )}
+
+                        <div className="mt-3">
+                          {iAlreadyLiked ? (
+                            <span className="text-xs text-muted-foreground flex items-center gap-1">
+                              <Check className="w-3 h-3 text-green-500" />
+                              You're in — waiting on the rest
+                            </span>
+                          ) : (
+                            <Button
+                              size="sm"
+                              onClick={() => agreePartialMutation.mutate(pm.restaurant.id)}
+                              disabled={inFlight}
+                              data-testid={`button-agree-partial-${pm.restaurant.id}`}
+                              className="h-8"
+                            >
+                              {inFlight ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <>
+                                  <Heart className="w-3 h-3 mr-1" />
+                                  I'm in
+                                </>
+                              )}
+                            </Button>
+                          )}
+                        </div>
+                      </CardContent>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
           </motion.div>
         )}
 
