@@ -10,7 +10,7 @@ import type {
 } from "@shared/schema";
 import { anonymousGroups, anonymousGroupSwipes, restaurantCache } from "@shared/schema";
 import { fetchRestaurantsFromYelp, clusterChainRestaurants, flattenClusters } from "./yelp";
-import { findUnanimousMatches } from "./match-logic";
+import { findUnanimousMatches, findPartialMatches } from "./match-logic";
 import { db } from "./db";
 import { eq, and, sql } from "drizzle-orm";
 
@@ -39,6 +39,12 @@ export interface IStorage {
   recordSwipe(groupId: string, memberId: string, restaurantId: string, liked: boolean): Promise<Swipe>;
   getSwipesForGroup(groupId: string): Promise<Swipe[]>;
   getMatchesForGroup(groupId: string): Promise<Restaurant[]>;
+  getPartialMatchesForGroup(groupId: string): Promise<Array<{
+    restaurant: Restaurant;
+    likedBy: Array<{ memberId: string; memberName: string }>;
+    notYetLiked: Array<{ memberId: string; memberName: string }>;
+  }>>;
+  flipSwipeToLike(groupId: string, memberId: string, restaurantId: string): Promise<void>;
   getMembersWhoHaventSwiped(groupId: string, restaurantId: string): Promise<GroupMember[]>;
   markMemberDoneSwiping(groupId: string, memberId: string): Promise<{ group: Group; member: GroupMember } | undefined>;
   deleteSwipe(groupId: string, memberId: string, restaurantId: string): Promise<void>;
@@ -569,6 +575,51 @@ export class DbStorage implements IStorage {
     const memberIds = group.members.map(m => m.id);
 
     return findUnanimousMatches(memberIds, restaurants, swipes);
+  }
+
+  async getPartialMatchesForGroup(groupId: string) {
+    const group = await this.getGroup(groupId);
+    if (!group) return [];
+
+    const swipes = await this.getSwipesForGroup(groupId);
+    const restaurants = await this.getRestaurantsForGroup(groupId);
+    const memberIds = group.members.map(m => m.id);
+
+    const partials = findPartialMatches(memberIds, restaurants, swipes);
+    const membersById = new Map(group.members.map(m => [m.id, m]));
+
+    return partials.map(({ restaurant, likedByIds }) => {
+      const likedSet = new Set(likedByIds);
+      const likedBy = likedByIds
+        .map(id => membersById.get(id))
+        .filter((m): m is GroupMember => !!m)
+        .map(m => ({ memberId: m.id, memberName: m.name }));
+      const notYetLiked = group.members
+        .filter(m => !likedSet.has(m.id))
+        .map(m => ({ memberId: m.id, memberName: m.name }));
+      return { restaurant, likedBy, notYetLiked };
+    });
+  }
+
+  // Convert any prior swipe on this restaurant to a like (or insert one if
+  // none exists). Used when a holdout taps "I'm in" on a partial-match card.
+  // Drizzle's `onConflictDoUpdate` would work too, but deleting first keeps
+  // the swipedAt timestamp honest as the "moment they actually agreed".
+  async flipSwipeToLike(groupId: string, memberId: string, restaurantId: string): Promise<void> {
+    await db.delete(anonymousGroupSwipes).where(
+      and(
+        eq(anonymousGroupSwipes.groupId, groupId),
+        eq(anonymousGroupSwipes.memberId, memberId),
+        eq(anonymousGroupSwipes.restaurantId, restaurantId),
+      ),
+    );
+    await db.insert(anonymousGroupSwipes).values({
+      id: randomUUID(),
+      groupId,
+      memberId,
+      restaurantId,
+      liked: true,
+    });
   }
 
   async getMembersWhoHaventSwiped(groupId: string, restaurantId: string): Promise<GroupMember[]> {
