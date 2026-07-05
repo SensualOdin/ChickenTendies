@@ -4,7 +4,7 @@
 
 ChickenTinders is a collaborative restaurant discovery app that takes the stress out of the classic "where should we eat?" dilemma. Inspired by the swipe-based format of dating apps, ChickenTinders lets groups of friends swipe through real restaurant options together. When everyone in the group likes the same restaurant, it's a match — and dinner is decided.
 
-The app is built as a Progressive Web App (PWA), meaning it works on any device with a browser and can be installed directly to your phone's home screen for a native app-like experience.
+The app is a Capacitor hybrid app: it ships as native iOS and Android apps and also runs on the web as a Progressive Web App (PWA) that can be installed to your phone's home screen.
 
 ---
 
@@ -20,13 +20,11 @@ The app is built as a Progressive Web App (PWA), meaning it works on any device 
 
 ### Full Experience (Signed In)
 
-Sign in with your Replit account to unlock persistent crews, friends, dining history, achievements, push notifications, and your personal profile. All the social and long-term features require an account.
+Sign in with Google or an email/password account (via Supabase Auth) to unlock persistent crews, friends, dining history, achievements, push notifications, and your personal profile. All the social and long-term features require an account.
 
 ### Branded Login Page
-- A custom ChickenTinders-branded sign-in page appears before users are redirected to the Replit authentication screen
-- Shows the app logo, a welcome message, a summary of what signing in unlocks (crews, visit tracking, secure data), and a clear "Continue with Replit" button
-- Includes an explanation that users will be briefly redirected to Replit and then brought right back
-- Helps users understand what Replit is and feel confident about the sign-in process
+- A custom ChickenTinders-branded sign-in page with Google OAuth and email/password options
+- Shows the app logo, a welcome message, and a summary of what signing in unlocks (crews, visit tracking, secure data)
 
 ---
 
@@ -206,7 +204,7 @@ When the group can't seem to agree and swiping isn't producing matches:
 ## Profile & Achievements
 
 ### User Profile
-- View your avatar, name, and email from your Replit account
+- View your avatar, name, and email from your Google or email account
 - Name display handles long names gracefully with text truncation
 - Stats dashboard showing:
   - Total swipes made
@@ -333,7 +331,7 @@ The entire app is optimized for mobile devices:
 | Backend | Express.js (v5), Node.js |
 | Real-time | WebSocket (ws library) |
 | Database | PostgreSQL (Drizzle ORM) |
-| Authentication | Replit Auth (OpenID Connect) |
+| Authentication | Supabase Auth (Google OAuth + email/password) |
 | Restaurant Data | Yelp Fusion API |
 | Push Notifications | Web Push (VAPID) |
 | PWA | Service Worker, Web App Manifest |

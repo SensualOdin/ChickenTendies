@@ -3,8 +3,9 @@ services:
     name: chickentinders
     runtime: node
     plan: free
-    buildCommand: npm install --include=dev && npm run build
+    buildCommand: npm ci --include=dev && npm run build
     startCommand: npm start
+    healthCheckPath: /api/health
     envVars:
       - key: IS_PRODUCTION
         value: true
@@ -20,8 +21,6 @@ services:
         sync: false
       - key: COOKIE_SECRET
         sync: false
-      - key: CHECK_FOR_THIS_STRING
-        value: "true"
       - key: FRONTEND_URL
         sync: false
       - key: YELP_API_KEY
