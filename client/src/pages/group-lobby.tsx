@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,8 @@ import { motion } from "framer-motion";
 import { apiRequest, SHARE_BASE_URL } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
 import { useGroupNativePush } from "@/hooks/use-push-notifications";
-import { getLeaderToken } from "@/lib/leader-token";
+import { getLeaderToken, clearLeaderToken } from "@/lib/leader-token";
+import { getMemberId, setMemberId } from "@/lib/member-id";
 import { useGroupWebSocket } from "@/hooks/use-group-websocket";
 import type { Group, WSMessage, GroupMember } from "@shared/schema";
 
@@ -25,7 +26,7 @@ export default function GroupLobby() {
   const [hasLeaderToken, setHasLeaderToken] = useState(false);
   const [isReclaiming, setIsReclaiming] = useState(false);
 
-  const memberId = localStorage.getItem("grubmatch-member-id");
+  const memberId = getMemberId(params.id);
   const isHost = group?.members.find((m) => m.id === memberId)?.isHost ?? false;
 
   // Native push: prompt for OS notification permission the first time this
@@ -44,15 +45,21 @@ export default function GroupLobby() {
     }
   }, [storedLeaderToken, isHost, group]);
 
-  // Auto-reclaim leadership on mount if user has leader token but isn't recognized
+  // Auto-reclaim leadership on mount if user has leader token but isn't
+  // recognized. One attempt only — previously a failing request flipped
+  // isReclaiming back to false, which re-triggered this effect and retried
+  // forever. The ref guard makes it one-shot, and clearing the stored token
+  // on failure ensures it can't re-fire on the next mount either.
+  const autoReclaimAttempted = useRef(false);
   useEffect(() => {
     const attemptAutoReclaim = async () => {
-      if (!params.id || !storedLeaderToken || isHost || !group || isReclaiming) return;
+      if (!params.id || !storedLeaderToken || isHost || !group || autoReclaimAttempted.current) return;
 
       // Check if user is already in the group
       const isMember = group.members.some(m => m.id === memberId);
       if (isMember) return; // Already in group, just not as host - don't auto-reclaim
 
+      autoReclaimAttempted.current = true;
       setIsReclaiming(true);
       try {
         const response = await apiRequest("POST", `/api/groups/${params.id}/reclaim-leadership`, {
@@ -62,7 +69,7 @@ export default function GroupLobby() {
 
         if (response.ok) {
           const data = await response.json();
-          localStorage.setItem("grubmatch-member-id", data.memberId);
+          setMemberId(params.id, data.memberId);
           setGroup(data.group);
           toast({
             title: "Welcome back!",
@@ -70,14 +77,16 @@ export default function GroupLobby() {
           });
         }
       } catch {
-        // Silent fail - user can manually reclaim
+        // Clear the stale token so the reclaim attempt never re-fires;
+        // the user can still reclaim manually via the button.
+        clearLeaderToken(params.id);
       } finally {
         setIsReclaiming(false);
       }
     };
 
     attemptAutoReclaim();
-  }, [params.id, storedLeaderToken, isHost, group, memberId, isReclaiming, toast]);
+  }, [params.id, storedLeaderToken, isHost, group, memberId, toast]);
 
   const { data: initialGroup, isLoading } = useQuery<Group>({
     queryKey: ["/api/groups", params.id],
@@ -220,7 +229,7 @@ export default function GroupLobby() {
       return response.json();
     },
     onSuccess: (data) => {
-      localStorage.setItem("grubmatch-member-id", data.memberId);
+      if (params.id) setMemberId(params.id, data.memberId);
       setGroup(data.group);
       setHasLeaderToken(false);
       toast({

@@ -1,8 +1,48 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
-import { API_BASE, getAuthHeaders } from "@/lib/queryClient";
+import { API_BASE, getAuthHeaders, queryClient as appQueryClient } from "@/lib/queryClient";
 import type { User } from "@shared/models/auth";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+
+// Module-level singleton: register the Supabase auth listener (and the
+// /api/auth/sync POST) exactly once, no matter how many components use
+// useAuth(). Previously each hook mount registered its own listener, so a
+// single SIGNED_IN event fired /api/auth/sync N times (once per mounted
+// component). Hooks consume auth changes via React Query invalidation.
+let authListenerRegistered = false;
+function registerAuthListener() {
+  if (authListenerRegistered) return;
+  authListenerRegistered = true;
+
+  supabase.auth.onAuthStateChange(async (event, session) => {
+    if (event === "SIGNED_IN" && session) {
+      // Sync user to our database. Use getAuthHeaders() to pick up the
+      // CSRF token + any other headers in one place rather than hand-building.
+      const meta = session.user.user_metadata;
+      const headers = {
+        "Content-Type": "application/json",
+        ...(await getAuthHeaders()),
+      };
+      await fetch(`${API_BASE}/api/auth/sync`, {
+        method: "POST",
+        headers,
+        credentials: "include",
+        body: JSON.stringify({
+          firstName: meta?.full_name?.split(" ")[0] || meta?.name?.split(" ")[0] || null,
+          lastName: meta?.full_name?.split(" ").slice(1).join(" ") || null,
+          avatarUrl: meta?.avatar_url || null,
+        }),
+      }).catch(() => { });
+
+      appQueryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+    }
+
+    if (event === "SIGNED_OUT") {
+      appQueryClient.setQueryData(["/api/auth/user"], null);
+    }
+  });
+}
+registerAuthListener();
 
 async function fetchUser(): Promise<User | null> {
   let { data: { session } } = await supabase.auth.getSession();
@@ -64,14 +104,6 @@ export function useAuth() {
   const queryClient = useQueryClient();
   const [isRestoringSession, setIsRestoringSession] = useState(detectInboundAuth);
 
-  // Keep a ref mirror of isRestoringSession so the auth-state-change listener
-  // can read the latest value without being re-subscribed on every flip (which
-  // previously leaked subscriptions and created login-flow race conditions).
-  const isRestoringSessionRef = useRef(isRestoringSession);
-  useEffect(() => {
-    isRestoringSessionRef.current = isRestoringSession;
-  }, [isRestoringSession]);
-
   const { data: user, isLoading: isQueryLoading } = useQuery<User | null>({
     queryKey: ["/api/auth/user"],
     queryFn: fetchUser,
@@ -79,38 +111,16 @@ export function useAuth() {
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
 
-  // Listen for Supabase auth state changes. Subscribe exactly once per mount.
+  // While waiting for Supabase to finish an inbound OAuth redirect, watch for
+  // the resulting auth event so we can clear the local loading flag. This
+  // listener only exists during that brief window; the app-wide side effects
+  // (sync POST, query invalidation) live in the module-level singleton above.
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      // If we were waiting for a session restore (OAuth redirect), finish it
-      if (isRestoringSessionRef.current && (event === "SIGNED_IN" || event === "SIGNED_OUT")) {
+    if (!isRestoringSession) return;
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_IN" || event === "SIGNED_OUT") {
         setIsRestoringSession(false);
-      }
-
-      if (event === "SIGNED_IN" && session) {
-        // Sync user to our database. Use getAuthHeaders() to pick up the
-        // CSRF token + any other headers in one place rather than hand-building.
-        const meta = session.user.user_metadata;
-        const headers = {
-          "Content-Type": "application/json",
-          ...(await getAuthHeaders()),
-        };
-        await fetch(`${API_BASE}/api/auth/sync`, {
-          method: "POST",
-          headers,
-          credentials: "include",
-          body: JSON.stringify({
-            firstName: meta?.full_name?.split(" ")[0] || meta?.name?.split(" ")[0] || null,
-            lastName: meta?.full_name?.split(" ").slice(1).join(" ") || null,
-            avatarUrl: meta?.avatar_url || null,
-          }),
-        }).catch(() => { });
-
-        queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
-      }
-
-      if (event === "SIGNED_OUT") {
-        queryClient.setQueryData(["/api/auth/user"], null);
       }
     });
 
@@ -124,7 +134,7 @@ export function useAuth() {
       subscription.unsubscribe();
       clearTimeout(restoreTimeout);
     };
-  }, [queryClient]);
+  }, [isRestoringSession]);
 
   const logoutMutation = useMutation({
     mutationFn: async () => {

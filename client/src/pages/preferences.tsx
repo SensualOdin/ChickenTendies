@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Slider } from "@/components/ui/slider";
 import { groupPreferencesSchema, type GroupPreferences, type Group, dietaryRestrictions, cuisineTypes, priceRanges } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { getMemberId } from "@/lib/member-id";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, ChevronDown, Flame, Loader2, MapPin, Ruler, UtensilsCrossed, DollarSign, Leaf, Sparkles, Navigation, Star, Target } from "lucide-react";
 import { Link } from "wouter";
@@ -253,7 +254,7 @@ export default function Preferences() {
     setUsingGPS(false);
   };
 
-  const memberId = localStorage.getItem("grubmatch-member-id");
+  const memberId = getMemberId(params.id);
 
   const saveMutation = useMutation({
     mutationFn: async (data: GroupPreferences) => {

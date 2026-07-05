@@ -11,6 +11,7 @@ import {
 } from "@/components/swipe-card";
 import { MemberAvatars } from "@/components/member-avatars";
 import { apiRequest, queryClient, API_BASE, getAuthHeaders } from "@/lib/queryClient";
+import { getMemberId } from "@/lib/member-id";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { useGroupPushNotifications } from "@/hooks/use-push-notifications";
@@ -37,6 +38,7 @@ export default function SwipePage() {
   const [latestMatch, setLatestMatch] = useState<Restaurant | null>(null);
   const [showFinalVote, setShowFinalVote] = useState(false);
   const [finalVoteTimer, setFinalVoteTimer] = useState(60);
+  const [finalChoice, setFinalChoice] = useState<{ restaurantId: string; chosenBy: string } | null>(null);
   const [likedRestaurants, setLikedRestaurants] = useState<Restaurant[]>([]);
   const [lastSwipe, setLastSwipe] = useState<{ restaurant: Restaurant; index: number } | null>(null);
   const [visitedRestaurantIds, setVisitedRestaurantIds] = useState<Set<string>>(new Set());
@@ -52,7 +54,7 @@ export default function SwipePage() {
   const cardRef = useRef<SwipeCardHandle>(null);
 
   const { isAuthenticated } = useAuth();
-  const memberId = localStorage.getItem("grubmatch-member-id");
+  const memberId = getMemberId(params.id);
   const { trackSwipe, flushNow } = useAnalytics(params.id, memberId || undefined);
 
   const {
@@ -139,8 +141,17 @@ export default function SwipePage() {
       setGroup(message.group);
       const swipedIds = getSwipedIds();
       const unswipedRestaurants = message.restaurants.filter((r: Restaurant) => !swipedIds.has(r.id));
+      // The rebuilt deck already excludes swiped restaurants, so the old
+      // currentIndex would point past (or skip) cards — reset it. A stale
+      // lastSwipe would also let Undo restore an index into the replaced
+      // array, so clear it too.
       setRestaurants(unswipedRestaurants);
+      setCurrentIndex(0);
+      setLastSwipe(null);
       setMatches(message.matches);
+    } else if (message.type === "final_choice") {
+      setShowFinalVote(false);
+      setFinalChoice({ restaurantId: message.restaurantId, chosenBy: message.chosenBy });
     } else if (message.type === "match_found") {
       setMatches((prev) => [...prev, message.restaurant]);
       setLatestMatch(message.restaurant);
@@ -210,7 +221,16 @@ export default function SwipePage() {
       });
       return response.json();
     },
-    onError: () => {
+    onError: (_error, variables) => {
+      // Roll back the optimistic swipe so the card is retryable: without this
+      // the restaurant stays marked as swiped in localStorage and the index
+      // stays advanced, permanently skipping a card the server never recorded.
+      const swiped = getSwipedIds();
+      swiped.delete(variables.restaurantId);
+      localStorage.setItem(`swiped-${params.id}`, JSON.stringify(Array.from(swiped)));
+      setLikedRestaurants(prev => prev.filter(r => r.id !== variables.restaurantId));
+      setLastSwipe(null);
+      setCurrentIndex(prev => Math.max(0, prev - 1));
       toast({
         title: "Oops!",
         description: "That didn't work. Try again!",
@@ -361,8 +381,39 @@ export default function SwipePage() {
     });
   }, [lastSwipe, params.id, undoMutation, toast]);
 
+  // Final Vote is a group decision, not a local one: send the pick to the
+  // server, which records it and broadcasts a `final_choice` WS message so
+  // every member sees the same "IT'S DECIDED!" moment.
+  const finalChoiceMutation = useMutation({
+    mutationFn: async (restaurantId: string) => {
+      const response = await apiRequest("POST", `/api/groups/${params.id}/final-choice`, {
+        memberId,
+        restaurantId,
+      });
+      return response.json();
+    },
+    onError: () => {
+      toast({
+        title: "Couldn't lock it in",
+        description: "That pick didn't go through. Try again!",
+        variant: "destructive",
+      });
+    },
+  });
+
   useEffect(() => {
-    if (!showFinalVote || finalVoteTimer <= 0) return;
+    if (!showFinalVote) return;
+
+    if (finalVoteTimer <= 0) {
+      // Time's up — auto-pick the first match so the timer actually decides
+      // something instead of silently expiring.
+      setShowFinalVote(false);
+      const autoPick = matches[0];
+      if (autoPick) {
+        finalChoiceMutation.mutate(autoPick.id);
+      }
+      return;
+    }
 
     const timer = setInterval(() => {
       setFinalVoteTimer(prev => prev - 1);
@@ -378,11 +429,7 @@ export default function SwipePage() {
 
   const selectFinalChoice = (restaurant: Restaurant) => {
     setShowFinalVote(false);
-    toast({
-      title: "Decision made!",
-      description: `You picked ${restaurant.name}!`,
-    });
-    setMatches(prev => [...prev, restaurant]);
+    finalChoiceMutation.mutate(restaurant.id);
   };
 
   const isLoading = groupLoading || restaurantsLoading;
@@ -390,26 +437,44 @@ export default function SwipePage() {
   const nextRestaurant = restaurants[currentIndex + 1];
   const isComplete = currentIndex >= restaurants.length && restaurants.length > 0;
 
+  const finalChoiceRestaurant = finalChoice
+    ? [...matches, ...likedRestaurants, ...restaurants].find(r => r.id === finalChoice.restaurantId) ?? null
+    : null;
+
+  // Keep the latest handler in a ref so the window listener registers exactly
+  // once instead of tearing down/re-adding on every swipe or state change.
+  const keyDownRef = useRef<(e: KeyboardEvent) => void>(() => {});
+  keyDownRef.current = (e: KeyboardEvent) => {
+    if (isComplete || swipeMutation.isPending || showFinalVote || showMatchCelebration) return;
+    if (currentIndex >= restaurants.length) return;
+
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      handleSwipe("dislike");
+    } else if (e.key === "ArrowRight") {
+      e.preventDefault();
+      handleSwipe("like");
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      handleSwipe("superlike");
+    }
+  };
+
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (isComplete || swipeMutation.isPending || showFinalVote || showMatchCelebration) return;
-      if (currentIndex >= restaurants.length) return;
-
-      if (e.key === "ArrowLeft") {
-        e.preventDefault();
-        handleSwipe("dislike");
-      } else if (e.key === "ArrowRight") {
-        e.preventDefault();
-        handleSwipe("like");
-      } else if (e.key === "ArrowUp") {
-        e.preventDefault();
-        handleSwipe("superlike");
-      }
-    };
-
+    const handleKeyDown = (e: KeyboardEvent) => keyDownRef.current(e);
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleSwipe, isComplete, swipeMutation.isPending, showFinalVote, showMatchCelebration, currentIndex, restaurants.length]);
+  }, []);
+
+  // Flush queued analytics events when the page is hidden or unmounts so the
+  // last batch of swipes isn't lost when the user closes the tab/app.
+  useEffect(() => {
+    window.addEventListener("pagehide", flushNow);
+    return () => {
+      window.removeEventListener("pagehide", flushNow);
+      flushNow();
+    };
+  }, [flushNow]);
 
   // Mark as done swiping when user finishes all restaurants
   useEffect(() => {
@@ -565,6 +630,61 @@ export default function SwipePage() {
                   onClick={() => setShowMatchCelebration(false)}
                 >
                   Keep Swiping
+                </Button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Final Vote decision overlay — shown to every member when the server
+          broadcasts `final_choice`, so the whole crew sees the same outcome. */}
+      <AnimatePresence>
+        {finalChoice && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+            onClick={() => setFinalChoice(null)}
+          >
+            <motion.div
+              className="text-center p-8 max-w-sm"
+              initial={{ y: 50 }}
+              animate={{ y: 0 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <motion.div
+                animate={{ scale: [1, 1.2, 1], rotate: [0, 10, -10, 0] }}
+                transition={{ duration: 0.5, repeat: 3 }}
+                className="mb-4"
+              >
+                <Trophy className="w-16 h-16 text-yellow-500 mx-auto" />
+              </motion.div>
+              <h2 className="text-3xl font-extrabold text-white mb-1">IT'S DECIDED!</h2>
+              <p className="text-xl text-white/90 font-bold mb-1">
+                {finalChoiceRestaurant?.name ?? "Your crew picked a spot!"}
+              </p>
+              <p className="text-white/60 mb-6">Locked in by {finalChoice.chosenBy}</p>
+
+              <div className="flex flex-col gap-3">
+                <Link href={`/group/${params.id}/matches`}>
+                  <Button
+                    size="lg"
+                    className="w-full"
+                    onClick={() => setFinalChoice(null)}
+                  >
+                    <PartyPopper className="w-5 h-5 mr-2" />
+                    See the Details
+                  </Button>
+                </Link>
+                <Button
+                  size="lg"
+                  variant="ghost"
+                  className="w-full text-white/70 hover:text-white hover:bg-white/10"
+                  onClick={() => setFinalChoice(null)}
+                >
+                  Dismiss
                 </Button>
               </div>
             </motion.div>

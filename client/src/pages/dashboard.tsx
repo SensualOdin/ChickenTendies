@@ -21,6 +21,7 @@ import { usePushNotifications } from "@/hooks/use-push-notifications";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest, getAuthHeaders, API_BASE, saveMemberBindings } from "@/lib/queryClient";
 import { storeLeaderToken } from "@/lib/leader-token";
+import { setMemberId } from "@/lib/member-id";
 import { Users, Plus, ArrowRight, UserPlus, Check, X, UserMinus, Bell, BellRing, BellOff, Play, User, BarChart3, CheckCheck, Settings, Flame } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import logoImage from "@assets/460272BC-3FCC-4927-8C2E-4C236353E7AB_1768880143398.png";
@@ -171,7 +172,7 @@ export default function Dashboard() {
       return response.json();
     },
     onSuccess: (data) => {
-      localStorage.setItem("grubmatch-member-id", data.memberId);
+      setMemberId(data.group.id, data.memberId);
       localStorage.setItem("grubmatch-group-id", data.group.id);
       if (data.leaderToken) {
         storeLeaderToken(data.group.id, data.leaderToken);
@@ -195,7 +196,7 @@ export default function Dashboard() {
       if (response.ok) {
         saveMemberBindings(response);
         const data = await response.json();
-        localStorage.setItem("grubmatch-member-id", data.memberId);
+        setMemberId(data.group.id, data.memberId);
         localStorage.setItem("grubmatch-group-id", data.group.id);
         navigate(`/group/${data.group.id}`);
       } else {

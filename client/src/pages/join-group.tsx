@@ -9,6 +9,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { joinGroupSchema, type JoinGroup } from "@shared/schema";
 import { getAuthHeaders, API_BASE } from "@/lib/queryClient";
+import { setMemberId } from "@/lib/member-id";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { ArrowLeft, Loader2, Ticket, Smartphone, Users, ArrowRight } from "lucide-react";
@@ -217,7 +218,7 @@ export default function JoinGroupPage() {
     },
     onSuccess: (result) => {
       if (result.type === "party") {
-        localStorage.setItem("grubmatch-member-id", result.data.memberId);
+        setMemberId(result.data.group.id, result.data.memberId);
         localStorage.setItem("grubmatch-group-id", result.data.group.id);
         setLocation(`/group/${result.data.group.id}`);
       } else {

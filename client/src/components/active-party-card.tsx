@@ -3,10 +3,10 @@ import { useLocation } from "wouter";
 import { ArrowRight, ChevronDown, Users, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { API_BASE, getAuthHeaders } from "@/lib/queryClient";
+import { setMemberId } from "@/lib/member-id";
 import type { Group } from "@shared/schema";
 
 const GROUP_KEY = "grubmatch-group-id";
-const MEMBER_KEY = "grubmatch-member-id";
 const DISMISS_KEY = "ct-rejoin-dismissed-session";
 
 type Entry = { group: Group; memberId: string };
@@ -59,16 +59,17 @@ export function ActivePartyCard() {
           // Server says we're not bound to any group anymore — clean up the
           // single-slot pointer so other code paths don't act on stale state.
           localStorage.removeItem(GROUP_KEY);
-          localStorage.removeItem(MEMBER_KEY);
           setStatus({ kind: "absent" });
           return;
         }
 
-        // Keep localStorage in sync with the active (top) entry so legacy
-        // single-slot readers (swipe page, etc.) stay coherent.
-        const top = entries[0];
-        localStorage.setItem(GROUP_KEY, top.group.id);
-        localStorage.setItem(MEMBER_KEY, top.memberId);
+        // Persist every binding under its per-group key so each party keeps
+        // its own member identity (joining a second party no longer clobbers
+        // the first). The group pointer still tracks the active (top) entry.
+        for (const entry of entries) {
+          setMemberId(entry.group.id, entry.memberId);
+        }
+        localStorage.setItem(GROUP_KEY, entries[0].group.id);
 
         setStatus({ kind: "ready", entries });
       } catch {
@@ -96,10 +97,10 @@ export function ActivePartyCard() {
   };
 
   const goTo = (entry: Entry) => {
-    // Promote the chosen group into the single-slot localStorage so swipe
-    // page / matches page (which still read the legacy keys) operate on it.
+    // Make sure the chosen party's member identity is stored under its
+    // per-group key, then mark it as the active group.
+    setMemberId(entry.group.id, entry.memberId);
     localStorage.setItem(GROUP_KEY, entry.group.id);
-    localStorage.setItem(MEMBER_KEY, entry.memberId);
     navigate(targetFor(entry.group));
   };
 

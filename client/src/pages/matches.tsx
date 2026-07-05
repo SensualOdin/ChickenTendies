@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { apiRequest, queryClient, API_BASE, SHARE_BASE_URL } from "@/lib/queryClient";
+import { getMemberId } from "@/lib/member-id";
 import { openUrl } from "@/lib/open-url";
 import { isNative } from "@/lib/platform";
 import { Share } from "@capacitor/share";
@@ -91,7 +92,7 @@ export default function MatchesPage() {
   // avatar cluster to toggle). Only one at a time to keep the layout tight.
   const [expandedVotersFor, setExpandedVotersFor] = useState<string | null>(null);
 
-  const memberId = localStorage.getItem("grubmatch-member-id");
+  const memberId = getMemberId(params.id);
 
   const { data: group, isLoading: groupLoading } = useQuery<Group>({
     queryKey: ["/api/groups", params.id],
@@ -324,6 +325,10 @@ export default function MatchesPage() {
       return response.json();
     },
     onSuccess: async () => {
+      // New session, new deck — clear the local swipe history for this group,
+      // otherwise the fresh deck is filtered by last round's swiped ids and
+      // shows up empty (or missing most cards).
+      localStorage.removeItem(`swiped-${params.id}`);
       await queryClient.invalidateQueries({ queryKey: ["/api/groups", params.id] });
       await queryClient.invalidateQueries({ queryKey: ["/api/groups", params.id, "restaurants"] });
       setLocation(`/group/${params.id}/swipe`);
@@ -339,6 +344,10 @@ export default function MatchesPage() {
 
   const completeSession = useCallback(async (restaurantId?: string, action?: SessionAction) => {
     if (sessionCompleted || !params.id) return;
+    // Anonymous groups have no crew session to complete — the endpoint
+    // requires auth, so skip it entirely instead of surfacing a spurious
+    // failure toast to anonymous users.
+    if (!isAuthenticated) return;
     try {
       await apiRequest("POST", `/api/crews/${params.id}/complete-session`, {
         restaurantId,
@@ -347,8 +356,13 @@ export default function MatchesPage() {
       setSessionCompleted(true);
       queryClient.invalidateQueries({ queryKey: ["/api/crews"] });
     } catch {
+      toast({
+        title: "Couldn't wrap up the session",
+        description: "Your session history didn't save. Try again!",
+        variant: "destructive",
+      });
     }
-  }, [sessionCompleted, params.id]);
+  }, [sessionCompleted, params.id, isAuthenticated, toast]);
 
   const handleShare = useCallback(async (restaurant: Restaurant) => {
     const rating = (restaurant.combinedRating ?? restaurant.rating).toFixed(1);

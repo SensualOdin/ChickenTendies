@@ -10,6 +10,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { insertGroupSchema, type InsertGroup } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { storeLeaderToken } from "@/lib/leader-token";
+import { setMemberId } from "@/lib/member-id";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { ArrowLeft, Loader2, ArrowRight } from "lucide-react";
@@ -40,7 +41,7 @@ export default function CreateGroup() {
       return response.json();
     },
     onSuccess: (data) => {
-      localStorage.setItem("grubmatch-member-id", data.memberId);
+      setMemberId(data.group.id, data.memberId);
       localStorage.setItem("grubmatch-group-id", data.group.id);
       if (data.leaderToken) storeLeaderToken(data.group.id, data.leaderToken);
       setLocation(`/group/${data.group.id}`);

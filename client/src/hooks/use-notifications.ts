@@ -2,6 +2,7 @@ import { useEffect, useRef, createElement } from "react";
 import { useAuth } from "./use-auth";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getAuthHeaders, API_BASE, saveMemberBindings } from "@/lib/queryClient";
+import { setMemberId } from "@/lib/member-id";
 import { useToast } from "./use-toast";
 import { useLocation } from "wouter";
 import { ToastAction, type ToastActionElement } from "@/components/ui/toast";
@@ -69,7 +70,7 @@ export function useNotifications() {
                 if (res.ok) {
                   saveMemberBindings(res);
                   const data = await res.json();
-                  localStorage.setItem("grubmatch-member-id", data.memberId);
+                  setMemberId(groupId, data.memberId);
                   localStorage.setItem("grubmatch-group-id", groupId);
                   setLocation(`/group/${groupId}`);
                 }

@@ -147,6 +147,11 @@ export default function LoginPage() {
       }
     } catch (err: any) {
       setError(err.message || "Google sign-in failed");
+    } finally {
+      // On native the OAuth flow continues in the system browser — if the
+      // user cancels it, no error is thrown here, so without this the button
+      // would stay stuck in its loading state forever. On web the page is
+      // about to redirect anyway, so re-enabling is harmless.
       setLoading(false);
     }
   };
