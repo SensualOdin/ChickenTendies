@@ -11,6 +11,11 @@ import { startScheduledNotifications } from "./scheduled-notifications";
 const app = express();
 const httpServer = createServer(app);
 
+// Render (and most PaaS) terminate TLS at a proxy and forward with
+// X-Forwarded-For. Without this, express-rate-limit keys every request to the
+// proxy's IP, so one abusive client can exhaust the shared per-IP budget.
+app.set("trust proxy", 1);
+
 declare module "http" {
   interface IncomingMessage {
     rawBody: unknown;

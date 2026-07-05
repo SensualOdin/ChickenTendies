@@ -205,7 +205,8 @@ export type WSMessage =
   | { type: "all_done_swiping" }
   | { type: "member_progress"; memberId: string; swipeCount: number; totalRestaurants: number }
   | { type: "match_vote"; memberId: string; memberName: string; restaurantId: string }
-  | { type: "match_picked"; restaurant: Restaurant; pickedLocationId?: string };
+  | { type: "match_picked"; restaurant: Restaurant; pickedLocationId?: string }
+  | { type: "final_choice"; restaurantId: string; chosenBy: string };
 
 // Export auth models
 export * from "./models/auth";

@@ -18,9 +18,11 @@ import {
   analyticsEvents
 } from "@shared/schema";
 import { eq, or, and, inArray, desc, sql, gte, count } from "drizzle-orm";
+import { z } from "zod";
 import { fetchRestaurantsFromYelp } from "./yelp";
 import type { GroupPreferences, Restaurant } from "@shared/schema";
-import { notifyUser, notifyUsers, sessionUserMap } from "./routes";
+import { notifyUser, notifyUsers, sessionUserMap, joinByCodeLimiter, getSessionMemberId } from "./routes";
+import { generateJoinCode } from "./codes";
 import { createHash } from "crypto";
 import { logAnalyticsEvent } from "./analytics";
 import { storage } from "./storage";
@@ -501,31 +503,27 @@ export function registerSocialRoutes(app: Express): void {
     }
   });
 
+  const createCrewSchema = z.object({
+    name: z.string().trim().min(1, "Name is required").max(100),
+    memberIds: z.array(z.string().min(1)).max(50).optional(),
+  });
+
   app.post("/api/crews", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = getUserId(req);
-      const { name, memberIds } = req.body;
-      
-      if (!name) {
-        return res.status(400).json({ message: "Name is required" });
+      const parsed = createCrewSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ message: parsed.error.errors[0].message });
       }
-      
-      const generateInviteCode = () => {
-        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-        let code = '';
-        for (let i = 0; i < 6; i++) {
-          code += chars.charAt(Math.floor(Math.random() * chars.length));
-        }
-        return code;
-      };
-      
+      const { name, memberIds } = parsed.data;
+
       const [group] = await db
         .insert(persistentGroups)
         .values({
           name,
           ownerId: userId,
           memberIds: memberIds || [],
-          inviteCode: generateInviteCode(),
+          inviteCode: generateJoinCode(),
         })
         .returning();
       
@@ -550,7 +548,7 @@ export function registerSocialRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/crews/join", isAuthenticated, async (req: Request, res: Response) => {
+  app.post("/api/crews/join", joinByCodeLimiter, isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = getUserId(req);
       const { inviteCode } = req.body;
@@ -974,13 +972,24 @@ export function registerSocialRoutes(app: Express): void {
     }
   });
 
+  const sessionSwipeSchema = z.object({
+    restaurantId: z.string().min(1, "restaurantId is required"),
+    liked: z.boolean(),
+    superLiked: z.boolean().optional().default(false),
+    restaurantData: z.object({}).passthrough().nullish(),
+  });
+
   app.post("/api/sessions/:id/swipe", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = getUserId(req);
       const sessionId = (req.params.id as string);
       if (!(await requireSessionMembership(userId, sessionId, res))) return;
-      const { restaurantId, liked, superLiked = false, restaurantData } = req.body;
-      
+      const parsedSwipe = sessionSwipeSchema.safeParse(req.body);
+      if (!parsedSwipe.success) {
+        return res.status(400).json({ message: parsedSwipe.error.errors[0].message });
+      }
+      const { restaurantId, liked, superLiked, restaurantData } = parsedSwipe.data;
+
       const [swipe] = await db
         .insert(sessionSwipes)
         .values({
@@ -1043,23 +1052,21 @@ export function registerSocialRoutes(app: Express): void {
             );
 
             if (matchResults.length > 0) {
-              const existingMatch = await db
-                .select()
-                .from(sessionMatches)
-                .where(
-                  and(
-                    eq(sessionMatches.sessionId, sessionId),
-                    eq(sessionMatches.restaurantId, restaurantId)
-                  )
-                );
-
-              if (existingMatch.length === 0) {
-                await db.insert(sessionMatches).values({
+              // Concurrent liking swipes can both see "no match yet" — let the
+              // unique index (session_id, restaurant_id) arbitrate instead of a
+              // check-then-insert race. Only the row that actually inserted
+              // creates the dining-history entry.
+              const [insertedMatch] = await db
+                .insert(sessionMatches)
+                .values({
                   sessionId,
                   restaurantId,
                   restaurantData: restaurantData || null,
-                });
+                })
+                .onConflictDoNothing()
+                .returning();
 
+              if (insertedMatch) {
                 const restaurantInfo = restaurantData as { name?: string } | null;
                 await db.insert(diningHistory).values({
                   groupId: group.id,
@@ -1465,13 +1472,27 @@ export function registerSocialRoutes(app: Express): void {
     }
   });
 
+  const addHistorySchema = z.object({
+    sessionId: z.string().min(1).nullish(),
+    // dining_history.restaurant_id is NOT NULL — reject up front instead of 500ing.
+    restaurantId: z.string().min(1, "restaurantId is required"),
+    restaurantName: z.string().trim().min(1, "restaurantName is required").max(200),
+    restaurantData: z.object({}).passthrough().nullish(),
+    rating: z.number().int().min(1).max(5).nullish(),
+    notes: z.string().max(2000).nullish(),
+  });
+
   app.post("/api/crews/:id/history", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = getUserId(req);
       const groupId = (req.params.id as string);
       if (!(await requireCrewMembership(userId, groupId, res))) return;
-      const { sessionId, restaurantId, restaurantName, restaurantData, rating, notes } = req.body;
-      
+      const parsedHistory = addHistorySchema.safeParse(req.body);
+      if (!parsedHistory.success) {
+        return res.status(400).json({ message: parsedHistory.error.errors[0].message });
+      }
+      const { sessionId, restaurantId, restaurantName, restaurantData, rating, notes } = parsedHistory.data;
+
       const [entry] = await db
         .insert(diningHistory)
         .values({
@@ -1779,16 +1800,18 @@ export function registerSocialRoutes(app: Express): void {
         return res.status(404).json({ message: "Group not found" });
       }
 
-      const name = crewName || group.name;
+      // Verify the caller is actually bound to this anonymous group
+      // (either via the crew-session map or the signed member-binding cookie/header).
+      // Without this, any authenticated user could claim ownership of any
+      // anonymous party they know the id of.
+      const boundMemberId =
+        sessionUserMap.get(`${groupId}:${userId}`) || getSessionMemberId(req, groupId);
+      const isMember = !!boundMemberId && group.members.some(m => m.id === boundMemberId);
+      if (!isMember) {
+        return res.status(403).json({ message: "You are not a member of this group" });
+      }
 
-      const generateInviteCode = () => {
-        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-        let code = '';
-        for (let i = 0; i < 6; i++) {
-          code += chars.charAt(Math.floor(Math.random() * chars.length));
-        }
-        return code;
-      };
+      const name = crewName || group.name;
 
       const [crew] = await db
         .insert(persistentGroups)
@@ -1796,7 +1819,7 @@ export function registerSocialRoutes(app: Express): void {
           name,
           ownerId: userId,
           memberIds: [],
-          inviteCode: generateInviteCode(),
+          inviteCode: generateJoinCode(),
         })
         .returning();
 

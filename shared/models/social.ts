@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, varchar, timestamp, text, integer, boolean, jsonb, serial, real, index } from "drizzle-orm/pg-core";
+import { pgTable, varchar, timestamp, text, integer, boolean, jsonb, serial, real, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { users } from "./auth";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -79,7 +79,9 @@ export const sessionMatches = pgTable("session_matches", {
   restaurantId: varchar("restaurant_id").notNull(),
   restaurantData: jsonb("restaurant_data"),
   matchedAt: timestamp("matched_at").defaultNow(),
-});
+}, (table) => [
+  uniqueIndex("session_matches_session_restaurant_unique_idx").on(table.sessionId, table.restaurantId),
+]);
 
 export type SessionMatch = typeof sessionMatches.$inferSelect;
 export type InsertSessionMatch = typeof sessionMatches.$inferInsert;

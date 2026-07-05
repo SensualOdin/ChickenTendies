@@ -57,6 +57,16 @@ const swipeLimiter = rateLimit({
   message: { error: "Swiping too fast, slow down!" },
 });
 
+// Brute-force protection for join-by-code endpoints (6-char codes).
+// Exported so social-routes.ts can reuse it on /api/crews/join.
+export const joinByCodeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 15,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many join attempts, please try again later" },
+});
+
 // Suggest is a Yelp-backed search per call — cap per-IP to avoid burning quota.
 const suggestLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -217,7 +227,7 @@ function bindMemberToSession(req: any, res: any, groupId: string, memberId: stri
   res.setHeader("X-Member-Bindings", signed);
 }
 
-function getSessionMemberId(req: any, groupId: string): string | null {
+export function getSessionMemberId(req: any, groupId: string): string | null {
   return getMemberBindings(req)[groupId] || null;
 }
 
@@ -350,7 +360,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/groups/join", async (req, res) => {
+  app.post("/api/groups/join", joinByCodeLimiter, async (req, res) => {
     try {
       const data = joinGroupSchema.parse(req.body);
       const result = await storage.joinGroup(data);
@@ -555,7 +565,9 @@ export async function registerRoutes(
         sessionUserMap.set(`${groupId}:${userId}`, hostMemberId);
         bindMemberToSession(req, res, groupId, hostMemberId);
 
-        res.json({ memberId: hostMemberId, group: memGroup, leaderToken });
+        // Host gets the leaderToken as an explicit top-level field; the nested
+        // group object must never carry it (dbRowToGroup includes it).
+        res.json({ memberId: hostMemberId, group: stripLeaderToken(memGroup), leaderToken });
         return;
       }
 
@@ -564,7 +576,7 @@ export async function registerRoutes(
         const existingMember = memGroup.members.find(m => m.id === existingMemberId);
         if (existingMember) {
           bindMemberToSession(req, res, groupId, existingMemberId);
-          res.json({ memberId: existingMemberId, group: memGroup });
+          res.json({ memberId: existingMemberId, group: stripLeaderToken(memGroup) });
           return;
         }
       }
@@ -585,7 +597,7 @@ export async function registerRoutes(
 
       broadcast(groupId, { type: "member_joined", member: newMember }, memberId);
 
-      res.json({ memberId, group: memGroup });
+      res.json({ memberId, group: stripLeaderToken(memGroup) });
     } catch (error) {
       console.error("Error joining session:", error);
       res.status(500).json({ error: "Failed to join session" });
@@ -746,7 +758,7 @@ export async function registerRoutes(
         const matches = await storage.getMatchesForGroup((req.params.id as string));
         broadcast((req.params.id as string), {
           type: "sync",
-          group,
+          group: stripLeaderToken(group),
           restaurants,
           matches,
         });
@@ -1192,6 +1204,54 @@ export async function registerRoutes(
     }
   });
 
+  // A member locks in their "Final Vote" pick on the swipe page. Server-side
+  // sibling of the client-only Final Vote overlay: validates the caller's
+  // identity and that the restaurant is actually a match before telling the
+  // rest of the group.
+  app.post("/api/groups/:id/final-choice", voteMatchLimiter, async (req, res) => {
+    try {
+      const { memberId, restaurantId } = req.body;
+      if (!memberId || typeof memberId !== "string" || !restaurantId || typeof restaurantId !== "string") {
+        res.status(400).json({ error: "memberId and restaurantId required" });
+        return;
+      }
+
+      if (!verifyMemberIdentity(req, (req.params.id as string), memberId)) {
+        res.status(403).json({ error: "Session identity mismatch" });
+        return;
+      }
+
+      const group = await storage.getGroup((req.params.id as string));
+      if (!group) {
+        res.status(404).json({ error: "Group not found" });
+        return;
+      }
+
+      const member = group.members.find(m => m.id === memberId);
+      if (!member) {
+        res.status(403).json({ error: "Member not in group" });
+        return;
+      }
+
+      const matches = await storage.getMatchesForGroup((req.params.id as string));
+      if (!matches.some(r => r.id === restaurantId)) {
+        res.status(404).json({ error: "Restaurant not in matches" });
+        return;
+      }
+
+      // Broadcast the final choice to all members
+      broadcast((req.params.id as string), {
+        type: "final_choice",
+        restaurantId,
+        chosenBy: member.name,
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      res.status(400).json({ error: "Invalid request" });
+    }
+  });
+
   // Nudge members who haven't swiped yet
   const nudgeLimiter = rateLimit({
     windowMs: 60 * 1000,
@@ -1273,19 +1333,23 @@ export async function registerRoutes(
       const allDone = result.group.members.every(m => m.doneSwiping);
       if (allDone && result.group.members.length > 0) {
         // Send push notification to all group members (fire-and-forget with
-        // error capture to prevent unhandled rejection crashes).
-        sendPushToGroupMembers((req.params.id as string), {
-          title: "Everyone's done swiping!",
-          body: `Your group "${result.group.name}" has finished swiping. Check out your matches!`,
-          url: `/group/${(req.params.id as string)}/matches`,
-          data: { groupId: (req.params.id as string), type: "all_done_swiping" }
-        }).catch((err) => console.error("[push] all_done_swiping failed:", err));
+        // error capture to prevent unhandled rejection crashes). Skip the push
+        // for solo groups — "Everyone's done swiping!" is just the person who
+        // tapped the button, and the notification reads as spam.
+        if (result.group.members.length >= 2) {
+          sendPushToGroupMembers((req.params.id as string), {
+            title: "Everyone's done swiping!",
+            body: `Your group "${result.group.name}" has finished swiping. Check out your matches!`,
+            url: `/group/${(req.params.id as string)}/matches`,
+            data: { groupId: (req.params.id as string), type: "all_done_swiping" }
+          }).catch((err) => console.error("[push] all_done_swiping failed:", err));
+        }
 
         // Also broadcast via WebSocket for users who are still on the page
         broadcast((req.params.id as string), { type: "all_done_swiping" });
       }
 
-      res.json({ success: true, group: result.group });
+      res.json({ success: true, group: stripLeaderToken(result.group) });
     } catch (error) {
       res.status(400).json({ error: "Invalid request" });
     }

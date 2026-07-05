@@ -13,15 +13,7 @@ import { fetchRestaurantsFromYelp, clusterChainRestaurants, flattenClusters } fr
 import { findUnanimousMatches, findPartialMatches } from "./match-logic";
 import { db } from "./db";
 import { eq, and, sql } from "drizzle-orm";
-
-function generateCode(): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let code = "";
-  for (let i = 0; i < 6; i++) {
-    code += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return code;
-}
+import { generateJoinCode } from "./codes";
 
 export interface IStorage {
   createGroup(data: InsertGroup): Promise<{ group: Group; memberId: string }>;
@@ -270,7 +262,7 @@ export class DbStorage implements IStorage {
   async createGroup(data: InsertGroup): Promise<{ group: Group; memberId: string }> {
     const id = randomUUID();
     const memberId = randomUUID();
-    const code = generateCode();
+    const code = generateJoinCode();
     const leaderToken = randomUUID();
 
     const host: GroupMember = {
