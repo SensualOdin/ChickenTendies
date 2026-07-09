@@ -24,6 +24,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { useAnalytics, type MatchActionName } from "@/hooks/use-analytics";
 import { useGroupWebSocket } from "@/hooks/use-group-websocket";
 import { ConversionPrompt } from "@/components/conversion-prompt";
 import { getLeaderToken } from "@/lib/leader-token";
@@ -93,6 +94,25 @@ export default function MatchesPage() {
   const [expandedVotersFor, setExpandedVotersFor] = useState<string | null>(null);
 
   const memberId = getMemberId(params.id);
+  const { trackEvent, flushNow } = useAnalytics(params.id, memberId || undefined);
+
+  // Demand instrumentation: log which match-card action the user took for this
+  // restaurant. These fire right before the user leaves the app (maps,
+  // DoorDash, calendar...), so flush immediately instead of waiting for the
+  // 5s batch timer.
+  const trackAction = useCallback(
+    (restaurant: Restaurant, action: MatchActionName) => {
+      trackEvent({
+        restaurantId: restaurant.id,
+        restaurantName: restaurant.name,
+        action,
+        cuisineTags: restaurant.cuisine ? [restaurant.cuisine] : undefined,
+        priceRange: restaurant.priceRange,
+      });
+      flushNow();
+    },
+    [trackEvent, flushNow],
+  );
 
   const { data: group, isLoading: groupLoading } = useQuery<Group>({
     queryKey: ["/api/groups", params.id],
@@ -365,6 +385,7 @@ export default function MatchesPage() {
   }, [sessionCompleted, params.id, isAuthenticated, toast]);
 
   const handleShare = useCallback(async (restaurant: Restaurant) => {
+    trackAction(restaurant, "action_share");
     const rating = (restaurant.combinedRating ?? restaurant.rating).toFixed(1);
     const inviteCode = (group as any)?.inviteCode;
     const shareUrl = inviteCode
@@ -404,7 +425,7 @@ export default function MatchesPage() {
         });
       }
     }
-  }, [params.id, toast, group]);
+  }, [params.id, toast, group, trackAction]);
 
   const isLoading = groupLoading || matchesLoading;
 
@@ -459,6 +480,7 @@ export default function MatchesPage() {
                     const destination = pickedRestaurant.latitude && pickedRestaurant.longitude
                       ? `${pickedRestaurant.latitude},${pickedRestaurant.longitude}`
                       : encodeURIComponent(pickedRestaurant.address);
+                    trackAction(pickedRestaurant, "action_directions");
                     openUrl(`https://www.google.com/maps/dir/?api=1&destination=${destination}`);
                     completeSession(pickedRestaurant.id, "directions");
                   }}
@@ -798,6 +820,7 @@ export default function MatchesPage() {
                                   const destination = restaurant.latitude && restaurant.longitude
                                     ? `${restaurant.latitude},${restaurant.longitude}`
                                     : encodeURIComponent(restaurant.address);
+                                  trackAction(restaurant, "action_directions");
                                   openUrl(`https://www.google.com/maps/dir/?api=1&destination=${destination}`);
                                   completeSession(restaurant.id, "directions");
                                 }}
@@ -824,6 +847,7 @@ export default function MatchesPage() {
                                 <DropdownMenuContent align="end">
                                   <DropdownMenuItem
                                     onClick={() => {
+                                      trackAction(restaurant, "action_delivery");
                                       const query = encodeURIComponent(restaurant.name);
                                       openUrl(`https://www.doordash.com/search/store/${query}/`);
                                       completeSession(restaurant.id, "doordash");
@@ -835,6 +859,7 @@ export default function MatchesPage() {
                                   {restaurant.yelpUrl && (
                                     <DropdownMenuItem
                                       onClick={() => {
+                                        trackAction(restaurant, "action_reserve");
                                         openUrl(restaurant.yelpUrl!);
                                         completeSession(restaurant.id, "reserve");
                                       }}
@@ -845,6 +870,7 @@ export default function MatchesPage() {
                                   )}
                                   <DropdownMenuItem
                                     onClick={() => {
+                                      trackAction(restaurant, "action_calendar");
                                       openUrl(generateCalendarUrl(restaurant, group.name));
                                     }}
                                   >
@@ -853,6 +879,7 @@ export default function MatchesPage() {
                                   </DropdownMenuItem>
                                   <DropdownMenuItem
                                     onClick={() => {
+                                      trackAction(restaurant, "action_visited");
                                       setVisitedRestaurantId(restaurant.id);
                                       completeSession(restaurant.id, "visited");
                                       toast({

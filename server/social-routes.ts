@@ -1067,7 +1067,21 @@ export function registerSocialRoutes(app: Express): void {
                 .returning();
 
               if (insertedMatch) {
-                const restaurantInfo = restaurantData as { name?: string } | null;
+                const restaurantInfo = restaurantData as { name?: string; cuisine?: string; priceRange?: string } | null;
+
+                // Row actually inserted → this request created the match.
+                // Log it server-side for the demand report; never let
+                // analytics failures break the match flow.
+                logAnalyticsEvent({
+                  userId,
+                  sessionId,
+                  restaurantId,
+                  restaurantName: restaurantInfo?.name || null,
+                  action: "match",
+                  cuisineTags: restaurantInfo?.cuisine ? [restaurantInfo.cuisine] : null,
+                  priceRange: restaurantInfo?.priceRange || null,
+                }).catch(() => {});
+
                 await db.insert(diningHistory).values({
                   groupId: group.id,
                   sessionId,

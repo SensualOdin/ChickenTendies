@@ -55,7 +55,7 @@ export default function SwipePage() {
 
   const { isAuthenticated } = useAuth();
   const memberId = getMemberId(params.id);
-  const { trackSwipe, flushNow } = useAnalytics(params.id, memberId || undefined);
+  const { trackEvent, trackSwipe, flushNow } = useAnalytics(params.id, memberId || undefined);
 
   const {
     isPushSupported,
@@ -391,6 +391,21 @@ export default function SwipePage() {
         restaurantId,
       });
       return response.json();
+    },
+    onSuccess: (_data, restaurantId) => {
+      // Demand instrumentation: record the confirmed final pick. Flush right
+      // away — the user is likely heading out the door (or to Maps) next.
+      const restaurant = [...matches, ...likedRestaurants, ...restaurants].find(
+        (r) => r.id === restaurantId,
+      );
+      trackEvent({
+        restaurantId,
+        restaurantName: restaurant?.name,
+        action: "action_final_choice",
+        cuisineTags: restaurant?.cuisine ? [restaurant.cuisine] : undefined,
+        priceRange: restaurant?.priceRange,
+      });
+      flushNow();
     },
     onError: () => {
       toast({

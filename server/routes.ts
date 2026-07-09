@@ -11,7 +11,7 @@ import { getCachedGoogleReviews } from "./google-places";
 import { isAuthenticated, optionalAuth, registerAuthRoutes } from "./auth";
 import { registerSocialRoutes } from "./social-routes";
 import { sendPushToGroupMembers, saveGroupPushSubscription, getVapidPublicKey } from "./push";
-import { logAnalyticsEvent, logBatchAnalyticsEvents, getAnalyticsSummary, getCuisineDemand, getRestaurantAnalytics } from "./analytics";
+import { logAnalyticsEvent, logBatchAnalyticsEvents, getAnalyticsSummary, getCuisineDemand, getRestaurantAnalytics, getDemandReport, clampReportDays, CLIENT_ANALYTICS_ACTIONS } from "./analytics";
 import { logLifecycleEvent } from "./lifecycle";
 import { analyticsEvents } from "@shared/models/social";
 import { db } from "./db";
@@ -917,6 +917,18 @@ export async function registerRoutes(
         const matchedRestaurant = matches.find(r => r.id === restaurantId);
 
         if (matchedRestaurant) {
+          // This like completed unanimity — the match is born here. Log it
+          // server-side (demand dataset); never let logging break the flow.
+          logAnalyticsEvent({
+            userId: authUserId ?? null,
+            sessionId: (req.params.id as string),
+            restaurantId: matchedRestaurant.id,
+            restaurantName: matchedRestaurant.name,
+            action: "match",
+            cuisineTags: matchedRestaurant.cuisine ? [matchedRestaurant.cuisine] : null,
+            priceRange: matchedRestaurant.priceRange ?? null,
+          }).catch(() => { });
+
           broadcast((req.params.id as string), {
             type: "match_found",
             restaurant: matchedRestaurant
@@ -1006,6 +1018,17 @@ export async function registerRoutes(
       const matches = await storage.getMatchesForGroup(groupId);
       const newMatch = matches.find(r => r.id === restaurantId);
       if (newMatch) {
+        // The "I'm in" flip completed unanimity — log the match server-side.
+        logAnalyticsEvent({
+          userId: (req as any).supabaseUser?.id ?? null,
+          sessionId: groupId,
+          restaurantId: newMatch.id,
+          restaurantName: newMatch.name,
+          action: "match",
+          cuisineTags: newMatch.cuisine ? [newMatch.cuisine] : null,
+          priceRange: newMatch.priceRange ?? null,
+        }).catch(() => { });
+
         broadcast(groupId, { type: "match_found", restaurant: newMatch });
       }
 
@@ -1601,8 +1624,16 @@ export async function registerRoutes(
       // client supplied userId in the body, so an unauthenticated caller could
       // flood/poison the analytics store with arbitrary userIds.
       const authUserId = (req as any).supabaseUser?.id ?? null;
+      // Action allowlist: unknown/junk actions are silently dropped so a bad
+      // client can't pollute the demand dataset. Server-only actions like
+      // "match" are excluded on purpose (logged at match creation instead).
       const sanitized = events
-        .filter((e: any) => e && typeof e.restaurantId === "string" && typeof e.action === "string")
+        .filter((e: any) =>
+          e &&
+          typeof e.restaurantId === "string" &&
+          typeof e.action === "string" &&
+          CLIENT_ANALYTICS_ACTIONS.has(e.action)
+        )
         .map((e: any) => ({
           userId: authUserId,
           sessionId: typeof e.sessionId === "string" ? e.sessionId : null,
@@ -1617,7 +1648,8 @@ export async function registerRoutes(
         }));
 
       if (sanitized.length === 0) {
-        res.status(400).json({ error: "No valid events" });
+        // Everything was malformed or had an unknown action — drop silently.
+        res.json({ success: true, count: 0 });
         return;
       }
 
@@ -1636,6 +1668,17 @@ export async function registerRoutes(
     } catch (error) {
       console.error("[Analytics] Summary error:", error);
       res.status(500).json({ error: "Failed to fetch analytics" });
+    }
+  });
+
+  app.get("/api/analytics/report", isAuthenticated, isAdminUser, async (req, res) => {
+    try {
+      const days = clampReportDays(req.query.days as string | undefined);
+      const report = await getDemandReport(days);
+      res.json(report);
+    } catch (error) {
+      console.error("[Analytics] Report error:", error);
+      res.status(500).json({ error: "Failed to generate report" });
     }
   });
 
