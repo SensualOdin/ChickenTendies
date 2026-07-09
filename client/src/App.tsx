@@ -205,6 +205,10 @@ function Router() {
       <Route path="/crew/:id" component={CrewManage} />
       <Route path="/analytics" component={AnalyticsPage} />
       <Route path="/login" component={LoginPage} />
+      {/* /auth/callback is shadowed by a physical native-handoff file
+          (client/public/auth/callback.html); web logins land on
+          /auth/web-callback instead, which the SPA actually serves. */}
+      <Route path="/auth/web-callback" component={AuthCallback} />
       <Route path="/auth/callback" component={AuthCallback} />
       <Route component={NotFound} />
     </Switch>

@@ -141,10 +141,12 @@ export default function LoginPage() {
       } else {
         const { error } = await supabase.auth.signInWithOAuth({
           provider: "google",
-          // Must land on /auth/callback: detectSessionInUrl is disabled, so
-          // that route's handler is the only place the PKCE code gets
-          // exchanged for a session. Landing anywhere else strands the code.
-          options: { redirectTo: `${window.location.origin}/auth/callback` },
+          // Must land on the SPA's exchange route: detectSessionInUrl is
+          // disabled, so the AuthCallback route is the only place the PKCE
+          // code gets redeemed. NOT /auth/callback — a physical native-
+          // handoff file (public/auth/callback.html) shadows that path and
+          // would try to deep-link into the native app.
+          options: { redirectTo: `${window.location.origin}/auth/web-callback` },
         });
         if (error) throw error;
       }
