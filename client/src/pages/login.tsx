@@ -141,7 +141,10 @@ export default function LoginPage() {
       } else {
         const { error } = await supabase.auth.signInWithOAuth({
           provider: "google",
-          options: { redirectTo: `${window.location.origin}/dashboard` },
+          // Must land on /auth/callback: detectSessionInUrl is disabled, so
+          // that route's handler is the only place the PKCE code gets
+          // exchanged for a session. Landing anywhere else strands the code.
+          options: { redirectTo: `${window.location.origin}/auth/callback` },
         });
         if (error) throw error;
       }
