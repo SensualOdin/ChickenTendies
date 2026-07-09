@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { groupPreferencesSchema, type GroupPreferences, type Group, dietaryRestrictions, cuisineTypes, priceRanges } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -138,6 +139,7 @@ export default function Preferences() {
       longitude: undefined,
       trySomethingNew: false,
       excludeCuisines: [],
+      cuisineRoundEnabled: true,
     },
   });
 
@@ -156,6 +158,7 @@ export default function Preferences() {
         longitude: prefs.longitude,
         trySomethingNew: prefs.trySomethingNew || false,
         excludeCuisines: prefs.excludeCuisines || [],
+        cuisineRoundEnabled: prefs.cuisineRoundEnabled ?? true,
       });
       // Set GPS state if coords were saved
       if (prefs.latitude !== undefined && prefs.longitude !== undefined) {
@@ -632,6 +635,26 @@ export default function Preferences() {
                   </div>
 
                   <div className="space-y-4">
+                    <div className="flex items-center gap-3 p-3 rounded-lg border-2 border-dashed bg-gradient-to-r from-primary/10 to-orange-500/5">
+                      <div className="flex-1">
+                        <div className="text-sm font-semibold flex items-center gap-2">
+                          <span>🗳️</span>
+                          Cuisine vote first
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Everyone swipes on cuisines before restaurants load — the group's pick sets the menu.
+                        </p>
+                      </div>
+                      <Switch
+                        checked={form.watch("cuisineRoundEnabled")}
+                        onCheckedChange={(checked) => form.setValue("cuisineRoundEnabled", checked)}
+                        data-testid="switch-cuisine-round"
+                      />
+                    </div>
+                  </div>
+
+                  {!form.watch("cuisineRoundEnabled") && (
+                  <div className="space-y-4">
                     <SectionHeader label="Cravings" icon={<UtensilsCrossed className="w-4 h-4 text-primary" />} isOpen={openSections.has("cuisines")} onToggle={() => toggleSection("cuisines")} badge="or leave blank for all" />
 
                     {openSections.has("cuisines") && (
@@ -705,6 +728,7 @@ export default function Preferences() {
                     </>
                     )}
                   </div>
+                  )}
 
                   <Button
                     type="submit"
