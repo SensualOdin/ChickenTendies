@@ -27,6 +27,9 @@ declare module "http" {
 // answers if FRONTEND_URL ever gets unset in Render's env vars.
 const allowedOrigins = [
   process.env.FRONTEND_URL,
+  "https://chickentinders.co",
+  "https://www.chickentinders.co",
+  // .app is being retired in favor of .co — remove once the .app domain is gone
   "https://chickentinders.app",
   "https://www.chickentinders.app",
   "https://chickentinders.onrender.com",

@@ -132,7 +132,7 @@ export default function LoginPage() {
         const { data, error } = await supabase.auth.signInWithOAuth({
           provider: "google",
           options: {
-            redirectTo: "https://chickentinders.app/auth/callback",
+            redirectTo: "https://chickentinders.co/auth/callback",
             skipBrowserRedirect: true,
           },
         });

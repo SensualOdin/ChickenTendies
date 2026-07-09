@@ -13,7 +13,7 @@ export const API_BASE = isNative()
 // (the WebView's bundled-asset origin) — useless to recipients. Always share
 // the production URL so the link works in any browser.
 export const SHARE_BASE_URL = isNative()
-  ? (import.meta.env.VITE_PUBLIC_WEB_URL || "https://chickentinders.app")
+  ? (import.meta.env.VITE_PUBLIC_WEB_URL || "https://chickentinders.co")
   : window.location.origin;
 
 // CSRF token is cached in memory for the lifetime of the tab/app launch.

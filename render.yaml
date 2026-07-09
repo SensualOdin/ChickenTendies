@@ -22,7 +22,7 @@ services:
       - key: COOKIE_SECRET
         sync: false
       - key: FRONTEND_URL
-        sync: false
+        value: https://chickentinders.co
       - key: YELP_API_KEY
         sync: false
       - key: GOOGLE_PLACES_API_KEY
