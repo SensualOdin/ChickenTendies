@@ -8,7 +8,7 @@ import type {
   InsertGroup,
   JoinGroup 
 } from "@shared/schema";
-import { anonymousGroups, anonymousGroupSwipes, restaurantCache } from "@shared/schema";
+import { anonymousGroups, anonymousGroupSwipes, anonymousGroupCuisineVotes, restaurantCache } from "@shared/schema";
 import { fetchRestaurantsFromYelp } from "./yelp";
 import { findUnanimousMatches } from "./match-logic";
 import { db } from "./db";
@@ -43,6 +43,12 @@ export interface IStorage {
   deleteSwipe(groupId: string, memberId: string, restaurantId: string): Promise<void>;
   getSwipeCountForMember(groupId: string, memberId: string): Promise<number>;
   getRestaurantCountForGroup(groupId: string): Promise<number>;
+  setCuisineDeck(groupId: string, deck: string[]): Promise<void>;
+  recordCuisineVote(groupId: string, memberId: string, cuisine: string, liked: boolean): Promise<void>;
+  getCuisineVotes(groupId: string): Promise<{ memberId: string; cuisine: string; liked: boolean }[]>;
+  markMemberDoneCuisineVoting(groupId: string, memberId: string): Promise<{ group: Group; member: GroupMember } | undefined>;
+  setMatchedCuisines(groupId: string, winners: string[]): Promise<void>;
+  clearRestaurantCache(groupId: string): Promise<void>;
 }
 
 const mockRestaurants: Restaurant[] = [
@@ -237,6 +243,8 @@ function dbRowToGroup(row: typeof anonymousGroups.$inferSelect): Group {
     preferences: (row.preferences as GroupPreferences) || null,
     status: row.status as Group["status"],
     createdAt: row.createdAt ? row.createdAt.getTime() : Date.now(),
+    cuisineDeck: (row.cuisineDeck as any) || undefined,
+    matchedCuisines: (row.matchedCuisines as any) || undefined,
     leaderToken: row.leaderToken || undefined,
   };
 }
@@ -592,6 +600,42 @@ export class DbStorage implements IStorage {
   async getRestaurantCountForGroup(groupId: string): Promise<number> {
     const restaurants = await this.getRestaurantsForGroup(groupId);
     return restaurants?.length ?? 0;
+  }
+
+  async setCuisineDeck(groupId: string, deck: string[]): Promise<void> {
+    await db.update(anonymousGroups).set({ cuisineDeck: deck }).where(eq(anonymousGroups.id, groupId));
+  }
+
+  async recordCuisineVote(groupId: string, memberId: string, cuisine: string, liked: boolean): Promise<void> {
+    await db.insert(anonymousGroupCuisineVotes)
+      .values({ groupId, memberId, cuisine, liked })
+      .onConflictDoUpdate({
+        target: [anonymousGroupCuisineVotes.groupId, anonymousGroupCuisineVotes.memberId, anonymousGroupCuisineVotes.cuisine],
+        set: { liked, votedAt: new Date() },
+      });
+  }
+
+  async getCuisineVotes(groupId: string): Promise<{ memberId: string; cuisine: string; liked: boolean }[]> {
+    const rows = await db.select().from(anonymousGroupCuisineVotes).where(eq(anonymousGroupCuisineVotes.groupId, groupId));
+    return rows.map((r) => ({ memberId: r.memberId, cuisine: r.cuisine, liked: r.liked }));
+  }
+
+  async markMemberDoneCuisineVoting(groupId: string, memberId: string): Promise<{ group: Group; member: GroupMember } | undefined> {
+    const group = await this.getGroup(groupId);
+    if (!group) return undefined;
+    const member = group.members.find((m) => m.id === memberId);
+    if (!member) return undefined;
+    member.doneCuisineVoting = true;
+    await this.updateGroup(groupId, group);
+    return { group, member };
+  }
+
+  async setMatchedCuisines(groupId: string, winners: string[]): Promise<void> {
+    await db.update(anonymousGroups).set({ matchedCuisines: winners }).where(eq(anonymousGroups.id, groupId));
+  }
+
+  async clearRestaurantCache(groupId: string): Promise<void> {
+    await db.delete(restaurantCache).where(eq(restaurantCache.groupId, groupId));
   }
 }
 
