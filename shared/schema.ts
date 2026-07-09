@@ -50,7 +50,8 @@ export const groupMemberSchema = z.object({
   name: z.string().min(1),
   isHost: z.boolean().default(false),
   joinedAt: z.number(),
-  doneSwiping: z.boolean().default(false)
+  doneSwiping: z.boolean().default(false),
+  doneCuisineVoting: z.boolean().default(false)
 });
 
 export type GroupMember = z.infer<typeof groupMemberSchema>;
@@ -68,6 +69,7 @@ export const groupPreferencesSchema = z.object({
   trySomethingNew: z.boolean().optional().default(false), // Hide cuisines already matched on
   excludeCuisines: z.array(z.string()).optional().default([]), // Cuisines to exclude
   excludeVisited: z.boolean().optional().default(false), // Exclude restaurants crew has already visited
+  cuisineRoundEnabled: z.boolean().optional().default(true),
 });
 
 export type GroupPreferences = z.infer<typeof groupPreferencesSchema>;
@@ -79,8 +81,10 @@ export const groupSchema = z.object({
   name: z.string().min(1),
   members: z.array(groupMemberSchema),
   preferences: groupPreferencesSchema.nullable(),
-  status: z.enum(["waiting", "configuring", "swiping", "completed"]).default("waiting"),
+  status: z.enum(["waiting", "configuring", "cuisine_voting", "swiping", "completed"]).default("waiting"),
   createdAt: z.number(),
+  cuisineDeck: z.array(z.enum(cuisineTypes)).optional(),
+  matchedCuisines: z.array(z.enum(cuisineTypes)).optional(),
   leaderToken: z.string().optional()
 });
 
@@ -126,6 +130,14 @@ export const swipeSchema = z.object({
 
 export type Swipe = z.infer<typeof swipeSchema>;
 
+// Cuisine vote (pre-restaurant round)
+export const cuisineVoteSchema = z.object({
+  memberId: z.string().min(1),
+  cuisine: z.enum(cuisineTypes),
+  liked: z.boolean(),
+});
+export type CuisineVote = z.infer<typeof cuisineVoteSchema>;
+
 // Match (restaurant all members liked)
 export const matchSchema = z.object({
   id: z.string(),
@@ -170,7 +182,11 @@ export type WSMessage =
   | { type: "all_done_swiping" }
   | { type: "member_progress"; memberId: string; swipeCount: number; totalRestaurants: number }
   | { type: "match_vote"; memberId: string; memberName: string; restaurantId: string }
-  | { type: "match_picked"; restaurant: Restaurant };
+  | { type: "match_picked"; restaurant: Restaurant }
+  | { type: "cuisine_vote_made"; memberId: string; cuisine: CuisineType }
+  | { type: "member_done_cuisine_voting"; memberId: string; memberName: string }
+  | { type: "cuisine_match_found"; cuisine: CuisineType }
+  | { type: "cuisine_round_complete"; winners: CuisineType[] };
 
 // Export auth models
 export * from "./models/auth";
