@@ -210,6 +210,8 @@ export const anonymousGroups = pgTable("anonymous_groups", {
   preferences: jsonb("preferences"),
   status: varchar("status", { length: 20 }).notNull().default("waiting"),
   leaderToken: varchar("leader_token"),
+  cuisineDeck: jsonb("cuisine_deck"),
+  matchedCuisines: jsonb("matched_cuisines"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -228,6 +230,21 @@ export const anonymousGroupSwipes = pgTable("anonymous_group_swipes", {
 ]);
 
 export type AnonymousGroupSwipe = typeof anonymousGroupSwipes.$inferSelect;
+
+export const anonymousGroupCuisineVotes = pgTable("anonymous_group_cuisine_votes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  groupId: varchar("group_id").notNull().references(() => anonymousGroups.id, { onDelete: "cascade" }),
+  memberId: varchar("member_id").notNull(),
+  cuisine: varchar("cuisine").notNull(),
+  liked: boolean("liked").notNull(),
+  votedAt: timestamp("voted_at").defaultNow(),
+}, (table) => [
+  index("agcv_group_idx").on(table.groupId),
+  index("agcv_group_cuisine_idx").on(table.groupId, table.cuisine, table.liked),
+  index("agcv_unique_idx").on(table.groupId, table.memberId, table.cuisine),
+]);
+
+export type AnonymousGroupCuisineVote = typeof anonymousGroupCuisineVotes.$inferSelect;
 
 export const restaurantCache = pgTable("restaurant_cache", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
