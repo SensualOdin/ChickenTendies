@@ -85,6 +85,13 @@ export default function CuisineVotePage() {
   // Hydrate deck + members from the round response (once).
   useEffect(() => {
     if (!data || initialized) return;
+
+    if (data.status && data.status !== "cuisine_voting") {
+      setInitialized(true);
+      setLocation(`/group/${params.id}/${data.status === "completed" ? "matches" : "swipe"}`);
+      return;
+    }
+
     setInitialized(true);
 
     const votedByMe = new Set(
@@ -96,11 +103,15 @@ export default function CuisineVotePage() {
     setIndex(0);
 
     if (remaining.length === 0) {
-      // Nothing to vote on — mark done immediately.
-      markDone();
+      const meDone = data.members.find((m) => m.id === memberId)?.doneCuisineVoting;
+      if (meDone) {
+        setDoneVoting(true);        // already recorded server-side; don't re-POST
+      } else {
+        markDone();
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data, initialized]);
+  }, [data, initialized, setLocation, params.id]);
 
   // WebSocket — same connect/reconnect logic as swipe.tsx.
   useEffect(() => {

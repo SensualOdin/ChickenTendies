@@ -29,6 +29,7 @@ export interface IStorage {
   getGroup(id: string): Promise<Group | undefined>;
   getGroupByCode(code: string): Promise<Group | undefined>;
   updateGroup(groupId: string, group: Group): Promise<Group | undefined>;
+  updateGroupMembers(groupId: string, members: GroupMember[]): Promise<void>;
   updateGroupPreferences(groupId: string, preferences: GroupPreferences): Promise<Group | undefined>;
   updateGroupStatus(groupId: string, status: Group["status"]): Promise<Group | undefined>;
   addMember(groupId: string, member: GroupMember): Promise<Group | undefined>;
@@ -49,6 +50,7 @@ export interface IStorage {
   markMemberDoneCuisineVoting(groupId: string, memberId: string): Promise<{ group: Group; member: GroupMember } | undefined>;
   setMatchedCuisines(groupId: string, winners: string[]): Promise<void>;
   clearRestaurantCache(groupId: string): Promise<void>;
+  claimCuisineResolution(groupId: string): Promise<boolean>;
 }
 
 const mockRestaurants: Restaurant[] = [
@@ -334,6 +336,10 @@ export class DbStorage implements IStorage {
       .returning();
     if (!row) return undefined;
     return dbRowToGroup(row);
+  }
+
+  async updateGroupMembers(groupId: string, members: GroupMember[]): Promise<void> {
+    await db.update(anonymousGroups).set({ members }).where(eq(anonymousGroups.id, groupId));
   }
 
   async updateGroupPreferences(groupId: string, preferences: GroupPreferences): Promise<Group | undefined> {
@@ -626,7 +632,7 @@ export class DbStorage implements IStorage {
     const member = group.members.find((m) => m.id === memberId);
     if (!member) return undefined;
     member.doneCuisineVoting = true;
-    await this.updateGroup(groupId, group);
+    await this.updateGroupMembers(groupId, group.members);
     return { group, member };
   }
 
@@ -636,6 +642,16 @@ export class DbStorage implements IStorage {
 
   async clearRestaurantCache(groupId: string): Promise<void> {
     await db.delete(restaurantCache).where(eq(restaurantCache.groupId, groupId));
+  }
+
+  // Atomically transition cuisine_voting -> swiping. Returns true only for the
+  // caller that actually performed the transition (single-shot resolution guard).
+  async claimCuisineResolution(groupId: string): Promise<boolean> {
+    const rows = await db.update(anonymousGroups)
+      .set({ status: "swiping" })
+      .where(and(eq(anonymousGroups.id, groupId), eq(anonymousGroups.status, "cuisine_voting")))
+      .returning({ id: anonymousGroups.id });
+    return rows.length > 0;
   }
 }
 

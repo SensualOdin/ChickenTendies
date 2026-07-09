@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, varchar, timestamp, text, integer, boolean, jsonb, serial, real, index } from "drizzle-orm/pg-core";
+import { pgTable, varchar, timestamp, text, integer, boolean, jsonb, serial, real, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { users } from "./auth";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -241,7 +241,7 @@ export const anonymousGroupCuisineVotes = pgTable("anonymous_group_cuisine_votes
 }, (table) => [
   index("agcv_group_idx").on(table.groupId),
   index("agcv_group_cuisine_idx").on(table.groupId, table.cuisine, table.liked),
-  index("agcv_unique_idx").on(table.groupId, table.memberId, table.cuisine),
+  uniqueIndex("agcv_unique_idx").on(table.groupId, table.memberId, table.cuisine),
 ]);
 
 export type AnonymousGroupCuisineVote = typeof anonymousGroupCuisineVotes.$inferSelect;

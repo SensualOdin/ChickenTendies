@@ -226,7 +226,8 @@ export async function registerRoutes(
   const resolveCuisineRound = async (groupId: string): Promise<void> => {
     const group = await storage.getGroup(groupId);
     if (!group || !group.preferences) return;
-    if (group.status !== "cuisine_voting") return; // idempotent: only resolve once
+    const claimed = await storage.claimCuisineResolution(groupId);
+    if (!claimed) return; // another trigger already resolved this round
     const memberIds = group.members.map((m) => m.id);
     const votes = await storage.getCuisineVotes(groupId);
     const deck = (group.cuisineDeck as string[]) || [];
@@ -240,6 +241,25 @@ export async function registerRoutes(
 
     broadcast(groupId, { type: "cuisine_round_complete", winners });
     broadcast(groupId, { type: "status_changed", status: "swiping" });
+  };
+
+  // Re-evaluate whether the cuisine round should end. Safe to call after any
+  // event that changes votes or membership (vote, done, member removal).
+  const maybeResolveCuisineRound = async (groupId: string): Promise<void> => {
+    const group = await storage.getGroup(groupId);
+    if (!group || group.status !== "cuisine_voting" || group.members.length === 0) return;
+    const memberIds = group.members.map((m) => m.id);
+    const votes = await storage.getCuisineVotes(groupId);
+    const deck = (group.cuisineDeck as string[]) || [];
+    const unanimous = findUnanimousCuisine(memberIds, votes);
+    const allDone = group.members.every((m) => m.doneCuisineVoting);
+    if (unanimous) {
+      const winners = resolveCuisineWinners(memberIds, votes, deck) as CuisineType[];
+      if (winners[0]) broadcast(groupId, { type: "cuisine_match_found", cuisine: winners[0] });
+      await resolveCuisineRound(groupId);
+    } else if (allDone) {
+      await resolveCuisineRound(groupId);
+    }
   };
 
   const wss = new WebSocketServer({ noServer: true });
@@ -576,7 +596,7 @@ export async function registerRoutes(
       // Clear any previous match votes
       matchVotes.delete(req.params.id);
 
-      const cuisineEnabled = (validatedPreferences as any).cuisineRoundEnabled !== false;
+      const cuisineEnabled = validatedPreferences.cuisineRoundEnabled !== false;
       let deck: CuisineType[] = [];
       if (cuisineEnabled) {
         deck = buildCuisineDeck({
@@ -965,14 +985,7 @@ export async function registerRoutes(
       await storage.recordCuisineVote(groupId, memberId, cuisine, liked);
       broadcast(groupId, { type: "cuisine_vote_made", memberId, cuisine });
 
-      // Unanimous fast-path: if every present member liked the same cuisine, end the round now.
-      const votes = await storage.getCuisineVotes(groupId);
-      const memberIds = group.members.map((m) => m.id);
-      const unanimous = findUnanimousCuisine(memberIds, votes);
-      if (unanimous) {
-        broadcast(groupId, { type: "cuisine_match_found", cuisine: unanimous as CuisineType });
-        await resolveCuisineRound(groupId);
-      }
+      await maybeResolveCuisineRound(groupId);
 
       res.json({ success: true });
     } catch (error) {
@@ -997,10 +1010,7 @@ export async function registerRoutes(
         memberName: result.member.name,
       });
 
-      const allDone = result.group.members.every((m) => m.doneCuisineVoting);
-      if (allDone && result.group.members.length > 0) {
-        await resolveCuisineRound(req.params.id);
-      }
+      await maybeResolveCuisineRound(req.params.id);
       res.json({ success: true });
     } catch (error) {
       res.status(400).json({ error: "Invalid request" });
@@ -1167,6 +1177,8 @@ export async function registerRoutes(
       memberId: targetMemberId,
       memberName: targetMember.name
     });
+
+    await maybeResolveCuisineRound(groupId);
 
     res.json({ success: true, group: stripLeaderToken(updatedGroup) });
   });
