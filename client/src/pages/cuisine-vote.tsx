@@ -202,6 +202,7 @@ export default function CuisineVotePage() {
   }, [params.id, memberId, toast, setLocation]);
 
   const handleSwipe = async (cuisine: CuisineType, action: CuisineSwipeAction) => {
+    // TODO: cuisine vote analytics (useAnalytics.trackSwipe is restaurant-shaped)
     try {
       await apiRequest("POST", `/api/groups/${params.id}/cuisine-vote`, {
         memberId,
