@@ -4,9 +4,10 @@ import { WebSocketServer, WebSocket } from "ws";
 import { z } from "zod";
 import { randomUUID, createHmac, timingSafeEqual } from "crypto";
 import { storage } from "./storage";
-import { insertGroupSchema, joinGroupSchema, groupPreferencesSchema, persistentGroups, diningSessions, users, anonymousGroups } from "@shared/schema";
-import type { WSMessage, Group, Restaurant, GroupMember } from "@shared/schema";
+import { insertGroupSchema, joinGroupSchema, groupPreferencesSchema, cuisineVoteSchema, cuisineTypes, persistentGroups, diningSessions, users, anonymousGroups } from "@shared/schema";
+import type { WSMessage, Group, Restaurant, GroupMember, CuisineType } from "@shared/schema";
 import { isAuthenticated, optionalAuth, registerAuthRoutes } from "./auth";
+import { buildCuisineDeck, resolveCuisineWinners, findUnanimousCuisine } from "./cuisine-round";
 import { registerSocialRoutes } from "./social-routes";
 import { sendPushToGroupMembers, saveGroupPushSubscription, getVapidPublicKey } from "./push";
 import { logAnalyticsEvent, logBatchAnalyticsEvents, getAnalyticsSummary, getCuisineDemand, getRestaurantAnalytics } from "./analytics";
@@ -212,6 +213,34 @@ export async function registerRoutes(
 
   registerAuthRoutes(app);
   registerSocialRoutes(app);
+
+  // Stable per-session seed so the cuisine deck order is deterministic.
+  const seedFromGroupId = (groupId: string): number => {
+    let h = 0;
+    for (let i = 0; i < groupId.length; i++) h = (Math.imul(31, h) + groupId.charCodeAt(i)) | 0;
+    return h >>> 0;
+  };
+
+  // Resolve the cuisine round: compute winners, write them into preferences.cuisineTypes,
+  // flip to swiping, and broadcast. Reused by both the unanimous fast-path and the all-done path.
+  const resolveCuisineRound = async (groupId: string): Promise<void> => {
+    const group = await storage.getGroup(groupId);
+    if (!group || !group.preferences) return;
+    if (group.status !== "cuisine_voting") return; // idempotent: only resolve once
+    const memberIds = group.members.map((m) => m.id);
+    const votes = await storage.getCuisineVotes(groupId);
+    const deck = (group.cuisineDeck as string[]) || [];
+    const winners = resolveCuisineWinners(memberIds, votes, deck) as CuisineType[];
+
+    const updatedPreferences = { ...group.preferences, cuisineTypes: winners };
+    await storage.updateGroupPreferences(groupId, updatedPreferences);
+    await storage.setMatchedCuisines(groupId, winners);
+    await storage.clearRestaurantCache(groupId);
+    await storage.updateGroupStatus(groupId, "swiping");
+
+    broadcast(groupId, { type: "cuisine_round_complete", winners });
+    broadcast(groupId, { type: "status_changed", status: "swiping" });
+  };
 
   const wss = new WebSocketServer({ noServer: true });
   // Export for external wiring — upgrade handler is set up in index.ts
@@ -547,12 +576,33 @@ export async function registerRoutes(
       // Clear any previous match votes
       matchVotes.delete(req.params.id);
 
-      // Update status to swiping
-      await storage.updateGroupStatus(req.params.id, "swiping");
+      const cuisineEnabled = (validatedPreferences as any).cuisineRoundEnabled !== false;
+      let deck: CuisineType[] = [];
+      if (cuisineEnabled) {
+        deck = buildCuisineDeck({
+          excludeCuisines: validatedPreferences.excludeCuisines || [],
+          trySomethingNew: validatedPreferences.trySomethingNew || false,
+          matchedBefore: [],
+          seed: seedFromGroupId(req.params.id),
+        });
+      }
 
+      if (cuisineEnabled && deck.length > 0) {
+        // Reset any stale done-voting flags, store the deck, enter the cuisine round.
+        for (const m of updatedGroup.members) m.doneCuisineVoting = false;
+        await storage.updateGroup(req.params.id, { ...updatedGroup, cuisineDeck: deck });
+        await storage.setCuisineDeck(req.params.id, deck);
+        await storage.updateGroupStatus(req.params.id, "cuisine_voting");
+        broadcast(req.params.id, { type: "preferences_updated", preferences: validatedPreferences });
+        broadcast(req.params.id, { type: "status_changed", status: "cuisine_voting" });
+        res.json(stripLeaderToken({ ...updatedGroup, status: "cuisine_voting", cuisineDeck: deck }));
+        return;
+      }
+
+      // Cuisine round disabled or empty deck → straight to swiping (legacy behavior).
+      await storage.updateGroupStatus(req.params.id, "swiping");
       broadcast(req.params.id, { type: "preferences_updated", preferences: validatedPreferences });
       broadcast(req.params.id, { type: "status_changed", status: "swiping" });
-
       res.json(stripLeaderToken(updatedGroup));
     } catch (error) {
       res.status(400).json({ error: "Invalid request" });
@@ -894,6 +944,83 @@ export async function registerRoutes(
     } catch (error) {
       res.status(400).json({ error: "Invalid request" });
     }
+  });
+
+  // Record a cuisine vote (pre-restaurant round)
+  app.post("/api/groups/:id/cuisine-vote", swipeLimiter, async (req, res) => {
+    try {
+      const groupId = String(req.params.id);
+      const { memberId, cuisine, liked } = cuisineVoteSchema.parse(req.body);
+
+      if (!verifyMemberIdentity(req, groupId, memberId)) {
+        res.status(403).json({ error: "Session identity mismatch" });
+        return;
+      }
+      const group = await storage.getGroup(groupId);
+      if (!group) { res.status(404).json({ error: "Group not found" }); return; }
+      if (!group.members.some((m) => m.id === memberId)) {
+        res.status(403).json({ error: "Member not in group" }); return;
+      }
+
+      await storage.recordCuisineVote(groupId, memberId, cuisine, liked);
+      broadcast(groupId, { type: "cuisine_vote_made", memberId, cuisine });
+
+      // Unanimous fast-path: if every present member liked the same cuisine, end the round now.
+      const votes = await storage.getCuisineVotes(groupId);
+      const memberIds = group.members.map((m) => m.id);
+      const unanimous = findUnanimousCuisine(memberIds, votes);
+      if (unanimous) {
+        broadcast(groupId, { type: "cuisine_match_found", cuisine: unanimous as CuisineType });
+        await resolveCuisineRound(groupId);
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      res.status(400).json({ error: "Invalid request" });
+    }
+  });
+
+  // Mark a member done with the cuisine round
+  app.post("/api/groups/:id/done-cuisine-voting", async (req, res) => {
+    try {
+      const { memberId } = z.object({ memberId: z.string().min(1) }).parse(req.body);
+      if (!verifyMemberIdentity(req, req.params.id, memberId)) {
+        res.status(403).json({ error: "Session identity mismatch" });
+        return;
+      }
+      const result = await storage.markMemberDoneCuisineVoting(req.params.id, memberId);
+      if (!result) { res.status(404).json({ error: "Group or member not found" }); return; }
+
+      broadcast(req.params.id, {
+        type: "member_done_cuisine_voting",
+        memberId: result.member.id,
+        memberName: result.member.name,
+      });
+
+      const allDone = result.group.members.every((m) => m.doneCuisineVoting);
+      if (allDone && result.group.members.length > 0) {
+        await resolveCuisineRound(req.params.id);
+      }
+      res.json({ success: true });
+    } catch (error) {
+      res.status(400).json({ error: "Invalid request" });
+    }
+  });
+
+  // Get cuisine round state (deck, votes, tallies, member progress) — refresh/rejoin recovery
+  app.get("/api/groups/:id/cuisine-round", async (req, res) => {
+    const group = await storage.getGroup(req.params.id);
+    if (!group) { res.status(404).json({ error: "Group not found" }); return; }
+    const votes = await storage.getCuisineVotes(req.params.id);
+    const tallies: Record<string, number> = {};
+    for (const v of votes) if (v.liked) tallies[v.cuisine] = (tallies[v.cuisine] || 0) + 1;
+    res.json({
+      deck: group.cuisineDeck || [],
+      votes,
+      tallies,
+      members: group.members.map((m) => ({ id: m.id, name: m.name, doneCuisineVoting: m.doneCuisineVoting })),
+      status: group.status,
+    });
   });
 
   // Group push notification subscription endpoints
