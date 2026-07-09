@@ -11,6 +11,7 @@ import JoinGroup from "@/pages/join-group";
 import GroupLobby from "@/pages/group-lobby";
 import Preferences from "@/pages/preferences";
 import SwipePage from "@/pages/swipe";
+import CuisineVotePage from "@/pages/cuisine-vote";
 import MatchesPage from "@/pages/matches";
 import ProfilePage from "@/pages/profile";
 import CrewManage from "@/pages/crew-manage";
@@ -134,6 +135,7 @@ function Router() {
       <Route path="/join" component={JoinGroup} />
       <Route path="/group/:id" component={GroupLobby} />
       <Route path="/group/:id/preferences" component={Preferences} />
+      <Route path="/group/:id/cuisine-vote" component={CuisineVotePage} />
       <Route path="/group/:id/swipe" component={SwipePage} />
       <Route path="/group/:id/matches" component={MatchesPage} />
       <Route path="/profile" component={ProfilePage} />
