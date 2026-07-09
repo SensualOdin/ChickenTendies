@@ -16,6 +16,17 @@ const httpServer = createServer(app);
 // proxy's IP, so one abusive client can exhaust the shared per-IP budget.
 app.set("trust proxy", 1);
 
+// chickentinders.app is retired in favor of chickentinders.co, but its DNS
+// still points at this service and old links/native builds reference it.
+// 301 everything to .co (query string is preserved via originalUrl).
+app.use((req, res, next) => {
+  const host = req.hostname?.toLowerCase();
+  if (host === "chickentinders.app" || host === "www.chickentinders.app") {
+    return res.redirect(301, `https://chickentinders.co${req.originalUrl}`);
+  }
+  next();
+});
+
 declare module "http" {
   interface IncomingMessage {
     rawBody: unknown;
