@@ -85,9 +85,9 @@ export default function GroupLobby() {
   }, [initialGroup]);
 
   useEffect(() => {
-    if (group?.status === "swiping" && params.id) {
-      setLocation(`/group/${params.id}/swipe`);
-    }
+    if (!params.id) return;
+    if (group?.status === "cuisine_voting") setLocation(`/group/${params.id}/cuisine-vote`);
+    else if (group?.status === "swiping") setLocation(`/group/${params.id}/swipe`);
   }, [group?.status, params.id, setLocation]);
 
   useEffect(() => {
@@ -162,9 +162,8 @@ export default function GroupLobby() {
             });
           }
         } else if (message.type === "status_changed") {
-          if (message.status === "swiping") {
-            setLocation(`/group/${params.id}/swipe`);
-          }
+          if (message.status === "cuisine_voting") setLocation(`/group/${params.id}/cuisine-vote`);
+          else if (message.status === "swiping") setLocation(`/group/${params.id}/swipe`);
         } else if (message.type === "preferences_updated") {
           setGroup((prev) => {
             if (!prev) return null;

@@ -259,9 +259,13 @@ export default function Preferences() {
       });
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/groups", params.id] });
-      setLocation(`/group/${params.id}/swipe`);
+      if (data?.status === "cuisine_voting") {
+        setLocation(`/group/${params.id}/cuisine-vote`);
+      } else {
+        setLocation(`/group/${params.id}/swipe`);
+      }
     },
     onError: () => {
       toast({
