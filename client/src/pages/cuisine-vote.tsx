@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
@@ -65,6 +65,7 @@ export default function CuisineVotePage() {
   const [members, setMembers] = useState<CuisineMember[]>([]);
   const [progress, setProgress] = useState<Record<string, number>>({});
   const [initialized, setInitialized] = useState(false);
+  const winnerShownAtRef = useRef<number | null>(null);
 
   const { data } = useQuery<CuisineRoundResponse>({
     queryKey: ["/api/groups", params.id, "cuisine-round"],
@@ -107,6 +108,7 @@ export default function CuisineVotePage() {
 
     let socket: WebSocket | null = null;
     let reconnectTimeout: NodeJS.Timeout | null = null;
+    let navTimeout: NodeJS.Timeout | null = null;
     let reconnectAttempts = 0;
     const maxReconnectAttempts = 10;
     let isClosedIntentionally = false;
@@ -167,12 +169,20 @@ export default function CuisineVotePage() {
           }
         } else if (message.type === "cuisine_match_found") {
           setWinner(message.cuisine);
+          if (winnerShownAtRef.current === null) winnerShownAtRef.current = Date.now();
           fireConfetti();
         } else if (message.type === "cuisine_round_complete") {
-          setWinner((prev) => prev ?? message.winners[0] ?? null);
+          setWinner((prev) => {
+            const next = prev ?? message.winners[0] ?? null;
+            if (next && winnerShownAtRef.current === null) winnerShownAtRef.current = Date.now();
+            return next;
+          });
         } else if (message.type === "status_changed") {
           if (message.status === "swiping") {
-            setLocation(`/group/${params.id}/swipe`);
+            const shownAt = winnerShownAtRef.current;
+            const elapsed = shownAt ? Date.now() - shownAt : 0;
+            const remaining = shownAt ? Math.max(0, 2300 - elapsed) : 0;
+            navTimeout = setTimeout(() => setLocation(`/group/${params.id}/swipe`), remaining);
           }
         }
       };
@@ -197,6 +207,7 @@ export default function CuisineVotePage() {
     return () => {
       isClosedIntentionally = true;
       if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (navTimeout) clearTimeout(navTimeout);
       if (socket) socket.close();
     };
   }, [params.id, memberId, toast, setLocation]);
