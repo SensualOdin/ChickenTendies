@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
-import { API_BASE, getAuthHeaders, queryClient as appQueryClient } from "@/lib/queryClient";
+import { API_BASE, getCsrfToken, queryClient as appQueryClient } from "@/lib/queryClient";
 import type { User } from "@shared/models/auth";
 import { useEffect, useState } from "react";
 
@@ -14,27 +14,38 @@ function registerAuthListener() {
   if (authListenerRegistered) return;
   authListenerRegistered = true;
 
-  supabase.auth.onAuthStateChange(async (event, session) => {
+  // DEADLOCK WARNING: supabase-js emits auth events while holding its
+  // internal auth lock and awaits async callbacks. Calling any lock-taking
+  // auth method (getSession, refreshSession, ...) from inside this callback
+  // deadlocks the whole client — exchangeCodeForSession hangs forever with
+  // no error. Keep this callback synchronous and defer side effects; build
+  // the Authorization header from the session the event already carries.
+  supabase.auth.onAuthStateChange((event, session) => {
     if (event === "SIGNED_IN" && session) {
-      // Sync user to our database. Use getAuthHeaders() to pick up the
-      // CSRF token + any other headers in one place rather than hand-building.
+      const accessToken = session.access_token;
       const meta = session.user.user_metadata;
-      const headers = {
-        "Content-Type": "application/json",
-        ...(await getAuthHeaders()),
-      };
-      await fetch(`${API_BASE}/api/auth/sync`, {
-        method: "POST",
-        headers,
-        credentials: "include",
-        body: JSON.stringify({
-          firstName: meta?.full_name?.split(" ")[0] || meta?.name?.split(" ")[0] || null,
-          lastName: meta?.full_name?.split(" ").slice(1).join(" ") || null,
-          avatarUrl: meta?.avatar_url || null,
-        }),
-      }).catch(() => { });
+      setTimeout(() => {
+        void (async () => {
+          const headers: Record<string, string> = {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          };
+          const csrf = await getCsrfToken();
+          if (csrf) headers["X-CSRF-Token"] = csrf;
+          await fetch(`${API_BASE}/api/auth/sync`, {
+            method: "POST",
+            headers,
+            credentials: "include",
+            body: JSON.stringify({
+              firstName: meta?.full_name?.split(" ")[0] || meta?.name?.split(" ")[0] || null,
+              lastName: meta?.full_name?.split(" ").slice(1).join(" ") || null,
+              avatarUrl: meta?.avatar_url || null,
+            }),
+          }).catch(() => { });
 
-      appQueryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+          appQueryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+        })();
+      }, 0);
     }
 
     if (event === "SIGNED_OUT") {
