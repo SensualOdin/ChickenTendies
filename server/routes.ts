@@ -379,6 +379,7 @@ export async function registerRoutes(
           isHost: true,
           joinedAt: Date.now(),
           doneSwiping: false,
+          doneCuisineVoting: false,
         };
 
         const leaderToken = randomUUID();
@@ -430,6 +431,7 @@ export async function registerRoutes(
         isHost: isSessionCreator && !memGroup.members.some(m => m.isHost),
         joinedAt: Date.now(),
         doneSwiping: false,
+        doneCuisineVoting: false,
       };
 
       memGroup.members.push(newMember);
@@ -490,7 +492,8 @@ export async function registerRoutes(
         name: memberName || "Leader",
         isHost: true,
         joinedAt: Date.now(),
-        doneSwiping: false
+        doneSwiping: false,
+        doneCuisineVoting: false
       };
 
       // Demote old host if exists

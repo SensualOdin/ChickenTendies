@@ -259,7 +259,8 @@ export class DbStorage implements IStorage {
       name: data.hostName,
       isHost: true,
       joinedAt: Date.now(),
-      doneSwiping: false
+      doneSwiping: false,
+      doneCuisineVoting: false
     };
 
     const [row] = await db.insert(anonymousGroups).values({
@@ -286,7 +287,8 @@ export class DbStorage implements IStorage {
       name: data.memberName,
       isHost: false,
       joinedAt: Date.now(),
-      doneSwiping: false
+      doneSwiping: false,
+      doneCuisineVoting: false
     };
 
     const updatedMembers = [...group.members, member];
