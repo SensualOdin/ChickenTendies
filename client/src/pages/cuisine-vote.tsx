@@ -10,6 +10,7 @@ import { CUISINE_VISUALS } from "@/lib/cuisine-visuals";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { isNative } from "@/lib/platform";
+import { getMemberId } from "@/lib/member-id";
 import type { CuisineType, Group, GroupMember, WSMessage } from "@shared/schema";
 
 interface CuisineMember {
@@ -56,7 +57,7 @@ export default function CuisineVotePage() {
   const params = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const memberId = localStorage.getItem("grubmatch-member-id");
+  const memberId = getMemberId(params.id);
 
   const [deck, setDeck] = useState<CuisineType[]>([]);
   const [index, setIndex] = useState(0);
