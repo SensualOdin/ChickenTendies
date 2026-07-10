@@ -698,12 +698,17 @@ export class DbStorage implements IStorage {
   }
 
   async recordCuisineVote(groupId: string, memberId: string, cuisine: string, liked: boolean): Promise<void> {
-    await db.insert(anonymousGroupCuisineVotes)
-      .values({ groupId, memberId, cuisine, liked })
-      .onConflictDoUpdate({
-        target: [anonymousGroupCuisineVotes.groupId, anonymousGroupCuisineVotes.memberId, anonymousGroupCuisineVotes.cuisine],
-        set: { liked, votedAt: new Date() },
-      });
+    // Upsert without depending on a specific unique index (mirrors recordSwipe's
+    // tolerant conflict handling): clear any prior vote for this cuisine, then insert.
+    // Last vote wins. Avoids ON CONFLICT, which fails if the unique index is absent.
+    await db.delete(anonymousGroupCuisineVotes).where(
+      and(
+        eq(anonymousGroupCuisineVotes.groupId, groupId),
+        eq(anonymousGroupCuisineVotes.memberId, memberId),
+        eq(anonymousGroupCuisineVotes.cuisine, cuisine),
+      )
+    );
+    await db.insert(anonymousGroupCuisineVotes).values({ groupId, memberId, cuisine, liked });
   }
 
   async getCuisineVotes(groupId: string): Promise<{ memberId: string; cuisine: string; liked: boolean }[]> {

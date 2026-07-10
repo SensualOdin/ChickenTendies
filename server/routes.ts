@@ -1476,6 +1476,7 @@ export async function registerRoutes(
 
       res.json({ success: true });
     } catch (error) {
+      console.error("[cuisine-vote] error:", error);
       res.status(400).json({ error: "Invalid request" });
     }
   });
@@ -1500,6 +1501,7 @@ export async function registerRoutes(
       await maybeResolveCuisineRound(req.params.id);
       res.json({ success: true });
     } catch (error) {
+      console.error("[done-cuisine-voting] error:", error);
       res.status(400).json({ error: "Invalid request" });
     }
   });
