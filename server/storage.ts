@@ -9,19 +9,11 @@ import type {
   JoinGroup 
 } from "@shared/schema";
 import { anonymousGroups, anonymousGroupSwipes, anonymousGroupCuisineVotes, restaurantCache } from "@shared/schema";
-import { fetchRestaurantsFromYelp } from "./yelp";
-import { findUnanimousMatches } from "./match-logic";
+import { fetchRestaurantsFromYelp, clusterChainRestaurants, flattenClusters } from "./yelp";
+import { findUnanimousMatches, findPartialMatches } from "./match-logic";
 import { db } from "./db";
 import { eq, and, sql } from "drizzle-orm";
-
-function generateCode(): string {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let code = "";
-  for (let i = 0; i < 6; i++) {
-    code += chars[Math.floor(Math.random() * chars.length)];
-  }
-  return code;
-}
+import { generateJoinCode } from "./codes";
 
 export interface IStorage {
   createGroup(data: InsertGroup): Promise<{ group: Group; memberId: string }>;
@@ -36,9 +28,16 @@ export interface IStorage {
   removeMember(groupId: string, memberId: string): Promise<Group | undefined>;
   getRestaurantsForGroup(groupId: string): Promise<Restaurant[]>;
   loadMoreRestaurants(groupId: string): Promise<Restaurant[]>;
+  addRestaurantToGroup(groupId: string, restaurant: Restaurant): Promise<{ added: boolean; restaurants: Restaurant[] }>;
   recordSwipe(groupId: string, memberId: string, restaurantId: string, liked: boolean): Promise<Swipe>;
   getSwipesForGroup(groupId: string): Promise<Swipe[]>;
   getMatchesForGroup(groupId: string): Promise<Restaurant[]>;
+  getPartialMatchesForGroup(groupId: string): Promise<Array<{
+    restaurant: Restaurant;
+    likedBy: Array<{ memberId: string; memberName: string }>;
+    notYetLiked: Array<{ memberId: string; memberName: string }>;
+  }>>;
+  flipSwipeToLike(groupId: string, memberId: string, restaurantId: string): Promise<void>;
   getMembersWhoHaventSwiped(groupId: string, restaurantId: string): Promise<GroupMember[]>;
   markMemberDoneSwiping(groupId: string, memberId: string): Promise<{ group: Group; member: GroupMember } | undefined>;
   deleteSwipe(groupId: string, memberId: string, restaurantId: string): Promise<void>;
@@ -62,6 +61,7 @@ const mockRestaurants: Restaurant[] = [
     rating: 4.5,
     reviewCount: 324,
     imageUrl: "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=800&h=600&fit=crop",
+    photos: [],
     address: "123 Main St",
     distance: 0.8,
     dietaryOptions: ["vegetarian"],
@@ -77,6 +77,7 @@ const mockRestaurants: Restaurant[] = [
     rating: 4.7,
     reviewCount: 512,
     imageUrl: "https://images.unsplash.com/photo-1579871494447-9811cf80d66c?w=800&h=600&fit=crop",
+    photos: [],
     address: "456 Oak Ave",
     distance: 1.2,
     dietaryOptions: ["gluten-free", "pescatarian"],
@@ -92,6 +93,7 @@ const mockRestaurants: Restaurant[] = [
     rating: 4.3,
     reviewCount: 287,
     imageUrl: "https://images.unsplash.com/photo-1565299585323-38d6b0865b47?w=800&h=600&fit=crop",
+    photos: [],
     address: "789 Elm St",
     distance: 0.5,
     dietaryOptions: ["vegetarian", "vegan"],
@@ -107,6 +109,7 @@ const mockRestaurants: Restaurant[] = [
     rating: 4.8,
     reviewCount: 456,
     imageUrl: "https://images.unsplash.com/photo-1544025162-d76694265947?w=800&h=600&fit=crop",
+    photos: [],
     address: "321 Pine Rd",
     distance: 2.1,
     dietaryOptions: [],
@@ -122,6 +125,7 @@ const mockRestaurants: Restaurant[] = [
     rating: 4.4,
     reviewCount: 198,
     imageUrl: "https://images.unsplash.com/photo-1585937421612-70a008356fbe?w=800&h=600&fit=crop",
+    photos: [],
     address: "555 Spice Ln",
     distance: 1.5,
     dietaryOptions: ["vegetarian", "vegan", "gluten-free"],
@@ -137,6 +141,7 @@ const mockRestaurants: Restaurant[] = [
     rating: 4.2,
     reviewCount: 345,
     imageUrl: "https://images.unsplash.com/photo-1563245372-f21724e3856d?w=800&h=600&fit=crop",
+    photos: [],
     address: "888 Dragon Way",
     distance: 0.9,
     dietaryOptions: ["vegetarian"],
@@ -152,6 +157,7 @@ const mockRestaurants: Restaurant[] = [
     rating: 4.6,
     reviewCount: 267,
     imageUrl: "https://images.unsplash.com/photo-1544124065-6e44b000ca18?w=800&h=600&fit=crop",
+    photos: [],
     address: "222 Olive St",
     distance: 1.8,
     dietaryOptions: ["vegetarian", "gluten-free"],
@@ -167,6 +173,7 @@ const mockRestaurants: Restaurant[] = [
     rating: 4.4,
     reviewCount: 178,
     imageUrl: "https://images.unsplash.com/photo-1559314809-0d155014e29e?w=800&h=600&fit=crop",
+    photos: [],
     address: "444 Thai Ave",
     distance: 1.1,
     dietaryOptions: ["vegetarian", "vegan"],
@@ -182,6 +189,7 @@ const mockRestaurants: Restaurant[] = [
     rating: 4.5,
     reviewCount: 234,
     imageUrl: "https://images.unsplash.com/photo-1498654896293-37aacf113fd9?w=800&h=600&fit=crop",
+    photos: [],
     address: "777 Seoul Blvd",
     distance: 2.3,
     dietaryOptions: ["gluten-free"],
@@ -197,6 +205,7 @@ const mockRestaurants: Restaurant[] = [
     rating: 4.3,
     reviewCount: 567,
     imageUrl: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=800&h=600&fit=crop",
+    photos: [],
     address: "111 Burger Ln",
     distance: 0.4,
     dietaryOptions: ["vegetarian"],
@@ -212,6 +221,7 @@ const mockRestaurants: Restaurant[] = [
     rating: 4.6,
     reviewCount: 423,
     imageUrl: "https://images.unsplash.com/photo-1574071318508-1cdbab80d002?w=800&h=600&fit=crop",
+    photos: [],
     address: "333 Pizza Way",
     distance: 0.7,
     dietaryOptions: ["vegetarian"],
@@ -227,6 +237,7 @@ const mockRestaurants: Restaurant[] = [
     rating: 4.7,
     reviewCount: 289,
     imageUrl: "https://images.unsplash.com/photo-1559339352-11d035aa65de?w=800&h=600&fit=crop",
+    photos: [],
     address: "999 Harbor Dr",
     distance: 3.2,
     dietaryOptions: ["gluten-free", "pescatarian"],
@@ -261,7 +272,7 @@ export class DbStorage implements IStorage {
   async createGroup(data: InsertGroup): Promise<{ group: Group; memberId: string }> {
     const id = randomUUID();
     const memberId = randomUUID();
-    const code = generateCode();
+    const code = generateJoinCode();
     const leaderToken = randomUUID();
 
     const host: GroupMember = {
@@ -400,7 +411,9 @@ export class DbStorage implements IStorage {
 
   async getRestaurantsForGroup(groupId: string): Promise<Restaurant[]> {
     const group = await this.getGroup(groupId);
-    if (!group || !group.preferences) return mockRestaurants;
+    // Don't leak staging fake data to real users — wait for preferences so
+    // the Yelp/Places search runs with real inputs.
+    if (!group || !group.preferences) return [];
 
     const [cached] = await db.select().from(restaurantCache)
       .where(eq(restaurantCache.groupId, groupId));
@@ -473,17 +486,23 @@ export class DbStorage implements IStorage {
     const [cached] = await db.select().from(restaurantCache)
       .where(eq(restaurantCache.groupId, groupId));
     const existingRestaurants = (cached?.restaurants as Restaurant[]) || [];
-    const existingIds = new Set(existingRestaurants.map(r => r.id));
-    
-    const newOffset = existingRestaurants.length;
-    
+    // Compare against the FLATTENED set: a chain location that already lives
+    // inside a cluster card shouldn't be re-added as a fresh restaurant.
+    const flatExisting = flattenClusters(existingRestaurants);
+    const existingIds = new Set(flatExisting.map(r => r.id));
+
+    const newOffset = flatExisting.length;
+
     try {
       const yelpRestaurants = await fetchRestaurantsFromYelp(group.preferences, newOffset);
-      
-      const newRestaurants = yelpRestaurants.filter(r => !existingIds.has(r.id));
-      
-      if (newRestaurants.length > 0) {
-        const combined = [...existingRestaurants, ...newRestaurants];
+      // fetchRestaurantsFromYelp already clusters within its result. Flatten
+      // again so we're combining only individual locations, then re-cluster
+      // across the union — this catches chains whose locations spread across
+      // separate Yelp pages and only become a "flood" in aggregate.
+      const flatNew = flattenClusters(yelpRestaurants).filter(r => !existingIds.has(r.id));
+
+      if (flatNew.length > 0) {
+        const combined = clusterChainRestaurants([...flatExisting, ...flatNew], 3);
         await this.cacheRestaurants(groupId, combined);
         return combined;
       }
@@ -492,6 +511,27 @@ export class DbStorage implements IStorage {
     }
 
     return existingRestaurants;
+  }
+
+  async addRestaurantToGroup(
+    groupId: string,
+    restaurant: Restaurant
+  ): Promise<{ added: boolean; restaurants: Restaurant[] }> {
+    const [cached] = await db
+      .select()
+      .from(restaurantCache)
+      .where(eq(restaurantCache.groupId, groupId));
+    const existing = (cached?.restaurants as Restaurant[]) || [];
+
+    if (existing.some(r => r.id === restaurant.id)) {
+      return { added: false, restaurants: existing };
+    }
+
+    // Prepend so it shows up next in the deck for everyone — a user-suggested
+    // place should jump the queue rather than be buried at the bottom.
+    const combined = [restaurant, ...existing];
+    await this.cacheRestaurants(groupId, combined);
+    return { added: true, restaurants: combined };
   }
 
   async recordSwipe(groupId: string, memberId: string, restaurantId: string, liked: boolean): Promise<Swipe> {
@@ -543,6 +583,51 @@ export class DbStorage implements IStorage {
     const memberIds = group.members.map(m => m.id);
 
     return findUnanimousMatches(memberIds, restaurants, swipes);
+  }
+
+  async getPartialMatchesForGroup(groupId: string) {
+    const group = await this.getGroup(groupId);
+    if (!group) return [];
+
+    const swipes = await this.getSwipesForGroup(groupId);
+    const restaurants = await this.getRestaurantsForGroup(groupId);
+    const memberIds = group.members.map(m => m.id);
+
+    const partials = findPartialMatches(memberIds, restaurants, swipes);
+    const membersById = new Map(group.members.map(m => [m.id, m]));
+
+    return partials.map(({ restaurant, likedByIds }) => {
+      const likedSet = new Set(likedByIds);
+      const likedBy = likedByIds
+        .map(id => membersById.get(id))
+        .filter((m): m is GroupMember => !!m)
+        .map(m => ({ memberId: m.id, memberName: m.name }));
+      const notYetLiked = group.members
+        .filter(m => !likedSet.has(m.id))
+        .map(m => ({ memberId: m.id, memberName: m.name }));
+      return { restaurant, likedBy, notYetLiked };
+    });
+  }
+
+  // Convert any prior swipe on this restaurant to a like (or insert one if
+  // none exists). Used when a holdout taps "I'm in" on a partial-match card.
+  // Drizzle's `onConflictDoUpdate` would work too, but deleting first keeps
+  // the swipedAt timestamp honest as the "moment they actually agreed".
+  async flipSwipeToLike(groupId: string, memberId: string, restaurantId: string): Promise<void> {
+    await db.delete(anonymousGroupSwipes).where(
+      and(
+        eq(anonymousGroupSwipes.groupId, groupId),
+        eq(anonymousGroupSwipes.memberId, memberId),
+        eq(anonymousGroupSwipes.restaurantId, restaurantId),
+      ),
+    );
+    await db.insert(anonymousGroupSwipes).values({
+      id: randomUUID(),
+      groupId,
+      memberId,
+      restaurantId,
+      liked: true,
+    });
   }
 
   async getMembersWhoHaventSwiped(groupId: string, restaurantId: string): Promise<GroupMember[]> {

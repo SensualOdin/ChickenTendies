@@ -1,10 +1,21 @@
 import { useCallback, useRef } from "react";
 import { getAuthHeaders, API_BASE } from "@/lib/queryClient";
 
+// Match-outcome actions emitted from the matches page / final vote. These feed
+// the admin demand report ("50 people wanted Chinese this week").
+export type MatchActionName =
+  | "action_directions"
+  | "action_delivery"
+  | "action_reserve"
+  | "action_calendar"
+  | "action_share"
+  | "action_visited"
+  | "action_final_choice";
+
 interface AnalyticsEvent {
   restaurantId: string;
   restaurantName?: string;
-  action: "swipe_left" | "swipe_right" | "super_like" | "click_details";
+  action: "swipe_left" | "swipe_right" | "super_like" | "click_details" | MatchActionName;
   cuisineTags?: string[];
   priceRange?: string;
   distanceMiles?: number;

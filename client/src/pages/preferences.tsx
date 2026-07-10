@@ -11,6 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { groupPreferencesSchema, type GroupPreferences, type Group, dietaryRestrictions, cuisineTypes, priceRanges } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { getMemberId } from "@/lib/member-id";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, ChevronDown, Flame, Loader2, MapPin, Ruler, UtensilsCrossed, DollarSign, Leaf, Sparkles, Navigation, Star, Target } from "lucide-react";
 import { Link } from "wouter";
@@ -174,11 +175,18 @@ export default function Preferences() {
       let latitude: number;
       let longitude: number;
 
+      // Restaurant search only needs ~city-block accuracy. enableHighAccuracy
+      // forces a true GPS lock (10–30s on cold start); turning it off lets the
+      // OS reuse cell-tower / wifi triangulation, usually under a second.
+      // maximumAge accepts a recent cached position so back-to-back requests
+      // skip the radio entirely.
+      const geoOptions = { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 };
+
       if (isNative()) {
         const position = await Promise.race([
-          Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 10000 }),
+          Geolocation.getCurrentPosition(geoOptions),
           new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error("Location request timed out")), 15000)
+            setTimeout(() => reject(new Error("Location request timed out")), 10000)
           ),
         ]);
         latitude = position.coords.latitude;
@@ -195,10 +203,7 @@ export default function Preferences() {
         }
 
         const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, {
-            enableHighAccuracy: true,
-            timeout: 10000,
-          });
+          navigator.geolocation.getCurrentPosition(resolve, reject, geoOptions);
         });
         latitude = position.coords.latitude;
         longitude = position.coords.longitude;
@@ -252,7 +257,7 @@ export default function Preferences() {
     setUsingGPS(false);
   };
 
-  const memberId = localStorage.getItem("grubmatch-member-id");
+  const memberId = getMemberId(params.id);
 
   const saveMutation = useMutation({
     mutationFn: async (data: GroupPreferences) => {
@@ -403,7 +408,7 @@ export default function Preferences() {
                     <Button
                       type="button"
                       variant={usingGPS ? "default" : "outline"}
-                      className={`w-full ${usingGPS ? "bg-gradient-to-r from-primary to-orange-500" : ""}`}
+                      className="w-full"
                       onClick={usingGPS ? clearGPS : handleFindMe}
                       disabled={isLocating}
                       data-testid="button-find-me"
@@ -708,7 +713,7 @@ export default function Preferences() {
                                           field.onChange(updated);
                                         }}
                                         className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all border-2 ${(field.value || []).includes(cuisine)
-                                          ? "bg-gradient-to-r from-primary to-orange-500 text-white border-transparent"
+                                          ? "bg-primary text-primary-foreground border-transparent"
                                           : "bg-muted hover:border-primary/50 border-transparent"
                                           }`}
                                         data-testid={`button-cuisine-${cuisine}`}
@@ -732,7 +737,7 @@ export default function Preferences() {
 
                   <Button
                     type="submit"
-                    className="w-full bg-gradient-to-r from-primary to-orange-500 shadow-lg shadow-primary/30"
+                    className="w-full rounded-full h-12"
                     size="lg"
                     disabled={saveMutation.isPending}
                     data-testid="button-start-swiping"

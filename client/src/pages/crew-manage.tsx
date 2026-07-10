@@ -25,7 +25,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest, getAuthHeaders, API_BASE, saveMemberBindings } from "@/lib/queryClient";
+import { apiRequest, getAuthHeaders, API_BASE, SHARE_BASE_URL, saveMemberBindings } from "@/lib/queryClient";
+import { setMemberId } from "@/lib/member-id";
 import { ArrowLeft, Crown, UserMinus, UserPlus, Trash2, LogOut, History, Users, Copy, Check, Share2, Send, ChevronDown, ChevronUp, MapPin, Utensils, Play, Zap } from "lucide-react";
 import { motion } from "framer-motion";
 import { useState, useCallback } from "react";
@@ -114,7 +115,7 @@ export default function CrewManage() {
       if (res.ok) {
         saveMemberBindings(res);
         const data = await res.json();
-        localStorage.setItem("grubmatch-member-id", data.memberId);
+        setMemberId(groupId, data.memberId);
         localStorage.setItem("grubmatch-group-id", groupId);
         navigate(`/group/${groupId}`);
       } else {
@@ -149,7 +150,7 @@ export default function CrewManage() {
 
   const copyInviteLink = () => {
     if (crew?.inviteCode) {
-      const link = `${window.location.origin}/join?code=${crew.inviteCode}`;
+      const link = `${SHARE_BASE_URL}/join?code=${crew.inviteCode}`;
       navigator.clipboard.writeText(link);
       setLinkCopied(true);
       toast({ title: "Copied!", description: "Invite link copied to clipboard" });
@@ -160,7 +161,7 @@ export default function CrewManage() {
   const shareInviteCode = async () => {
     if (!crew) return;
     
-    const joinUrl = `${window.location.origin}/join?code=${crew.inviteCode}`;
+    const joinUrl = `${SHARE_BASE_URL}/join?code=${crew.inviteCode}`;
     const shareMessage = `Join my crew "${crew.name}" on ChickenTinders: ${joinUrl}`;
     
     if (navigator.share) {

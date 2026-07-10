@@ -3,7 +3,8 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { apiRequest, queryClient, API_BASE } from "@/lib/queryClient";
+import { apiRequest, queryClient, API_BASE, SHARE_BASE_URL } from "@/lib/queryClient";
+import { getMemberId } from "@/lib/member-id";
 import { openUrl } from "@/lib/open-url";
 import { isNative } from "@/lib/platform";
 import { Share } from "@capacitor/share";
@@ -23,14 +24,23 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
+import { useAnalytics, type MatchActionName } from "@/hooks/use-analytics";
+import { useGroupWebSocket } from "@/hooks/use-group-websocket";
 import { ConversionPrompt } from "@/components/conversion-prompt";
 import { getLeaderToken } from "@/lib/leader-token";
 import confetti from "canvas-confetti";
 import type { Group, Restaurant, WSMessage } from "@shared/schema";
+import { ClusterLocationPicker } from "@/components/cluster-location-picker";
 
 type SessionAction = "directions" | "doordash" | "visited" | "reserve";
 
 type VoteMap = Record<string, { memberId: string; memberName: string }[]>;
+
+type PartialMatch = {
+  restaurant: Restaurant;
+  likedBy: Array<{ memberId: string; memberName: string }>;
+  notYetLiked: Array<{ memberId: string; memberName: string }>;
+};
 
 function generateCalendarUrl(restaurant: Restaurant, groupName: string) {
   const today = new Date();
@@ -79,9 +89,30 @@ export default function MatchesPage() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
   const [votes, setVotes] = useState<VoteMap>({});
   const [pickedRestaurant, setPickedRestaurant] = useState<Restaurant | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
+  // Which match card currently has its voter list expanded inline (tap the
+  // avatar cluster to toggle). Only one at a time to keep the layout tight.
+  const [expandedVotersFor, setExpandedVotersFor] = useState<string | null>(null);
 
-  const memberId = localStorage.getItem("grubmatch-member-id");
+  const memberId = getMemberId(params.id);
+  const { trackEvent, flushNow } = useAnalytics(params.id, memberId || undefined);
+
+  // Demand instrumentation: log which match-card action the user took for this
+  // restaurant. These fire right before the user leaves the app (maps,
+  // DoorDash, calendar...), so flush immediately instead of waiting for the
+  // 5s batch timer.
+  const trackAction = useCallback(
+    (restaurant: Restaurant, action: MatchActionName) => {
+      trackEvent({
+        restaurantId: restaurant.id,
+        restaurantName: restaurant.name,
+        action,
+        cuisineTags: restaurant.cuisine ? [restaurant.cuisine] : undefined,
+        priceRange: restaurant.priceRange,
+      });
+      flushNow();
+    },
+    [trackEvent, flushNow],
+  );
 
   const { data: group, isLoading: groupLoading } = useQuery<Group>({
     queryKey: ["/api/groups", params.id],
@@ -101,89 +132,52 @@ export default function MatchesPage() {
     staleTime: 0,
   });
 
+  // Restaurants ≥2 members liked but not unanimous. Lets a holdout flip their
+  // swipe once they see who's already on board.
+  const { data: partialMatches } = useQuery<PartialMatch[]>({
+    queryKey: ["/api/groups", params.id, "partial-matches"],
+    enabled: !!params.id,
+    staleTime: 0,
+  });
+
   useEffect(() => {
     if (initialVotes?.votes) {
       setVotes(initialVotes.votes);
     }
   }, [initialVotes]);
 
-  // WebSocket connection for real-time vote updates
-  useEffect(() => {
-    if (!params.id || !memberId) return;
-
-    let socket: WebSocket | null = null;
-    let reconnectTimeout: NodeJS.Timeout | null = null;
-    let reconnectAttempts = 0;
-    const maxReconnectAttempts = 10;
-    let isClosedIntentionally = false;
-
-    const connect = () => {
-      const wsBase = isNative()
-        ? "wss://chickentinders.onrender.com"
-        : `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}`;
-
-      const apiUrl = import.meta.env.VITE_API_URL || "";
-      let wsUrl: string;
-      if (!isNative() && apiUrl) {
-        const url = new URL(apiUrl);
-        const wsProtocol = url.protocol === "https:" ? "wss:" : "ws:";
-        wsUrl = `${wsProtocol}//${url.host}/ws?groupId=${params.id}&memberId=${memberId}`;
-      } else {
-        wsUrl = `${wsBase}/ws?groupId=${params.id}&memberId=${memberId}`;
-      }
-      socket = new WebSocket(wsUrl);
-
-      socket.onopen = () => {
-        reconnectAttempts = 0;
-      };
-
-      socket.onmessage = (event) => {
-        const message: WSMessage = JSON.parse(event.data);
-
-        if (message.type === "match_vote") {
-          setVotes(prev => {
-            const next = { ...prev };
-            // Remove member's old vote from any restaurant
-            for (const rId of Object.keys(next)) {
-              next[rId] = next[rId].filter(v => v.memberId !== message.memberId);
-              if (next[rId].length === 0) delete next[rId];
-            }
-            // Add new vote
-            if (!next[message.restaurantId]) next[message.restaurantId] = [];
-            next[message.restaurantId].push({ memberId: message.memberId, memberName: message.memberName });
-            return next;
-          });
-        } else if (message.type === "match_picked") {
-          setPickedRestaurant(message.restaurant);
-          fireConfetti();
-        } else if (message.type === "match_found") {
-          // New match while on this page — refetch
-          queryClient.invalidateQueries({ queryKey: ["/api/groups", params.id, "matches"] });
+  const handleWsMessage = useCallback((message: WSMessage) => {
+    if (message.type === "match_vote") {
+      setVotes(prev => {
+        const next = { ...prev };
+        for (const rId of Object.keys(next)) {
+          next[rId] = next[rId].filter(v => v.memberId !== message.memberId);
+          if (next[rId].length === 0) delete next[rId];
         }
-      };
+        if (!next[message.restaurantId]) next[message.restaurantId] = [];
+        next[message.restaurantId].push({ memberId: message.memberId, memberName: message.memberName });
+        return next;
+      });
+    } else if (message.type === "match_picked") {
+      setPickedRestaurant(message.restaurant);
+      fireConfetti();
+    } else if (message.type === "match_found") {
+      queryClient.invalidateQueries({ queryKey: ["/api/groups", params.id, "matches"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/groups", params.id, "partial-matches"] });
+    } else if (message.type === "swipe_made") {
+      // Any swipe could change who's liked what — refresh the partials list
+      // so holdouts see new "almost matches" appear and existing ones update
+      // their avatar clusters.
+      queryClient.invalidateQueries({ queryKey: ["/api/groups", params.id, "partial-matches"] });
+    }
+  }, [params.id]);
 
-      socket.onclose = () => {
-        if (isClosedIntentionally) return;
-        if (reconnectAttempts < maxReconnectAttempts) {
-          reconnectAttempts++;
-          const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
-          reconnectTimeout = setTimeout(connect, delay);
-        }
-      };
-
-      socket.onerror = () => {};
-
-      wsRef.current = socket;
-    };
-
-    connect();
-
-    return () => {
-      isClosedIntentionally = true;
-      if (reconnectTimeout) clearTimeout(reconnectTimeout);
-      if (socket) socket.close();
-    };
-  }, [params.id, memberId]);
+  useGroupWebSocket({
+    groupId: params.id,
+    memberId: memberId ?? undefined,
+    onMessage: handleWsMessage,
+    label: "Matches",
+  });
 
   // Sort matches by vote count descending
   const sortedMatches = useMemo(() => {
@@ -247,11 +241,41 @@ export default function MatchesPage() {
     },
   });
 
-  const pickMutation = useMutation({
+  const agreePartialMutation = useMutation({
     mutationFn: async (restaurantId: string) => {
+      const response = await apiRequest(
+        "POST",
+        `/api/groups/${params.id}/agree-partial-match`,
+        { memberId, restaurantId },
+      );
+      return response.json() as Promise<{ success: boolean; becameUnanimous: boolean }>;
+    },
+    onSuccess: (data) => {
+      // Server already broadcasts swipe_made + match_found; our WS handler
+      // invalidates both query keys. Toast for the holdout's own feedback.
+      if (data.becameUnanimous) {
+        toast({ title: "Match!", description: "You sealed the deal." });
+      }
+    },
+    onError: () => {
+      toast({
+        title: "Couldn't agree",
+        description: "Something went wrong. Try again!",
+        variant: "destructive",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/groups", params.id, "partial-matches"] });
+    },
+  });
+
+  const pickMutation = useMutation({
+    mutationFn: async ({
+      restaurantId,
+      pickedLocationId,
+    }: { restaurantId: string; pickedLocationId?: string }) => {
       const response = await apiRequest("POST", `/api/groups/${params.id}/pick-match`, {
         memberId,
         restaurantId,
+        pickedLocationId,
       });
       return response.json();
     },
@@ -270,32 +294,40 @@ export default function MatchesPage() {
     },
   });
 
+  // Conversion prompt for anonymous users. Previously this used a 2-second
+  // timer + click/scroll listener, which could fire *during* rapid voting —
+  // interrupting the exact moment of delight. New timing: show it only after
+  // the decision has landed (host picked a restaurant) OR after 20 seconds
+  // of genuine idleness on the page with no voting activity. Either way, the
+  // prompt arrives as celebration, not interruption.
   useEffect(() => {
     if (authLoading || isAuthenticated || !matches?.length) return;
     const dismissed = sessionStorage.getItem(`chickentinders-conversion-dismissed-${params.id}`);
     if (dismissed) return;
 
-    const handleInteraction = () => {
-      setShowConversion(true);
-      cleanup();
-    };
-    const cleanup = () => {
-      document.removeEventListener("click", handleInteraction);
-      document.removeEventListener("scroll", handleInteraction, true);
-    };
-    const timer = setTimeout(() => {
-      document.addEventListener("click", handleInteraction, { once: true });
-      document.addEventListener("scroll", handleInteraction, { once: true, capture: true });
-    }, 2000);
-    return () => {
-      clearTimeout(timer);
-      cleanup();
-    };
-  }, [authLoading, isAuthenticated, matches, params.id]);
+    // 1. If the host has picked, show after the celebration modal has had a
+    //    moment to play (~4s gives confetti and the "IT'S DECIDED!" reveal
+    //    enough breathing room).
+    if (pickedRestaurant) {
+      const t = setTimeout(() => setShowConversion(true), 4000);
+      return () => clearTimeout(t);
+    }
+
+    // 2. Otherwise, wait 20 seconds of idle time. Any voting activity resets
+    //    the timer so users mid-decision aren't interrupted.
+    const IDLE_MS = 20_000;
+    const t = setTimeout(() => setShowConversion(true), IDLE_MS);
+    return () => clearTimeout(t);
+    // Depending on `votes` resets the timer on every vote — exactly the behavior
+    // we want. Once votes stabilize and nobody interacts for 20s, the prompt
+    // surfaces.
+  }, [authLoading, isAuthenticated, matches, params.id, pickedRestaurant, votes]);
 
   const loadMoreMutation = useMutation({
     mutationFn: async () => {
-      const response = await apiRequest("POST", `/api/groups/${params.id}/restaurants/load-more`);
+      const response = await apiRequest("POST", `/api/groups/${params.id}/restaurants/load-more`, {
+        memberId,
+      });
       return response.json();
     },
     onSuccess: async () => {
@@ -313,6 +345,10 @@ export default function MatchesPage() {
       return response.json();
     },
     onSuccess: async () => {
+      // New session, new deck — clear the local swipe history for this group,
+      // otherwise the fresh deck is filtered by last round's swiped ids and
+      // shows up empty (or missing most cards).
+      localStorage.removeItem(`swiped-${params.id}`);
       await queryClient.invalidateQueries({ queryKey: ["/api/groups", params.id] });
       await queryClient.invalidateQueries({ queryKey: ["/api/groups", params.id, "restaurants"] });
       setLocation(`/group/${params.id}/swipe`);
@@ -328,6 +364,10 @@ export default function MatchesPage() {
 
   const completeSession = useCallback(async (restaurantId?: string, action?: SessionAction) => {
     if (sessionCompleted || !params.id) return;
+    // Anonymous groups have no crew session to complete — the endpoint
+    // requires auth, so skip it entirely instead of surfacing a spurious
+    // failure toast to anonymous users.
+    if (!isAuthenticated) return;
     try {
       await apiRequest("POST", `/api/crews/${params.id}/complete-session`, {
         restaurantId,
@@ -336,15 +376,21 @@ export default function MatchesPage() {
       setSessionCompleted(true);
       queryClient.invalidateQueries({ queryKey: ["/api/crews"] });
     } catch {
+      toast({
+        title: "Couldn't wrap up the session",
+        description: "Your session history didn't save. Try again!",
+        variant: "destructive",
+      });
     }
-  }, [sessionCompleted, params.id]);
+  }, [sessionCompleted, params.id, isAuthenticated, toast]);
 
   const handleShare = useCallback(async (restaurant: Restaurant) => {
+    trackAction(restaurant, "action_share");
     const rating = (restaurant.combinedRating ?? restaurant.rating).toFixed(1);
     const inviteCode = (group as any)?.inviteCode;
     const shareUrl = inviteCode
-      ? `${window.location.origin}/crew/join/${inviteCode}`
-      : window.location.origin;
+      ? `${SHARE_BASE_URL}/crew/join/${inviteCode}`
+      : SHARE_BASE_URL;
     const shareText = `We matched on ${restaurant.name} (${rating} stars, ${restaurant.cuisine}, ${restaurant.priceRange}) on ChickenTinders!${inviteCode ? " Join our crew:" : ""}`;
 
     if (isNative()) {
@@ -379,7 +425,7 @@ export default function MatchesPage() {
         });
       }
     }
-  }, [params.id, toast, group]);
+  }, [params.id, toast, group, trackAction]);
 
   const isLoading = groupLoading || matchesLoading;
 
@@ -429,11 +475,12 @@ export default function MatchesPage() {
               <div className="flex flex-col gap-3">
                 <Button
                   size="lg"
-                  className="w-full bg-gradient-to-r from-primary to-orange-500"
+                  className="w-full"
                   onClick={() => {
                     const destination = pickedRestaurant.latitude && pickedRestaurant.longitude
                       ? `${pickedRestaurant.latitude},${pickedRestaurant.longitude}`
                       : encodeURIComponent(pickedRestaurant.address);
+                    trackAction(pickedRestaurant, "action_directions");
                     openUrl(`https://www.google.com/maps/dir/?api=1&destination=${destination}`);
                     completeSession(pickedRestaurant.id, "directions");
                   }}
@@ -532,7 +579,11 @@ export default function MatchesPage() {
                 const voteCount = restaurantVotes.length;
                 const iVoted = myVoteRestaurantId === restaurant.id;
                 const isTopPick = restaurant.id === topVotedId;
-                const showLockIn = isHost && (isTopPick || sortedMatches.length === 1);
+                // Host can lock in any match now — not just the top-voted one.
+                // Previously hiding the button on non-leaders created confusion
+                // for hosts deciding between tied options, and made non-hosts
+                // think their votes for anything but the top were wasted.
+                const showLockIn = isHost;
 
                 return (
                   <motion.div
@@ -595,66 +646,162 @@ export default function MatchesPage() {
                             <p className="text-sm text-muted-foreground mb-3 line-clamp-2">{restaurant.description}</p>
                           )}
 
-                          {/* Vote section */}
-                          <div className="flex items-center gap-3 mb-3">
+                          {/* Vote section. The avatar cluster is an inline toggle
+                              rather than a Radix Popover: the Popover approach
+                              failed silently on both web and mobile (likely
+                              interaction between Radix's Slot event attachment
+                              and the parent Framer Motion `popLayout` animations
+                              that re-key children on every vote change). Inline
+                              state-based disclosure is simpler, has no portal,
+                              and can't be clipped by mobile viewports. */}
+                          <div className="flex items-center gap-3 mb-3 flex-wrap">
                             <Button
                               size="sm"
                               variant={iVoted ? "default" : "outline"}
                               className={iVoted
-                                ? "bg-gradient-to-r from-primary to-orange-500 text-white"
+                                ? "text-white"
                                 : "border-primary/30 text-primary hover:bg-primary/10"
                               }
                               onClick={() => voteMutation.mutate(restaurant.id)}
                               disabled={voteMutation.isPending}
+                              data-testid={`button-vote-${restaurant.id}`}
                             >
                               <Flame className="w-4 h-4 mr-1" />
-                              {iVoted ? "Voted!" : "Vote"}
+                              {iVoted ? "You voted" : "Vote"}
                             </Button>
                             {voteCount > 0 && (
-                              <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                className="flex items-center gap-1.5 rounded-md px-1 py-0.5 hover:bg-muted transition-colors cursor-pointer"
+                                data-testid={`button-voters-${restaurant.id}`}
+                                aria-label={`${voteCount} voter${voteCount !== 1 ? "s" : ""}, tap to ${
+                                  expandedVotersFor === restaurant.id ? "hide" : "see"
+                                } names`}
+                                aria-expanded={expandedVotersFor === restaurant.id}
+                                onClick={() =>
+                                  setExpandedVotersFor((prev) =>
+                                    prev === restaurant.id ? null : restaurant.id,
+                                  )
+                                }
+                              >
                                 <span className="text-sm font-bold text-foreground">{voteCount}</span>
                                 <span className="text-xs text-muted-foreground">vote{voteCount !== 1 ? "s" : ""}</span>
                                 <div className="flex -space-x-1 ml-1">
-                                  {restaurantVotes.slice(0, 4).map((v, i) => (
-                                    <div
-                                      key={v.memberId}
-                                      className="w-5 h-5 rounded-full bg-primary/20 border border-background flex items-center justify-center text-[8px] font-bold text-primary"
-                                      title={v.memberName}
-                                    >
-                                      {v.memberName.charAt(0).toUpperCase()}
-                                    </div>
-                                  ))}
+                                  {restaurantVotes.slice(0, 4).map((v) => {
+                                    const isMe = v.memberId === memberId;
+                                    return (
+                                      <div
+                                        key={v.memberId}
+                                        className={`w-5 h-5 rounded-full border flex items-center justify-center text-[8px] font-bold ${
+                                          isMe
+                                            ? "bg-primary text-white border-primary ring-2 ring-primary/30"
+                                            : "bg-primary/20 text-primary border-background"
+                                        }`}
+                                      >
+                                        {v.memberName.charAt(0).toUpperCase()}
+                                      </div>
+                                    );
+                                  })}
                                   {restaurantVotes.length > 4 && (
                                     <div className="w-5 h-5 rounded-full bg-muted border border-background flex items-center justify-center text-[8px] font-bold text-muted-foreground">
                                       +{restaurantVotes.length - 4}
                                     </div>
                                   )}
                                 </div>
-                              </div>
+                              </button>
                             )}
                           </div>
 
-                          {/* Lock It In button for host */}
-                          {showLockIn && (
-                            <Button
-                              size="sm"
-                              className="w-full mb-3 bg-gradient-to-r from-yellow-500 to-orange-500 text-white font-bold shadow-lg"
-                              onClick={() => pickMutation.mutate(restaurant.id)}
-                              disabled={pickMutation.isPending}
-                            >
-                              {pickMutation.isPending ? (
-                                <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                              ) : (
-                                <Lock className="w-4 h-4 mr-1" />
-                              )}
-                              Lock It In!
-                            </Button>
+                          {/* Expanded voter list — inline disclosure, animated. */}
+                          <AnimatePresence initial={false}>
+                            {expandedVotersFor === restaurant.id && voteCount > 0 && (
+                              <motion.div
+                                key="voters-list"
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: "auto", opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                transition={{ duration: 0.18 }}
+                                className="overflow-hidden mb-3"
+                              >
+                                <div className="rounded-md border bg-muted/30 px-3 py-2">
+                                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold mb-1">
+                                    Voters
+                                  </p>
+                                  <ul className="space-y-0.5 text-sm">
+                                    {restaurantVotes.map((v) => {
+                                      const isMe = v.memberId === memberId;
+                                      return (
+                                        <li
+                                          key={v.memberId}
+                                          className="flex items-center gap-2"
+                                        >
+                                          <span
+                                            className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                                              isMe
+                                                ? "bg-primary text-white"
+                                                : "bg-primary/20 text-primary"
+                                            }`}
+                                          >
+                                            {v.memberName.charAt(0).toUpperCase()}
+                                          </span>
+                                          <span className={isMe ? "font-bold" : ""}>
+                                            {v.memberName}
+                                            {isMe ? " (you)" : ""}
+                                          </span>
+                                        </li>
+                                      );
+                                    })}
+                                  </ul>
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+
+                          {/* Cluster (multi-location chain) — host picks
+                              the specific storefront before locking. Shown
+                              to non-hosts too so they can see "3 locations
+                              · host will pick one" and aren't confused
+                              about why their lock button vanished. */}
+                          {restaurant.locations && restaurant.locations.length > 1 ? (
+                            <ClusterLocationPicker
+                              restaurant={restaurant}
+                              isHost={isHost}
+                              isTopPick={isTopPick}
+                              isPending={pickMutation.isPending}
+                              onLock={(pickedLocationId) =>
+                                pickMutation.mutate({ restaurantId: restaurant.id, pickedLocationId })
+                              }
+                            />
+                          ) : (
+                            /* Lock It In — single-location matches still use the
+                               original one-tap button. Host only. */
+                            showLockIn && (
+                              <Button
+                                size="sm"
+                                variant={isTopPick ? "default" : "outline"}
+                                className={
+                                  isTopPick
+                                    ? "w-full mb-3 bg-gradient-to-r from-yellow-500 to-orange-500 text-white font-bold shadow-lg"
+                                    : "w-full mb-3 border-yellow-500/40 text-yellow-700 dark:text-yellow-400 hover:bg-yellow-500/10"
+                                }
+                                onClick={() => pickMutation.mutate({ restaurantId: restaurant.id })}
+                                disabled={pickMutation.isPending}
+                                data-testid={`button-lock-${restaurant.id}`}
+                              >
+                                {pickMutation.isPending ? (
+                                  <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                                ) : (
+                                  <Lock className="w-4 h-4 mr-1" />
+                                )}
+                                {isTopPick ? "Lock It In!" : "Lock this one in"}
+                              </Button>
+                            )
                           )}
 
                           {/* Non-host guidance after voting */}
                           {!isHost && iVoted && (
                             <p className="text-xs text-muted-foreground mb-3 italic">
-                              Waiting for the host to lock it in...
+                              Votes help the host decide — they'll make the final call.
                             </p>
                           )}
 
@@ -667,12 +814,13 @@ export default function MatchesPage() {
                             <div className="flex items-center gap-2 mt-2 flex-wrap">
                               <Button
                                 size="sm"
-                                className="bg-gradient-to-r from-primary to-orange-500 text-xs"
+                                className="text-xs"
                                 data-testid={`button-directions-${restaurant.id}`}
                                 onClick={() => {
                                   const destination = restaurant.latitude && restaurant.longitude
                                     ? `${restaurant.latitude},${restaurant.longitude}`
                                     : encodeURIComponent(restaurant.address);
+                                  trackAction(restaurant, "action_directions");
                                   openUrl(`https://www.google.com/maps/dir/?api=1&destination=${destination}`);
                                   completeSession(restaurant.id, "directions");
                                 }}
@@ -699,6 +847,7 @@ export default function MatchesPage() {
                                 <DropdownMenuContent align="end">
                                   <DropdownMenuItem
                                     onClick={() => {
+                                      trackAction(restaurant, "action_delivery");
                                       const query = encodeURIComponent(restaurant.name);
                                       openUrl(`https://www.doordash.com/search/store/${query}/`);
                                       completeSession(restaurant.id, "doordash");
@@ -710,6 +859,7 @@ export default function MatchesPage() {
                                   {restaurant.yelpUrl && (
                                     <DropdownMenuItem
                                       onClick={() => {
+                                        trackAction(restaurant, "action_reserve");
                                         openUrl(restaurant.yelpUrl!);
                                         completeSession(restaurant.id, "reserve");
                                       }}
@@ -720,6 +870,7 @@ export default function MatchesPage() {
                                   )}
                                   <DropdownMenuItem
                                     onClick={() => {
+                                      trackAction(restaurant, "action_calendar");
                                       openUrl(generateCalendarUrl(restaurant, group.name));
                                     }}
                                   >
@@ -728,6 +879,7 @@ export default function MatchesPage() {
                                   </DropdownMenuItem>
                                   <DropdownMenuItem
                                     onClick={() => {
+                                      trackAction(restaurant, "action_visited");
                                       setVisitedRestaurantId(restaurant.id);
                                       completeSession(restaurant.id, "visited");
                                       toast({
@@ -770,7 +922,7 @@ export default function MatchesPage() {
                   Keep swiping — your perfect spot is waiting!
                 </p>
                 <Button
-                  className="bg-gradient-to-r from-primary to-orange-500"
+                  className=""
                   data-testid="button-back-to-swiping"
                   onClick={() => loadMoreMutation.mutate()}
                   disabled={loadMoreMutation.isPending}
@@ -792,6 +944,142 @@ export default function MatchesPage() {
           </motion.div>
         )}
 
+        {/* Almost matches — restaurants ≥2 people liked but not unanimous.
+            Surfaces the names of who's in so a holdout can flip their swipe. */}
+        {partialMatches && partialMatches.length > 0 && group && (
+          <motion.div
+            className="mt-8"
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.4 }}
+          >
+            <div className="mb-3">
+              <h2 className="text-lg font-bold flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-primary" />
+                Almost there
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                Tap "I'm in" to seal these
+              </p>
+            </div>
+            <div className="space-y-2">
+              {partialMatches.map((pm) => {
+                const total = pm.likedBy.length + pm.notYetLiked.length;
+                const iAlreadyLiked = pm.likedBy.some(m => m.memberId === memberId);
+                const inFlight = agreePartialMutation.isPending
+                  && agreePartialMutation.variables === pm.restaurant.id;
+
+                return (
+                  <Card
+                    key={pm.restaurant.id}
+                    className="overflow-hidden border-2 border-dashed border-primary/30"
+                  >
+                    <div className="flex items-stretch">
+                      <div
+                        className="w-20 sm:w-28 shrink-0 bg-cover bg-center"
+                        style={{ backgroundImage: `url(${pm.restaurant.imageUrl})` }}
+                      />
+                      <CardContent className="flex-1 p-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <h3 className="text-base font-bold truncate" data-testid={`text-partial-name-${pm.restaurant.id}`}>
+                              {pm.restaurant.name}
+                            </h3>
+                            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                              <span>{pm.restaurant.cuisine}</span>
+                              <span>•</span>
+                              <span>{pm.restaurant.priceRange}</span>
+                              <span>•</span>
+                              <div className="flex items-center gap-0.5">
+                                <Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />
+                                <span>{(pm.restaurant.combinedRating ?? pm.restaurant.rating).toFixed(1)}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <Badge variant="outline" className="text-[10px] shrink-0">
+                            {pm.likedBy.length}/{total}
+                          </Badge>
+                        </div>
+
+                        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                          <span className="text-muted-foreground">In:</span>
+                          <div className="flex -space-x-1">
+                            {pm.likedBy.map((m) => {
+                              const isMe = m.memberId === memberId;
+                              return (
+                                <div
+                                  key={m.memberId}
+                                  title={`${m.memberName}${isMe ? " (you)" : ""}`}
+                                  className={`w-5 h-5 rounded-full border-2 border-background flex items-center justify-center text-[9px] font-bold ${
+                                    isMe
+                                      ? "bg-primary text-white ring-1 ring-primary/40"
+                                      : "bg-green-500/80 text-white"
+                                  }`}
+                                >
+                                  {m.memberName.charAt(0).toUpperCase()}
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <span className="text-muted-foreground ml-1">
+                            {pm.likedBy.map(m => m.memberId === memberId ? "You" : m.memberName).join(", ")}
+                          </span>
+                        </div>
+
+                        {pm.notYetLiked.length > 0 && (
+                          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+                            <span className="text-muted-foreground">Waiting on:</span>
+                            <div className="flex -space-x-1">
+                              {pm.notYetLiked.map((m) => (
+                                <div
+                                  key={m.memberId}
+                                  title={m.memberName}
+                                  className="w-5 h-5 rounded-full border-2 border-background bg-muted text-muted-foreground flex items-center justify-center text-[9px] font-bold opacity-70"
+                                >
+                                  {m.memberName.charAt(0).toUpperCase()}
+                                </div>
+                              ))}
+                            </div>
+                            <span className="text-muted-foreground ml-1">
+                              {pm.notYetLiked.map(m => m.memberName).join(", ")}
+                            </span>
+                          </div>
+                        )}
+
+                        <div className="mt-3">
+                          {iAlreadyLiked ? (
+                            <span className="text-xs text-muted-foreground flex items-center gap-1">
+                              <Check className="w-3 h-3 text-green-500" />
+                              You're in — waiting on the rest
+                            </span>
+                          ) : (
+                            <Button
+                              size="sm"
+                              onClick={() => agreePartialMutation.mutate(pm.restaurant.id)}
+                              disabled={inFlight}
+                              data-testid={`button-agree-partial-${pm.restaurant.id}`}
+                              className="h-8"
+                            >
+                              {inFlight ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <>
+                                  <Heart className="w-3 h-3 mr-1" />
+                                  I'm in
+                                </>
+                              )}
+                            </Button>
+                          )}
+                        </div>
+                      </CardContent>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+
         {sortedMatches.length > 0 && (
           <motion.div
             className="mt-8 text-center"
@@ -804,7 +1092,7 @@ export default function MatchesPage() {
             </p>
             <div className="flex flex-col sm:flex-row gap-2 justify-center">
               <Button
-                className="bg-gradient-to-r from-primary to-orange-500"
+                className=""
                 data-testid="button-continue-swiping"
                 onClick={() => setLocation(`/group/${params.id}/swipe`)}
               >
@@ -846,7 +1134,7 @@ export default function MatchesPage() {
               <p className="text-sm text-muted-foreground mb-4">Start a new session with your crew</p>
               <div className="flex flex-col sm:flex-row gap-2 justify-center">
                 <Button
-                  className="bg-gradient-to-r from-primary to-orange-500"
+                  className=""
                   onClick={() => rematchMutation.mutate()}
                   disabled={rematchMutation.isPending}
                 >

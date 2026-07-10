@@ -79,7 +79,9 @@ export const sessionMatches = pgTable("session_matches", {
   restaurantId: varchar("restaurant_id").notNull(),
   restaurantData: jsonb("restaurant_data"),
   matchedAt: timestamp("matched_at").defaultNow(),
-});
+}, (table) => [
+  uniqueIndex("session_matches_session_restaurant_unique_idx").on(table.sessionId, table.restaurantId),
+]);
 
 export type SessionMatch = typeof sessionMatches.$inferSelect;
 export type InsertSessionMatch = typeof sessionMatches.$inferInsert;
@@ -126,6 +128,45 @@ export const groupPushSubscriptions = pgTable("group_push_subscriptions", {
 
 export type GroupPushSubscription = typeof groupPushSubscriptions.$inferSelect;
 export type InsertGroupPushSubscription = typeof groupPushSubscriptions.$inferInsert;
+
+// Native push tokens (FCM for Android, APNs for iOS) registered by Capacitor's
+// PushNotifications plugin. Distinct from push_subscriptions because the
+// transport is different — these go through Firebase Admin SDK rather than
+// the Web Push protocol — and the credential shape is just an opaque token.
+export const nativePushSubscriptions = pgTable("native_push_subscriptions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  token: text("token").notNull().unique(),
+  platform: varchar("platform", { length: 10 }).notNull(), // "android" | "ios"
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("native_push_user_idx").on(table.userId),
+]);
+
+export type NativePushSubscription = typeof nativePushSubscriptions.$inferSelect;
+export type InsertNativePushSubscription = typeof nativePushSubscriptions.$inferInsert;
+
+// Per-group native push tokens. Distinct from native_push_subscriptions
+// (which is user-scoped, for authenticated members of crews) because
+// anonymous-party members don't have a user_id but still want push when the
+// host starts a session. Keyed by (groupId, memberId) so we can reach the
+// exact device a tester is using even if they joined as a guest. The unique
+// constraint includes the token so a single device registering for the same
+// (group, member) twice is a no-op.
+export const groupNativePushSubscriptions = pgTable("group_native_push_subscriptions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  groupId: varchar("group_id").notNull(),
+  memberId: varchar("member_id").notNull(),
+  token: text("token").notNull(),
+  platform: varchar("platform", { length: 10 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("group_native_push_group_idx").on(table.groupId),
+  index("group_native_push_token_idx").on(table.token),
+]);
+
+export type GroupNativePushSubscription = typeof groupNativePushSubscriptions.$inferSelect;
+export type InsertGroupNativePushSubscription = typeof groupNativePushSubscriptions.$inferInsert;
 
 export const diningHistory = pgTable("dining_history", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

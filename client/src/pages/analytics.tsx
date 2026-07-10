@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, BarChart3, TrendingUp, TrendingDown, MousePointerClick, Star, ThumbsDown, ThumbsUp, Clock, Calendar, Search, ShieldAlert, ArrowRight, Users, Flame, Share2, UserPlus, Trash2 } from "lucide-react";
+import { ArrowLeft, BarChart3, TrendingUp, TrendingDown, MousePointerClick, Star, ThumbsDown, ThumbsUp, Clock, Calendar, Search, ShieldAlert, ArrowRight, Users, Flame, Share2, UserPlus, Trash2, Printer, Heart, MapPin } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from "recharts";
 import { useState, useEffect } from "react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -81,6 +81,70 @@ interface LifecycleDashboardData {
   inviteFunnel: { sent: number; accepted: number; rate: number };
 }
 
+// Shared contract with GET /api/analytics/report?days=N (see
+// docs/plans/2026-07-05-demand-report.md).
+interface DemandReportData {
+  windowDays: number;
+  generatedAt: string;
+  totals: {
+    swipes: number;
+    likes: number;
+    superLikes: number;
+    matches: number;
+    actions: number;
+    uniqueUsers: number;
+  };
+  cuisines: Array<{
+    cuisine: string;
+    swipes: number;
+    likes: number;
+    likeRate: number;
+    matches: number;
+    actions: number;
+  }>;
+  topRestaurants: Array<{
+    restaurantId: string;
+    name: string;
+    likes: number;
+    matches: number;
+    actions: number;
+    actionBreakdown: Record<string, number>;
+  }>;
+  actionBreakdown: Record<string, number>;
+  byDayOfWeek: Array<{ day: number; swipes: number }>;
+  byHourOfDay: Array<{ hour: number; swipes: number }>;
+}
+
+const ACTION_LABELS: Record<string, string> = {
+  action_directions: "Directions",
+  action_delivery: "Delivery",
+  action_reserve: "Reserve",
+  action_calendar: "Calendar",
+  action_share: "Share",
+  action_visited: "Visited",
+  action_final_choice: "Final Choice",
+};
+
+function actionLabel(action: string): string {
+  return ACTION_LABELS[action] ?? action.replace(/^action_/, "").replace(/_/g, " ");
+}
+
+function DemandTotalCard({ label, value, icon: Icon }: { label: string; value: number; icon: React.ElementType }) {
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex items-center gap-2 text-muted-foreground mb-1">
+          <Icon className="h-4 w-4" />
+          <span className="text-xs font-medium">{label}</span>
+        </div>
+        <p className="text-2xl font-bold" data-testid={`text-demand-total-${label.toLowerCase().replace(/\s+/g, "-")}`}>
+          {value.toLocaleString()}
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
 function MetricCard({ label, thisWeek, lastWeek, icon: Icon }: { label: string; thisWeek: number; lastWeek: number; icon: React.ElementType }) {
   const diff = thisWeek - lastWeek;
   const isUp = diff > 0;
@@ -147,6 +211,7 @@ export default function AnalyticsPage() {
   const { user, isLoading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
   const [days, setDays] = useState("30");
+  const [reportDays, setReportDays] = useState<"7" | "30">("7");
   const [cuisineSearch, setCuisineSearch] = useState("");
   const [restaurantSearch, setRestaurantSearch] = useState("");
   const [activeTab, setActiveTab] = useState("swipes");
@@ -186,6 +251,11 @@ export default function AnalyticsPage() {
 
   const { data: growthData, isLoading: growthLoading } = useQuery<LifecycleDashboardData>({
     queryKey: ["/api/admin/lifecycle-dashboard"],
+    enabled: isAdmin,
+  });
+
+  const { data: report, isLoading: reportLoading, isError: reportError } = useQuery<DemandReportData>({
+    queryKey: ["/api/analytics/report", `?days=${reportDays}`],
     enabled: isAdmin,
   });
 
@@ -244,9 +314,31 @@ export default function AnalyticsPage() {
     disliked: Number(p.disliked),
   })) || [];
 
+  // Demand report derived data — same shaping approach as the swipes tab.
+  const reportDailyData = Array.from({ length: 7 }, (_, i) => {
+    const found = report?.byDayOfWeek?.find(d => Number(d.day) === i);
+    return { day: DAY_NAMES[i], swipes: found ? Number(found.swipes) : 0 };
+  });
+
+  const reportHourlyData = Array.from({ length: 24 }, (_, i) => {
+    const found = report?.byHourOfDay?.find(h => Number(h.hour) === i);
+    return {
+      hour: i === 0 ? "12a" : i < 12 ? `${i}a` : i === 12 ? "12p" : `${i - 12}p`,
+      swipes: found ? Number(found.swipes) : 0,
+    };
+  });
+
+  const reportEmpty =
+    !!report &&
+    report.totals.swipes === 0 &&
+    report.totals.matches === 0 &&
+    report.totals.actions === 0;
+
+  const reportActionEntries = Object.entries(report?.actionBreakdown ?? {}).sort((a, b) => b[1] - a[1]);
+
   return (
-    <div className="min-h-screen bg-background safe-top safe-x">
-      <header className="sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <div className="min-h-screen bg-background safe-x">
+      <header className="safe-top sticky top-0 z-50 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto flex items-center justify-between gap-2 px-4 py-3">
           <div className="flex items-center gap-2 flex-wrap">
             <Link href="/dashboard">
@@ -293,6 +385,7 @@ export default function AnalyticsPage() {
           <TabsList>
             <TabsTrigger value="swipes" data-testid="tab-swipes">Swipes</TabsTrigger>
             <TabsTrigger value="growth" data-testid="tab-growth">Growth</TabsTrigger>
+            <TabsTrigger value="demand" data-testid="tab-demand">Demand</TabsTrigger>
           </TabsList>
 
           <TabsContent value="swipes" className="space-y-6 mt-4">
@@ -706,6 +799,261 @@ export default function AnalyticsPage() {
               </>
             ) : (
               <p className="text-sm text-muted-foreground text-center py-8">No growth data available</p>
+            )}
+          </TabsContent>
+
+          <TabsContent value="demand" className="space-y-6 mt-4">
+            {/* Print stylesheet: only the report section prints (hides nav,
+                tabs, toggles). Lives inside this TabsContent so printing from
+                other tabs is unaffected — Radix unmounts inactive tabs. */}
+            <style>{`
+              @media print {
+                body * { visibility: hidden; }
+                #demand-report-print, #demand-report-print * { visibility: visible; }
+                #demand-report-print { position: absolute; left: 0; top: 0; width: 100%; padding: 16px; }
+                .demand-print-hide { display: none !important; }
+              }
+            `}</style>
+
+            <div className="flex items-center justify-between gap-2 flex-wrap demand-print-hide">
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant={reportDays === "7" ? "default" : "outline"}
+                  onClick={() => setReportDays("7")}
+                  data-testid="button-report-7d"
+                >
+                  Last 7 days
+                </Button>
+                <Button
+                  size="sm"
+                  variant={reportDays === "30" ? "default" : "outline"}
+                  onClick={() => setReportDays("30")}
+                  data-testid="button-report-30d"
+                >
+                  Last 30 days
+                </Button>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => window.print()}
+                disabled={reportLoading || !report || reportEmpty}
+                data-testid="button-print-report"
+              >
+                <Printer className="h-4 w-4 mr-2" />
+                Print report
+              </Button>
+            </div>
+
+            {reportLoading ? (
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+                {[...Array(5)].map((_, i) => (
+                  <Card key={i}>
+                    <CardContent className="p-4">
+                      <div className="h-16 animate-pulse bg-muted rounded" />
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : reportError ? (
+              <p className="text-sm text-muted-foreground text-center py-8" data-testid="text-demand-error">
+                Couldn't load the demand report. Try again in a bit.
+              </p>
+            ) : !report || reportEmpty ? (
+              <Card>
+                <CardContent className="p-8 text-center space-y-2">
+                  <BarChart3 className="w-10 h-10 mx-auto text-muted-foreground" />
+                  <h3 className="font-bold">No demand data yet</h3>
+                  <p className="text-sm text-muted-foreground" data-testid="text-demand-empty">
+                    Once people start swiping and acting on matches, this report fills in with
+                    cuisine demand and restaurant outcomes.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div id="demand-report-print" className="space-y-6">
+                <div>
+                  <h2 className="text-xl font-bold flex items-center gap-2">
+                    <Flame className="h-5 w-5 text-primary" />
+                    ChickenTinders Demand Report
+                  </h2>
+                  <p className="text-sm text-muted-foreground" data-testid="text-report-window">
+                    Last {report.windowDays} days &middot; generated{" "}
+                    {new Date(report.generatedAt).toLocaleDateString(undefined, {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                    })}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+                  <DemandTotalCard label="Swipes" value={report.totals.swipes} icon={MousePointerClick} />
+                  <DemandTotalCard label="Likes" value={report.totals.likes + report.totals.superLikes} icon={ThumbsUp} />
+                  <DemandTotalCard label="Matches" value={report.totals.matches} icon={Heart} />
+                  <DemandTotalCard label="Actions" value={report.totals.actions} icon={MapPin} />
+                  <DemandTotalCard label="Unique Users" value={report.totals.uniqueUsers} icon={Users} />
+                </div>
+
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+                    <CardTitle className="text-base">Cuisine Demand</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {report.cuisines.length > 0 ? (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm" data-testid="table-cuisine-demand">
+                          <thead>
+                            <tr className="border-b">
+                              <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Cuisine</th>
+                              <th className="text-right py-2 px-4 font-medium text-muted-foreground">Swipes</th>
+                              <th className="text-right py-2 px-4 font-medium text-muted-foreground">Likes</th>
+                              <th className="text-right py-2 px-4 font-medium text-muted-foreground">Like Rate</th>
+                              <th className="text-right py-2 px-4 font-medium text-muted-foreground">Matches</th>
+                              <th className="text-right py-2 pl-4 font-medium text-muted-foreground">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {report.cuisines.map((c, i) => (
+                              <tr key={c.cuisine} className="border-b last:border-0" data-testid={`row-cuisine-${i}`}>
+                                <td className="py-2 pr-4 font-medium capitalize">{c.cuisine}</td>
+                                <td className="text-right py-2 px-4">{c.swipes.toLocaleString()}</td>
+                                <td className="text-right py-2 px-4">{c.likes.toLocaleString()}</td>
+                                <td className="text-right py-2 px-4">{(c.likeRate * 100).toFixed(0)}%</td>
+                                <td className="text-right py-2 px-4">{c.matches.toLocaleString()}</td>
+                                <td className="text-right py-2 pl-4">{c.actions.toLocaleString()}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground text-center py-8">No cuisine data yet</p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <Calendar className="h-4 w-4" />
+                        Demand by Day
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {reportDailyData.some(d => d.swipes > 0) ? (
+                        <ResponsiveContainer width="100%" height={250}>
+                          <BarChart data={reportDailyData}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="day" />
+                            <YAxis />
+                            <Tooltip />
+                            <Bar dataKey="swipes" name="Swipes" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <div className="flex items-center justify-center h-[250px] text-muted-foreground text-sm">
+                          No daily data yet
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <Clock className="h-4 w-4" />
+                        Demand by Hour
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {reportHourlyData.some(h => h.swipes > 0) ? (
+                        <ResponsiveContainer width="100%" height={250}>
+                          <BarChart data={reportHourlyData}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="hour" tick={{ fontSize: 10 }} interval={2} />
+                            <YAxis />
+                            <Tooltip />
+                            <Bar dataKey="swipes" name="Swipes" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <div className="flex items-center justify-center h-[250px] text-muted-foreground text-sm">
+                          No hourly data yet
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+                    <CardTitle className="text-base">Top Restaurants</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {report.topRestaurants.length > 0 ? (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm" data-testid="table-top-restaurants">
+                          <thead>
+                            <tr className="border-b">
+                              <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Restaurant</th>
+                              <th className="text-right py-2 px-4 font-medium text-muted-foreground">Likes</th>
+                              <th className="text-right py-2 px-4 font-medium text-muted-foreground">Matches</th>
+                              <th className="text-right py-2 px-4 font-medium text-muted-foreground">Actions</th>
+                              <th className="text-left py-2 pl-4 font-medium text-muted-foreground">Action Detail</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {report.topRestaurants.map((r, i) => (
+                              <tr key={r.restaurantId} className="border-b last:border-0" data-testid={`row-demand-restaurant-${i}`}>
+                                <td className="py-2 pr-4 font-medium">{r.name || r.restaurantId}</td>
+                                <td className="text-right py-2 px-4">{r.likes.toLocaleString()}</td>
+                                <td className="text-right py-2 px-4">{r.matches.toLocaleString()}</td>
+                                <td className="text-right py-2 px-4">{r.actions.toLocaleString()}</td>
+                                <td className="py-2 pl-4">
+                                  <div className="flex items-center gap-1 flex-wrap">
+                                    {Object.entries(r.actionBreakdown ?? {})
+                                      .sort((a, b) => b[1] - a[1])
+                                      .map(([action, count]) => (
+                                        <Badge key={action} variant="secondary" className="text-xs">
+                                          {actionLabel(action)} {count}
+                                        </Badge>
+                                      ))}
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground text-center py-8">No restaurant data yet</p>
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+                    <CardTitle className="text-base">Action Breakdown</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {reportActionEntries.length > 0 ? (
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                        {reportActionEntries.map(([action, count]) => (
+                          <div key={action} className="text-center p-3 rounded-md bg-muted/50" data-testid={`stat-action-${action}`}>
+                            <p className="text-xl font-bold">{count.toLocaleString()}</p>
+                            <p className="text-xs text-muted-foreground">{actionLabel(action)}</p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground text-center py-8">No match actions yet</p>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
             )}
           </TabsContent>
         </Tabs>

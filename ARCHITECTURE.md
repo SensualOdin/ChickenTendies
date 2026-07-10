@@ -30,7 +30,6 @@ Preferred communication style: Simple, everyday language.
 - **Database**: PostgreSQL (configured via DATABASE_URL environment variable)
 - **Schema Location**: `shared/schema.ts` contains all database schemas and Zod validation
 - **Migrations**: Drizzle Kit manages database migrations in `./migrations` directory
-- **Session Storage**: Uses connect-pg-simple for PostgreSQL-backed sessions
 
 ### Key Design Patterns
 - **Shared Schema**: TypeScript types and Zod schemas are defined once in `shared/` and imported by both client and server
@@ -54,14 +53,14 @@ Preferred communication style: Simple, everyday language.
 - **Group Membership Validation**: GET `/api/groups/:id` accepts optional `memberId` query param; if provided, verifies the caller is a group member before returning data. WebSocket connections also validate memberId belongs to the group before allowing connection.
 - **Crew Authorization**: All `/api/crews/:id/*` and `/api/sessions/:id/*` endpoints enforce crew membership checks via `requireCrewMembership()` and `requireSessionMembership()` helpers, preventing unauthorized access (IDOR protection). Delete operations require owner role.
 - **leaderToken Security**: `leaderToken` is stripped from all REST API responses (except the initial create response to the host) and from WebSocket sync broadcasts. API response logging recursively redacts `leaderToken` fields.
-- **Session Identity Binding**: Anonymous party members are bound to their browser session via express-session. `bindMemberToSession()` stores `memberBindings[groupId] = memberId` in the session on create/join. All action endpoints (swipe, done-swiping, nudge, reaction, remove-member, start-session, preferences, push-subscribe) verify via `verifyMemberIdentity()` that the caller's session matches the claimed memberId, preventing impersonation attacks.
+- **Session Identity Binding**: Anonymous party members are bound to their client via an HMAC-SHA256-signed binding (`COOKIE_SECRET`-keyed), delivered as a signed `member-bindings` cookie and as an `X-Member-Bindings` header (the header path supports Capacitor native WebViews where cross-origin cookies are unreliable). `bindMemberToSession()` issues bindings on create/join. All action endpoints (swipe, done-swiping, nudge, reaction, remove-member, start-session, preferences, push-subscribe) verify via `verifyMemberIdentity()` that the caller's session matches the claimed memberId, preventing impersonation attacks.
 - **CSRF Protection**: Double-submit cookie pattern via `server/csrf.ts`. Server sets `csrf-token` cookie (JS-readable, SameSite=Strict), client sends back as `X-CSRF-Token` header. Auth routes exempted.
 - **Keyboard Swiping**: Arrow keys (Left=dislike, Right=like, Up=super-like) for desktop swiping with visible keyboard hints below swipe buttons (hidden on mobile)
 
 ### Testing
 - **Framework**: Vitest with config at `vitest.config.ts` (separate from Vite's client config)
 - **Run**: `npx vitest run --config vitest.config.ts`
-- **Coverage**: 40 unit tests covering match algorithm, CSRF logic, leader token expiration, analytics coordinate truncation
+- **Coverage**: Unit tests in `server/__tests__/` covering the match algorithm, CSRF logic, TTL cache, leader token expiration, and analytics coordinate truncation
 
 ### Build Process
 - **Development**: Vite dev server with HMR, Express backend via tsx
@@ -73,7 +72,6 @@ Preferred communication style: Simple, everyday language.
 ### Database
 - PostgreSQL database (connection via DATABASE_URL environment variable)
 - Drizzle ORM for database operations
-- connect-pg-simple for session storage
 
 ### UI Framework
 - Radix UI primitives (comprehensive set: dialogs, menus, forms, etc.)
@@ -82,6 +80,5 @@ Preferred communication style: Simple, everyday language.
 - Lucide React for icons
 
 ### Development Tools
-- Replit-specific Vite plugins for development (cartographer, dev-banner, runtime-error-modal)
 - TypeScript with strict mode
 - ESBuild for production server bundling

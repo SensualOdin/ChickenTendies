@@ -29,6 +29,35 @@ export function findUnanimousMatches<T extends RestaurantRecord>(
   return matches;
 }
 
+// Restaurants that have ≥2 likes from the group but aren't unanimous yet.
+// Surfaces on the Matches page so a holdout can flip their swipe once they
+// see who's already on board. Threshold of 2 (not "≥50%") because for a
+// 2-person group the only meaningful outcome is unanimous-or-nothing, and
+// requiring 2 likes keeps single-person noise out of the list for larger
+// groups too.
+export function findPartialMatches<T extends RestaurantRecord>(
+  memberIds: string[],
+  restaurants: T[],
+  swipes: SwipeRecord[]
+): Array<{ restaurant: T; likedByIds: string[] }> {
+  const out: Array<{ restaurant: T; likedByIds: string[] }> = [];
+
+  for (const restaurant of restaurants) {
+    const likedByIds = swipes
+      .filter(s => s.restaurantId === restaurant.id && s.liked)
+      .map(s => s.memberId);
+    const uniqueLikedBy = Array.from(new Set(likedByIds));
+
+    if (uniqueLikedBy.length >= 2 && uniqueLikedBy.length < memberIds.length) {
+      out.push({ restaurant, likedByIds: uniqueLikedBy });
+    }
+  }
+
+  // Hottest partials first — the ones closest to unanimous.
+  out.sort((a, b) => b.likedByIds.length - a.likedByIds.length);
+  return out;
+}
+
 export function findMatchesWithSuperLikeBoost<T extends RestaurantRecord>(
   memberIds: string[],
   restaurants: T[],

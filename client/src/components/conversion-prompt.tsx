@@ -80,7 +80,7 @@ export function ConversionPrompt({ groupId, groupName, matchCount, onDismiss }: 
 
         <DialogFooter className="flex flex-col gap-2 sm:flex-col">
           <Button
-            className="w-full bg-gradient-to-r from-primary to-orange-500"
+            className="w-full"
             onClick={handleCreateAccount}
             data-testid="button-create-account-save-crew"
           >

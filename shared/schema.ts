@@ -90,6 +90,23 @@ export const groupSchema = z.object({
 
 export type Group = z.infer<typeof groupSchema>;
 
+// One physical address inside a chain cluster (e.g. each Chipotle near you).
+// The parent Restaurant card represents the BRAND; this represents a single
+// location the host can lock in once the brand has been matched.
+export const restaurantLocationSchema = z.object({
+  id: z.string(), // Yelp business id for this specific location
+  address: z.string(),
+  distance: z.number(),
+  rating: z.number().min(0).max(5),
+  reviewCount: z.number(),
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
+  phone: z.string().optional(),
+  yelpUrl: z.string().optional(),
+});
+
+export type RestaurantLocation = z.infer<typeof restaurantLocationSchema>;
+
 // Restaurant
 export const restaurantSchema = z.object({
   id: z.string(),
@@ -114,9 +131,27 @@ export const restaurantSchema = z.object({
   googleReviewCount: z.number().nullable().optional(),
   googleMapsUrl: z.string().nullable().optional(),
   combinedRating: z.number().min(0).max(5).nullable().optional(),
+  // Present when the card represents a chain with ≥3 locations in the search
+  // area. The parent fields (id, address, latitude, etc.) reflect the closest
+  // location; locations[] holds the full set so the host can pick the
+  // specific one to lock in after the brand matches.
+  locations: z.array(restaurantLocationSchema).optional(),
 });
 
 export type Restaurant = z.infer<typeof restaurantSchema>;
+
+// Lazily-fetched Google review surfaced in the swipe-card details panel. We
+// don't bake these into restaurantSchema — they'd bloat every search response
+// for content most users never expand. The client fetches via
+// GET /api/restaurants/reviews only when a card's details panel is opened.
+export const googleReviewSchema = z.object({
+  rating: z.number().min(0).max(5),
+  text: z.string(),
+  author: z.string().optional(),
+  publishedAt: z.string().optional(), // human-friendly relative time, e.g. "2 weeks ago"
+});
+
+export type GoogleReview = z.infer<typeof googleReviewSchema>;
 
 // Swipe
 export const swipeSchema = z.object({
@@ -182,7 +217,8 @@ export type WSMessage =
   | { type: "all_done_swiping" }
   | { type: "member_progress"; memberId: string; swipeCount: number; totalRestaurants: number }
   | { type: "match_vote"; memberId: string; memberName: string; restaurantId: string }
-  | { type: "match_picked"; restaurant: Restaurant }
+  | { type: "match_picked"; restaurant: Restaurant; pickedLocationId?: string }
+  | { type: "final_choice"; restaurantId: string; chosenBy: string }
   | { type: "cuisine_vote_made"; memberId: string; cuisine: CuisineType }
   | { type: "member_done_cuisine_voting"; memberId: string; memberName: string }
   | { type: "cuisine_match_found"; cuisine: CuisineType }

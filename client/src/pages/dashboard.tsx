@@ -21,6 +21,7 @@ import { usePushNotifications } from "@/hooks/use-push-notifications";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest, getAuthHeaders, API_BASE, saveMemberBindings } from "@/lib/queryClient";
 import { storeLeaderToken } from "@/lib/leader-token";
+import { setMemberId } from "@/lib/member-id";
 import { Users, Plus, ArrowRight, UserPlus, Check, X, UserMinus, Bell, BellRing, BellOff, Play, User, BarChart3, CheckCheck, Settings, Flame } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import logoImage from "@assets/460272BC-3FCC-4927-8C2E-4C236353E7AB_1768880143398.png";
@@ -171,7 +172,7 @@ export default function Dashboard() {
       return response.json();
     },
     onSuccess: (data) => {
-      localStorage.setItem("grubmatch-member-id", data.memberId);
+      setMemberId(data.group.id, data.memberId);
       localStorage.setItem("grubmatch-group-id", data.group.id);
       if (data.leaderToken) {
         storeLeaderToken(data.group.id, data.leaderToken);
@@ -195,7 +196,7 @@ export default function Dashboard() {
       if (response.ok) {
         saveMemberBindings(response);
         const data = await response.json();
-        localStorage.setItem("grubmatch-member-id", data.memberId);
+        setMemberId(data.group.id, data.memberId);
         localStorage.setItem("grubmatch-group-id", data.group.id);
         navigate(`/group/${data.group.id}`);
       } else {
@@ -282,14 +283,15 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-background safe-top safe-x">
+    <div className="editorial-page min-h-screen safe-x">
       <CrewWalkthrough />
-      <header className="flex items-center justify-between p-4 md:p-6 border-b gap-2">
-        <Link href="/" className="flex items-center gap-2 shrink-0">
-          <img src={logoImage} alt="ChickenTinders" className="w-10 h-10 rounded-xl object-cover shadow-lg shadow-primary/30" />
-          <span className="text-xl font-bold bg-gradient-to-r from-primary to-orange-500 bg-clip-text text-transparent leading-tight hidden sm:inline">
-            ChickenTinders
-          </span>
+      <header className="safe-top flex items-center justify-between p-4 md:p-6 border-b border-border gap-2 relative z-[1] backdrop-blur-md bg-background/85 sticky top-0">
+        <Link href="/" className="flex items-center gap-3 shrink-0">
+          <img src={logoImage} alt="ChickenTinders" className="w-10 h-10 rounded-[10px] object-cover" />
+          <div className="hidden sm:block">
+            <div className="font-serif font-bold text-xl tracking-tight leading-none">ChickenTinders</div>
+            <div className="font-mono text-[10px] tracking-[0.14em] uppercase opacity-55 mt-0.5">Swipe Together, Dine Together</div>
+          </div>
         </Link>
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
           <div className="relative" ref={notificationRef}>
@@ -395,38 +397,41 @@ export default function Dashboard() {
         </div>
       </header>
 
-      <main className="p-4 md:p-6 max-w-6xl mx-auto safe-bottom">
+      <main className="p-4 md:p-8 max-w-6xl mx-auto safe-bottom relative z-[1]">
         <motion.div
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          className="mb-8"
+          className="mb-12"
         >
-          <h1 className="text-2xl sm:text-3xl font-bold mb-2">Welcome back, {user.firstName || "Chef"}!</h1>
-          <p className="text-muted-foreground">Ready to find where to eat tonight?</p>
+          <div className="section-num mb-3">Your dashboard</div>
+          <h1 className="editorial-display text-4xl sm:text-5xl md:text-6xl mb-3">
+            Welcome back, <em>{user.firstName || "Chef"}</em>.
+          </h1>
+          <p className="text-muted-foreground text-lg">Ready to find where to eat tonight?</p>
         </motion.div>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 mb-8">
-          <Card className="hover-elevate cursor-pointer" onClick={() => navigate("/create")} data-testid="card-quick-start">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-10">
+          <Card className="hover-elevate cursor-pointer border-border" onClick={() => navigate("/create")} data-testid="card-quick-start">
             <CardContent className="p-4 sm:p-6 flex items-center gap-4">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-primary to-orange-500 flex items-center justify-center">
-                <Play className="w-6 h-6 text-primary-foreground" />
+              <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0" style={{ background: "hsl(var(--paprika))" }}>
+                <Play className="w-5 h-5" style={{ color: "hsl(36 47% 96%)" }} />
               </div>
               <div>
-                <h3 className="font-bold text-sm sm:text-base">Quick Start</h3>
-                <p className="text-sm text-muted-foreground hidden sm:block">Start a new dining session</p>
+                <h3 className="font-serif font-semibold text-base sm:text-lg tracking-tight leading-tight">Quick Start</h3>
+                <p className="text-xs text-muted-foreground hidden sm:block">Start a new dining session</p>
               </div>
               <ArrowRight className="w-5 h-5 ml-auto text-muted-foreground hidden sm:block" />
             </CardContent>
           </Card>
 
-          <Card className="hover-elevate cursor-pointer" onClick={() => navigate("/join")} data-testid="card-join-party">
+          <Card className="hover-elevate cursor-pointer border-border" onClick={() => navigate("/join")} data-testid="card-join-party">
             <CardContent className="p-4 sm:p-6 flex items-center gap-4">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-accent to-emerald-500 flex items-center justify-center">
-                <Users className="w-6 h-6 text-accent-foreground" />
+              <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0" style={{ background: "hsl(var(--sage))" }}>
+                <Users className="w-5 h-5" style={{ color: "hsl(36 47% 96%)" }} />
               </div>
               <div>
-                <h3 className="font-bold text-sm sm:text-base">Join a Party</h3>
-                <p className="text-sm text-muted-foreground hidden sm:block">Enter a group code</p>
+                <h3 className="font-serif font-semibold text-base sm:text-lg tracking-tight leading-tight">Join a Party</h3>
+                <p className="text-xs text-muted-foreground hidden sm:block">Enter a group code</p>
               </div>
               <ArrowRight className="w-5 h-5 ml-auto text-muted-foreground hidden sm:block" />
             </CardContent>
@@ -434,14 +439,14 @@ export default function Dashboard() {
 
           <Dialog open={isCreateCrewOpen} onOpenChange={setIsCreateCrewOpen}>
             <DialogTrigger asChild>
-              <Card className="hover-elevate cursor-pointer" data-testid="card-create-crew">
+              <Card className="hover-elevate cursor-pointer border-border" data-testid="card-create-crew">
                 <CardContent className="p-4 sm:p-6 flex items-center gap-4">
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-yellow-500 to-orange-500 flex items-center justify-center">
-                    <Plus className="w-6 h-6 text-white" />
+                  <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0" style={{ background: "hsl(var(--butter))" }}>
+                    <Plus className="w-5 h-5" style={{ color: "hsl(var(--ink))" }} />
                   </div>
                   <div>
-                    <h3 className="font-bold text-sm sm:text-base">Create a Crew</h3>
-                    <p className="text-sm text-muted-foreground hidden sm:block">Start a persistent group</p>
+                    <h3 className="font-serif font-semibold text-base sm:text-lg tracking-tight leading-tight">Create a Crew</h3>
+                    <p className="text-xs text-muted-foreground hidden sm:block">Start a persistent group</p>
                   </div>
                   <ArrowRight className="w-5 h-5 ml-auto text-muted-foreground hidden sm:block" />
                 </CardContent>
@@ -474,14 +479,14 @@ export default function Dashboard() {
 
           <Dialog open={isJoinCrewOpen} onOpenChange={setIsJoinCrewOpen}>
             <DialogTrigger asChild>
-              <Card className="hover-elevate cursor-pointer" data-testid="card-join-crew">
+              <Card className="hover-elevate cursor-pointer border-border" data-testid="card-join-crew">
                 <CardContent className="p-4 sm:p-6 flex items-center gap-4">
-                  <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-                    <UserPlus className="w-6 h-6 text-white" />
+                  <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0" style={{ background: "hsl(var(--ink))" }}>
+                    <UserPlus className="w-5 h-5" style={{ color: "hsl(var(--cream))" }} />
                   </div>
                   <div>
-                    <h3 className="font-bold text-sm sm:text-base">Join a Crew</h3>
-                    <p className="text-sm text-muted-foreground hidden sm:block">Enter an invite code</p>
+                    <h3 className="font-serif font-semibold text-base sm:text-lg tracking-tight leading-tight">Join a Crew</h3>
+                    <p className="text-xs text-muted-foreground hidden sm:block">Enter an invite code</p>
                   </div>
                   <ArrowRight className="w-5 h-5 ml-auto text-muted-foreground hidden sm:block" />
                 </CardContent>
@@ -536,8 +541,17 @@ export default function Dashboard() {
                     const success = await subscribe();
                     if (success) {
                       toast({ title: "Notifications enabled!", description: "You'll be notified when sessions start." });
-                    } else if (permission === "denied") {
-                      toast({ title: "Notifications blocked", description: "Please enable notifications in your browser settings.", variant: "destructive" });
+                    } else {
+                      // `permission` is captured before subscribe() updated it, so read
+                      // the live value from Notification.permission instead of the stale state.
+                      const denied = typeof Notification !== "undefined" && Notification.permission === "denied";
+                      toast({
+                        title: denied ? "Notifications blocked" : "Couldn't enable notifications",
+                        description: denied
+                          ? "Please enable notifications in your device or browser settings."
+                          : "Please try again in a moment.",
+                        variant: "destructive",
+                      });
                     }
                   }}
                   disabled={pushLoading}

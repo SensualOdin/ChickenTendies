@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -8,10 +8,12 @@ import { useToast } from "@/hooks/use-toast";
 import { ArrowLeft, Flame, Copy, Check, Users, ArrowRight, Loader2, PartyPopper, Sparkles, Clock, X, Crown, Settings, Send } from "lucide-react";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, SHARE_BASE_URL } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
-import { getLeaderToken } from "@/lib/leader-token";
-import { isNative } from "@/lib/platform";
+import { useGroupNativePush } from "@/hooks/use-push-notifications";
+import { getLeaderToken, clearLeaderToken } from "@/lib/leader-token";
+import { getMemberId, setMemberId } from "@/lib/member-id";
+import { useGroupWebSocket } from "@/hooks/use-group-websocket";
 import type { Group, WSMessage, GroupMember } from "@shared/schema";
 
 export default function GroupLobby() {
@@ -20,13 +22,18 @@ export default function GroupLobby() {
   const { toast } = useToast();
   const { isAuthenticated } = useAuth();
   const [copied, setCopied] = useState(false);
-  const [ws, setWs] = useState<WebSocket | null>(null);
   const [group, setGroup] = useState<Group | null>(null);
   const [hasLeaderToken, setHasLeaderToken] = useState(false);
   const [isReclaiming, setIsReclaiming] = useState(false);
 
-  const memberId = localStorage.getItem("grubmatch-member-id");
+  const memberId = getMemberId(params.id);
   const isHost = group?.members.find((m) => m.id === memberId)?.isHost ?? false;
+
+  // Native push: prompt for OS notification permission the first time this
+  // tester lands in a lobby, then bind their FCM token to (groupId, memberId)
+  // so a host-started session reaches them even when the app is closed.
+  // No-op on web — web push for the same flow runs in swipe.tsx already.
+  useGroupNativePush({ groupId: params.id, memberId });
   const storedLeaderToken = params.id ? getLeaderToken(params.id) : null;
 
   // Check if user has a stored leader token for this group
@@ -38,15 +45,21 @@ export default function GroupLobby() {
     }
   }, [storedLeaderToken, isHost, group]);
 
-  // Auto-reclaim leadership on mount if user has leader token but isn't recognized
+  // Auto-reclaim leadership on mount if user has leader token but isn't
+  // recognized. One attempt only — previously a failing request flipped
+  // isReclaiming back to false, which re-triggered this effect and retried
+  // forever. The ref guard makes it one-shot, and clearing the stored token
+  // on failure ensures it can't re-fire on the next mount either.
+  const autoReclaimAttempted = useRef(false);
   useEffect(() => {
     const attemptAutoReclaim = async () => {
-      if (!params.id || !storedLeaderToken || isHost || !group || isReclaiming) return;
+      if (!params.id || !storedLeaderToken || isHost || !group || autoReclaimAttempted.current) return;
 
       // Check if user is already in the group
       const isMember = group.members.some(m => m.id === memberId);
       if (isMember) return; // Already in group, just not as host - don't auto-reclaim
 
+      autoReclaimAttempted.current = true;
       setIsReclaiming(true);
       try {
         const response = await apiRequest("POST", `/api/groups/${params.id}/reclaim-leadership`, {
@@ -56,7 +69,7 @@ export default function GroupLobby() {
 
         if (response.ok) {
           const data = await response.json();
-          localStorage.setItem("grubmatch-member-id", data.memberId);
+          setMemberId(params.id, data.memberId);
           setGroup(data.group);
           toast({
             title: "Welcome back!",
@@ -64,14 +77,16 @@ export default function GroupLobby() {
           });
         }
       } catch {
-        // Silent fail - user can manually reclaim
+        // Clear the stale token so the reclaim attempt never re-fires;
+        // the user can still reclaim manually via the button.
+        clearLeaderToken(params.id);
       } finally {
         setIsReclaiming(false);
       }
     };
 
     attemptAutoReclaim();
-  }, [params.id, storedLeaderToken, isHost, group, memberId, isReclaiming, toast]);
+  }, [params.id, storedLeaderToken, isHost, group, memberId, toast]);
 
   const { data: initialGroup, isLoading } = useQuery<Group>({
     queryKey: ["/api/groups", params.id],
@@ -90,114 +105,54 @@ export default function GroupLobby() {
     else if (group?.status === "swiping") setLocation(`/group/${params.id}/swipe`);
   }, [group?.status, params.id, setLocation]);
 
-  useEffect(() => {
-    if (!params.id || !memberId) return;
-
-    let socket: WebSocket | null = null;
-    let reconnectTimeout: NodeJS.Timeout | null = null;
-    let reconnectAttempts = 0;
-    const maxReconnectAttempts = 10;
-    let isClosedIntentionally = false;
-
-    const connect = () => {
-      const wsBase = isNative()
-        ? "wss://chickentinders.onrender.com"
-        : `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}`;
-
-      const apiUrl = import.meta.env.VITE_API_URL || "";
-      let wsUrl: string;
-      if (!isNative() && apiUrl) {
-        const url = new URL(apiUrl);
-        const wsProtocol = url.protocol === "https:" ? "wss:" : "ws:";
-        wsUrl = `${wsProtocol}//${url.host}/ws?groupId=${params.id}&memberId=${memberId}`;
+  const handleWsMessage = useCallback((message: WSMessage) => {
+    if (message.type === "sync") {
+      setGroup(message.group);
+    } else if (message.type === "member_joined") {
+      setGroup((prev) => {
+        if (!prev) return null;
+        if (prev.members.some(m => m.id === message.member.id)) return prev;
+        return { ...prev, members: [...prev.members, message.member] };
+      });
+      toast({
+        title: "New party member!",
+        description: `${message.member.name} just joined the fun!`,
+      });
+    } else if (message.type === "member_removed") {
+      if (message.memberId === memberId) {
+        toast({
+          title: "Removed from group",
+          description: "You have been removed from this group.",
+          variant: "destructive",
+        });
+        setLocation("/");
       } else {
-        wsUrl = `${wsBase}/ws?groupId=${params.id}&memberId=${memberId}`;
+        setGroup((prev) => {
+          if (!prev) return null;
+          return { ...prev, members: prev.members.filter(m => m.id !== message.memberId) };
+        });
+        toast({
+          title: "Member left",
+          description: `${message.memberName} has left the group.`,
+        });
       }
-      socket = new WebSocket(wsUrl);
+    } else if (message.type === "status_changed") {
+      if (message.status === "cuisine_voting") {
+        setLocation(`/group/${params.id}/cuisine-vote`);
+      } else if (message.status === "swiping") {
+        setLocation(`/group/${params.id}/swipe`);
+      }
+    } else if (message.type === "preferences_updated") {
+      setGroup((prev) => (prev ? { ...prev, preferences: message.preferences } : null));
+    }
+  }, [memberId, toast, setLocation, params.id]);
 
-      socket.onopen = () => {
-        console.log("WebSocket connected");
-        reconnectAttempts = 0;
-      };
-
-      socket.onmessage = (event) => {
-        const message: WSMessage = JSON.parse(event.data);
-
-        if (message.type === "sync") {
-          setGroup(message.group);
-        } else if (message.type === "member_joined") {
-          setGroup((prev) => {
-            if (!prev) return null;
-            if (prev.members.some(m => m.id === message.member.id)) {
-              return prev;
-            }
-            return {
-              ...prev,
-              members: [...prev.members, message.member],
-            };
-          });
-          toast({
-            title: "New party member!",
-            description: `${message.member.name} just joined the fun!`,
-          });
-        } else if (message.type === "member_removed") {
-          if (message.memberId === memberId) {
-            toast({
-              title: "Removed from group",
-              description: "You have been removed from this group.",
-              variant: "destructive",
-            });
-            setLocation("/");
-          } else {
-            setGroup((prev) => {
-              if (!prev) return null;
-              return {
-                ...prev,
-                members: prev.members.filter(m => m.id !== message.memberId),
-              };
-            });
-            toast({
-              title: "Member left",
-              description: `${message.memberName} has left the group.`,
-            });
-          }
-        } else if (message.type === "status_changed") {
-          if (message.status === "cuisine_voting") setLocation(`/group/${params.id}/cuisine-vote`);
-          else if (message.status === "swiping") setLocation(`/group/${params.id}/swipe`);
-        } else if (message.type === "preferences_updated") {
-          setGroup((prev) => {
-            if (!prev) return null;
-            return { ...prev, preferences: message.preferences };
-          });
-        }
-      };
-
-      socket.onclose = () => {
-        if (isClosedIntentionally) return;
-
-        if (reconnectAttempts < maxReconnectAttempts) {
-          reconnectAttempts++;
-          const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
-          console.log(`WebSocket closed, reconnecting in ${delay}ms (attempt ${reconnectAttempts})`);
-          reconnectTimeout = setTimeout(connect, delay);
-        }
-      };
-
-      socket.onerror = (error) => {
-        console.error("WebSocket error:", error);
-      };
-
-      setWs(socket);
-    };
-
-    connect();
-
-    return () => {
-      isClosedIntentionally = true;
-      if (reconnectTimeout) clearTimeout(reconnectTimeout);
-      if (socket) socket.close();
-    };
-  }, [params.id, memberId, toast, setLocation]);
+  useGroupWebSocket({
+    groupId: params.id,
+    memberId: memberId ?? undefined,
+    onMessage: handleWsMessage,
+    label: "Lobby",
+  });
 
   const copyCode = useCallback(async () => {
     if (!group) return;
@@ -213,7 +168,7 @@ export default function GroupLobby() {
   const shareCode = useCallback(async () => {
     if (!group) return;
 
-    const joinUrl = `${window.location.origin}/join?code=${group.code}`;
+    const joinUrl = `${SHARE_BASE_URL}/join?code=${group.code}`;
     const shareMessage = `Swipe right on dinner! Join my party on ChickenTinders: ${joinUrl}`;
 
     if (navigator.share) {
@@ -276,7 +231,7 @@ export default function GroupLobby() {
       return response.json();
     },
     onSuccess: (data) => {
-      localStorage.setItem("grubmatch-member-id", data.memberId);
+      if (params.id) setMemberId(params.id, data.memberId);
       setGroup(data.group);
       setHasLeaderToken(false);
       toast({
@@ -323,7 +278,7 @@ export default function GroupLobby() {
             <Flame className="w-4 h-4 text-primary-foreground" />
           </div>
           <div className="flex flex-col">
-            <span className="font-bold bg-gradient-to-r from-primary to-orange-500 bg-clip-text text-transparent leading-tight">ChickenTinders</span>
+            <span className="font-serif font-bold tracking-tight leading-tight">ChickenTinders</span>
             <span className="text-xs text-muted-foreground hidden sm:block">Swipe Together, Dine Together</span>
           </div>
         </div>
@@ -456,7 +411,7 @@ export default function GroupLobby() {
           {isHost ? (
             <Button
               size="lg"
-              className="w-full bg-gradient-to-r from-primary to-orange-500 shadow-lg shadow-primary/30"
+              className="w-full rounded-full h-12"
               onClick={handleContinue}
               disabled={group.members.length < 1}
               data-testid="button-continue"

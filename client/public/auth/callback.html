@@ -14,12 +14,23 @@
     // After OAuth, Supabase redirects here with either:
     // - Hash fragment: #access_token=...&refresh_token=... (implicit flow)
     // - Query params: ?code=... (PKCE flow)
-    // Forward everything to the native app via deep link.
+    //
+    // This physical file shadows the SPA route, so it must serve BOTH
+    // audiences: with the native app installed, the deep link takes over
+    // and the app completes sign-in; without it (desktop / plain mobile
+    // browser) the deep link silently fails and we fall back to
+    // /auth/web-callback — no physical file there, so the server serves
+    // the SPA, whose AuthCallback route exchanges the code in the browser.
     var hash = window.location.hash || '';
     var search = window.location.search || '';
-    // Always redirect to the native app with both query and hash preserved
-    var deepLink = 'chickentinders://auth/callback' + search + hash;
-    window.location.replace(deepLink);
+    window.location.replace('chickentinders://auth/callback' + search + hash);
+    setTimeout(function () {
+      // If the app opened, this page is hidden/frozen — don't steal the
+      // flow back; only fall back while still visible.
+      if (!document.hidden) {
+        window.location.replace('/auth/web-callback' + search + hash);
+      }
+    }, 1200);
   </script>
 </body>
 </html>

@@ -1,6 +1,7 @@
 import { db } from "./db";
 import { anonymousGroups, googlePlacesCache } from "@shared/schema";
 import { sql, lt } from "drizzle-orm";
+import { matchVotes } from "./routes";
 
 const GROUP_TTL_HOURS = 24;
 const GOOGLE_CACHE_TTL_HOURS = 24;
@@ -15,6 +16,11 @@ export async function cleanupStaleGroups(): Promise<void> {
       .returning({ id: anonymousGroups.id });
 
     if (deleted.length > 0) {
+      // Drop in-memory match-vote state for the deleted groups so the map
+      // doesn't grow unbounded across the process lifetime.
+      for (const { id } of deleted) {
+        matchVotes.delete(id);
+      }
       console.log(`[Cleanup] Removed ${deleted.length} stale anonymous groups`);
     }
 

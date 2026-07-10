@@ -11,33 +11,63 @@ import { startScheduledNotifications } from "./scheduled-notifications";
 const app = express();
 const httpServer = createServer(app);
 
+// Render (and most PaaS) terminate TLS at a proxy and forward with
+// X-Forwarded-For. Without this, express-rate-limit keys every request to the
+// proxy's IP, so one abusive client can exhaust the shared per-IP budget.
+app.set("trust proxy", 1);
+
+// chickentinders.app is retired in favor of chickentinders.co, but its DNS
+// still points at this service and old links/native builds reference it.
+// 301 everything to .co (query string is preserved via originalUrl).
+app.use((req, res, next) => {
+  const host = req.hostname?.toLowerCase();
+  if (host === "chickentinders.app" || host === "www.chickentinders.app") {
+    return res.redirect(301, `https://chickentinders.co${req.originalUrl}`);
+  }
+  next();
+});
+
 declare module "http" {
   interface IncomingMessage {
     rawBody: unknown;
   }
 }
 
-// CORS — allow frontend origin, localhost dev, and native Capacitor apps
+// CORS — allow frontend origin, localhost dev, and native Capacitor apps.
+// Includes the deployed frontend domains as fallbacks so the API still
+// answers if FRONTEND_URL ever gets unset in Render's env vars.
 const allowedOrigins = [
   process.env.FRONTEND_URL,
+  "https://chickentinders.co",
+  "https://www.chickentinders.co",
+  // .app is being retired in favor of .co — remove once the .app domain is gone
+  "https://chickentinders.app",
+  "https://www.chickentinders.app",
+  "https://chickentinders.onrender.com",
   "http://localhost:5173",
   "http://localhost:3000",
+  "http://localhost:5001",
   "capacitor://localhost",
   "https://localhost",
+  "ionic://localhost",
 ].filter(Boolean) as string[];
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (like mobile apps, curl, etc.)
+    // Allow requests with no origin (server-to-server, health checks, curl).
+    // Note: Capacitor iOS/Android send "capacitor://localhost" or "https://localhost"
+    // explicitly, so the no-origin case is not needed for native apps.
     if (!origin) return callback(null, true);
-    if (allowedOrigins.some(allowed => origin.startsWith(allowed))) {
+    // Exact-match only — prefix matching allows e.g. "capacitor://localhost.evil.com"
+    // to bypass the allowlist.
+    if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
     callback(null, false);
   },
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "X-Member-Bindings"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Member-Bindings", "X-CSRF-Token"],
   exposedHeaders: ["X-Member-Bindings"],
 }));
 
@@ -51,10 +81,13 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 const cookieSecret = process.env.COOKIE_SECRET;
-if (!cookieSecret && process.env.NODE_ENV === "production") {
-  throw new Error("COOKIE_SECRET environment variable is required in production");
+// Require COOKIE_SECRET everywhere except explicit development mode. Previously
+// this allowed a hardcoded "dev-secret" fallback whenever NODE_ENV wasn't
+// "production", which silently degraded security if NODE_ENV was unset in staging.
+if (!cookieSecret && process.env.NODE_ENV !== "development") {
+  throw new Error("COOKIE_SECRET environment variable is required");
 }
-app.use(cookieParser(cookieSecret || "chickentinders-dev-secret"));
+app.use(cookieParser(cookieSecret || "chickentinders-dev-secret-DO-NOT-USE-IN-PROD"));
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -83,12 +116,26 @@ app.use((req, res, next) => {
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse) {
+        const SENSITIVE_KEYS = new Set([
+          "leaderToken",
+          "token",
+          "accessToken",
+          "refreshToken",
+          "supabaseToken",
+          "apiKey",
+          "password",
+          "secret",
+          "sessionId",
+          "cookie",
+          "authorization",
+          "memberBindings",
+        ]);
         const redactSensitive = (obj: any): any => {
           if (obj === null || typeof obj !== 'object') return obj;
           if (Array.isArray(obj)) return obj.map(redactSensitive);
           const result: any = {};
           for (const key of Object.keys(obj)) {
-            if (key === 'leaderToken') {
+            if (SENSITIVE_KEYS.has(key)) {
               result[key] = "[REDACTED]";
             } else {
               result[key] = redactSensitive(obj[key]);

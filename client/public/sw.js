@@ -1,109 +1,43 @@
-const CACHE_NAME = 'chickentinders-v1';
-const OFFLINE_URL = '/offline.html';
+// ChickenTinders Service Worker — v2 (passthrough).
+//
+// Earlier versions cached JS/CSS aggressively, which caused the custom domain
+// (chickentinders.app) to serve stale bundles pointing to hashed asset
+// filenames that no longer exist on the server, rendering a blank page.
+//
+// This version is intentionally minimal:
+//   - Activates immediately (skipWaiting + claim)
+//   - Deletes every cache from prior versions on activate
+//   - Does NOT intercept fetch — network handles everything
+//   - Keeps push + notificationclick handlers so opted-in users still get
+//     web push notifications
+//
+// Because there is no `fetch` listener, returning visitors with the old
+// SW registered will have their stale caches cleared and the page will
+// load directly from the network on their very next reload.
 
-const PRECACHE_URLS = [
-  '/offline.html',
-  '/icons/icon-192.png',
-  '/icons/icon-512.png'
-];
+const SW_VERSION = 'chickentinders-passthrough-v2';
 
-self.addEventListener('install', function(event) {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(function(cache) {
-      return cache.addAll(PRECACHE_URLS);
-    })
-  );
+self.addEventListener('install', function () {
   self.skipWaiting();
 });
 
-self.addEventListener('activate', function(event) {
+self.addEventListener('activate', function (event) {
   event.waitUntil(
-    caches.keys().then(function(cacheNames) {
-      return Promise.all(
-        cacheNames
-          .filter(function(name) { return name !== CACHE_NAME; })
-          .map(function(name) { return caches.delete(name); })
-      );
-    }).then(function() {
-      return clients.claim();
-    })
+    (async function () {
+      // Nuke every cache created by prior SW versions.
+      const names = await caches.keys();
+      await Promise.all(names.map(function (name) { return caches.delete(name); }));
+      await self.clients.claim();
+    })()
   );
 });
 
-self.addEventListener('fetch', function(event) {
-  if (event.request.method !== 'GET') return;
+// Intentionally no 'fetch' handler — letting the browser handle network
+// requests directly is the safest thing while we transition users off the
+// old caching SW. A future iteration can reintroduce selective caching
+// with proper versioning.
 
-  const url = new URL(event.request.url);
-
-  if (url.pathname.startsWith('/api/')) {
-    event.respondWith(
-      fetch(event.request).catch(function() {
-        return new Response(JSON.stringify({ error: 'You are offline' }), {
-          status: 503,
-          headers: { 'Content-Type': 'application/json' }
-        });
-      })
-    );
-    return;
-  }
-
-  if (event.request.destination === 'image') {
-    event.respondWith(
-      caches.match(event.request).then(function(cached) {
-        if (cached) return cached;
-        return fetch(event.request).then(function(response) {
-          if (response.ok) {
-            var clone = response.clone();
-            caches.open(CACHE_NAME).then(function(cache) {
-              cache.put(event.request, clone);
-            });
-          }
-          return response;
-        }).catch(function() {
-          return new Response('', { status: 404 });
-        });
-      })
-    );
-    return;
-  }
-
-  if (url.pathname.match(/\.(js|css|woff2?|ttf|eot)$/) || event.request.destination === 'script' || event.request.destination === 'style') {
-    event.respondWith(
-      caches.match(event.request).then(function(cached) {
-        if (cached) return cached;
-        return fetch(event.request).then(function(response) {
-          if (response.ok) {
-            var clone = response.clone();
-            caches.open(CACHE_NAME).then(function(cache) {
-              cache.put(event.request, clone);
-            });
-          }
-          return response;
-        }).catch(function() {
-          return caches.match(event.request);
-        });
-      })
-    );
-    return;
-  }
-
-  if (event.request.mode === 'navigate') {
-    event.respondWith(
-      fetch(event.request).catch(function() {
-        return caches.match(OFFLINE_URL);
-      })
-    );
-    return;
-  }
-
-  event.respondWith(
-    fetch(event.request).catch(function() {
-      return caches.match(event.request);
-    })
-  );
-});
-
-self.addEventListener('push', function(event) {
+self.addEventListener('push', function (event) {
   if (!event.data) return;
 
   try {
@@ -131,23 +65,27 @@ self.addEventListener('push', function(event) {
   }
 });
 
-self.addEventListener('notificationclick', function(event) {
+self.addEventListener('notificationclick', function (event) {
   event.notification.close();
 
-  var url = event.notification.data?.url || '/dashboard';
+  var url = (event.notification.data && event.notification.data.url) || '/dashboard';
 
   event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(clientList) {
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clientList) {
       for (var i = 0; i < clientList.length; i++) {
         var client = clientList[i];
-        if (client.url.includes(self.location.origin) && 'focus' in client) {
+        if (client.url.indexOf(self.location.origin) === 0 && 'focus' in client) {
           client.navigate(url);
           return client.focus();
         }
       }
-      if (clients.openWindow) {
-        return clients.openWindow(url);
+      if (self.clients.openWindow) {
+        return self.clients.openWindow(url);
       }
     })
   );
 });
+
+// Version marker — useful when debugging: `registration.active.scriptURL` +
+// response body will contain this string.
+self.__SW_VERSION__ = SW_VERSION;

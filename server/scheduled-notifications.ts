@@ -1,6 +1,6 @@
 import { db } from "./db";
 import { persistentGroups, diningSessions, lifecycleEvents } from "@shared/schema";
-import { eq, and, sql, desc, gte } from "drizzle-orm";
+import { eq, and, sql, gte, inArray, max } from "drizzle-orm";
 import { sendPushToUsers } from "./push";
 import { logLifecycleEvent } from "./lifecycle";
 
@@ -11,21 +11,26 @@ export function startScheduledNotifications() {
   console.log("[Scheduled Notifications] Started hourly check");
 }
 
-async function wasSentToday(eventName: string, groupId: string): Promise<boolean> {
+// Batched: which of these groupIds already had `eventName` logged today?
+// Replaces a per-crew SELECT that ran inside each nudge loop (N+1).
+async function getGroupsAlreadyNotifiedToday(
+  eventName: string,
+  groupIds: string[],
+): Promise<Set<string>> {
+  if (groupIds.length === 0) return new Set();
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
   const rows = await db
-    .select({ id: lifecycleEvents.id })
+    .select({ groupId: lifecycleEvents.groupId })
     .from(lifecycleEvents)
     .where(
       and(
         eq(lifecycleEvents.eventName, eventName),
-        eq(lifecycleEvents.groupId, groupId),
-        gte(lifecycleEvents.createdAt, todayStart)
-      )
-    )
-    .limit(1);
-  return rows.length > 0;
+        inArray(lifecycleEvents.groupId, groupIds),
+        gte(lifecycleEvents.createdAt, todayStart),
+      ),
+    );
+  return new Set(rows.map(r => r.groupId).filter((g): g is string => !!g));
 }
 
 function getEasternTime(): Date {
@@ -72,24 +77,33 @@ async function sendFridayNudge() {
       })
       .from(persistentGroups);
 
+    if (crews.length === 0) return;
+
+    const startOfWeek = new Date();
+    startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
+    startOfWeek.setHours(0, 0, 0, 0);
+
+    // Batched: which crews already started a session this week?
+    const crewIds = crews.map(c => c.id);
+    const activeRows = await db
+      .selectDistinct({ groupId: diningSessions.groupId })
+      .from(diningSessions)
+      .where(
+        and(
+          inArray(diningSessions.groupId, crewIds),
+          sql`${diningSessions.startedAt} > ${startOfWeek.toISOString()}::timestamp`,
+        ),
+      );
+    const activeThisWeek = new Set(activeRows.map(r => r.groupId));
+
+    const alreadyNotified = await getGroupsAlreadyNotifiedToday(
+      "push_friday_nudge_sent",
+      crewIds,
+    );
+
     for (const crew of crews) {
-      const startOfWeek = new Date();
-      startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
-      startOfWeek.setHours(0, 0, 0, 0);
-
-      const recentSessions = await db
-        .select({ id: diningSessions.id })
-        .from(diningSessions)
-        .where(
-          and(
-            eq(diningSessions.groupId, crew.id),
-            sql`${diningSessions.startedAt} > ${startOfWeek.toISOString()}::timestamp`
-          )
-        );
-
-      if (recentSessions.length > 0) continue;
-
-      if (await wasSentToday("push_friday_nudge_sent", crew.id)) continue;
+      if (activeThisWeek.has(crew.id)) continue;
+      if (alreadyNotified.has(crew.id)) continue;
 
       const allUserIds = [crew.ownerId, ...crew.memberIds];
 
@@ -124,18 +138,32 @@ async function sendDormantCrewNudge() {
       })
       .from(persistentGroups);
 
+    if (crews.length === 0) return;
+    const crewIds = crews.map(c => c.id);
+
+    // Batched: last session start time per group, in one GROUP BY query.
+    const lastSessionRows = await db
+      .select({
+        groupId: diningSessions.groupId,
+        lastStartedAt: max(diningSessions.startedAt),
+      })
+      .from(diningSessions)
+      .where(inArray(diningSessions.groupId, crewIds))
+      .groupBy(diningSessions.groupId);
+    const lastStartByGroup = new Map(
+      lastSessionRows.map(r => [r.groupId, r.lastStartedAt]),
+    );
+
+    const alreadyNotified = await getGroupsAlreadyNotifiedToday(
+      "push_dormant_nudge_sent",
+      crewIds,
+    );
+
     for (const crew of crews) {
-      const lastSession = await db
-        .select({ startedAt: diningSessions.startedAt })
-        .from(diningSessions)
-        .where(eq(diningSessions.groupId, crew.id))
-        .orderBy(desc(diningSessions.startedAt))
-        .limit(1);
-
-      if (lastSession.length === 0) continue;
-      if (lastSession[0].startedAt && new Date(lastSession[0].startedAt) > twoWeeksAgo) continue;
-
-      if (await wasSentToday("push_dormant_nudge_sent", crew.id)) continue;
+      const lastStart = lastStartByGroup.get(crew.id);
+      if (!lastStart) continue;
+      if (new Date(lastStart) > twoWeeksAgo) continue;
+      if (alreadyNotified.has(crew.id)) continue;
 
       const allUserIds = [crew.ownerId, ...crew.memberIds];
 

@@ -1,15 +1,46 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowRight, Shield, Users, Utensils, Mail } from "lucide-react";
+import { ArrowRight, Shield, Users, Utensils, Mail, ChevronLeft } from "lucide-react";
 import { motion } from "framer-motion";
 import { Link, useLocation } from "wouter";
 import { supabase } from "@/lib/supabase";
 import { isNative } from "@/lib/platform";
 import { Browser } from "@capacitor/browser";
 import logoImage from "@assets/460272BC-3FCC-4927-8C2E-4C236353E7AB_1768880143398.png";
+
+// Where Supabase should send the user after they tap a confirmation /
+// magic-link email. On native we want the email to deep-link straight back
+// into the app via the custom URL scheme — going through the web /auth/callback
+// page is fragile because the PKCE code_verifier lives in the app's
+// localStorage (not the browser's), and some Android browsers refuse to
+// bounce custom-scheme URLs from JS. NOTE: this URL must be on the Supabase
+// project's "Redirect URLs" allowlist.
+function getEmailRedirectTo(): string {
+  return isNative()
+    ? "chickentinders://auth/callback"
+    : `${window.location.origin}/auth/callback`;
+}
+
+// Some testers reported the Create-account button greying out and spinning
+// forever. Supabase's SDK can hang on transient network conditions (no
+// built-in fetch timeout in older releases). Race every auth call against a
+// hard deadline so the spinner always resolves to either success or a real
+// error message.
+const AUTH_TIMEOUT_MS = 20_000;
+async function withTimeout<T>(p: Promise<T>, label: string): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`${label} is taking too long. Check your connection and try again.`)),
+        AUTH_TIMEOUT_MS,
+      ),
+    ),
+  ]);
+}
 
 export default function LoginPage() {
   const [, setLocation] = useLocation();
@@ -20,18 +51,45 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [magicLinkSent, setMagicLinkSent] = useState(false);
 
+  // Surface OAuth callback failures — App.tsx's deep-link handler redirects
+  // here with ?error=auth_callback_failed when the PKCE exchange or
+  // setSession fails on the native side.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("error") === "auth_callback_failed") {
+      setError("Couldn't complete sign-in. Please try again.");
+    }
+  }, []);
+
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
-
     try {
       if (isSignUp) {
-        const { error } = await supabase.auth.signUp({ email, password });
+        const { data, error } = await withTimeout(
+          supabase.auth.signUp({
+            email,
+            password,
+            options: { emailRedirectTo: getEmailRedirectTo() },
+          }),
+          "Sign-up",
+        );
         if (error) throw error;
+        // Auto-confirm projects (Supabase setting "Enable email confirmations"
+        // off) return a session immediately and send NO email. Showing the
+        // "check your email" screen there strands the user forever waiting on
+        // a message that will never arrive.
+        if (data.session) {
+          setLocation("/dashboard");
+          return;
+        }
         setMagicLinkSent(true);
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        const { error } = await withTimeout(
+          supabase.auth.signInWithPassword({ email, password }),
+          "Sign-in",
+        );
         if (error) throw error;
         setLocation("/dashboard");
       }
@@ -49,9 +107,14 @@ export default function LoginPage() {
     }
     setLoading(true);
     setError(null);
-
     try {
-      const { error } = await supabase.auth.signInWithOtp({ email });
+      const { error } = await withTimeout(
+        supabase.auth.signInWithOtp({
+          email,
+          options: { emailRedirectTo: getEmailRedirectTo() },
+        }),
+        "Magic-link send",
+      );
       if (error) throw error;
       setMagicLinkSent(true);
     } catch (err: any) {
@@ -64,59 +127,70 @@ export default function LoginPage() {
   const handleGoogleLogin = async () => {
     setLoading(true);
     setError(null);
-
     try {
       if (isNative()) {
-        // On native, we generate the OAuth URL and open it in the system browser.
-        // The redirect comes back via deep link (chickentinders://...) which the
-        // App.tsx deep link handler picks up and sets the Supabase session.
         const { data, error } = await supabase.auth.signInWithOAuth({
           provider: "google",
           options: {
-            redirectTo: "https://chickentinders.app/auth/callback",
+            redirectTo: "https://chickentinders.co/auth/callback",
             skipBrowserRedirect: true,
           },
         });
         if (error) throw error;
-        if (data.url) {
-          await Browser.open({ url: data.url });
-        }
+        if (data.url) await Browser.open({ url: data.url });
       } else {
         const { error } = await supabase.auth.signInWithOAuth({
           provider: "google",
-          options: {
-            redirectTo: `${window.location.origin}/dashboard`,
-          },
+          // Must land on the SPA's exchange route: detectSessionInUrl is
+          // disabled, so the AuthCallback route is the only place the PKCE
+          // code gets redeemed. NOT /auth/callback — a physical native-
+          // handoff file (public/auth/callback.html) shadows that path and
+          // would try to deep-link into the native app.
+          options: { redirectTo: `${window.location.origin}/auth/web-callback` },
         });
         if (error) throw error;
       }
     } catch (err: any) {
       setError(err.message || "Google sign-in failed");
+    } finally {
+      // On native the OAuth flow continues in the system browser — if the
+      // user cancels it, no error is thrown here, so without this the button
+      // would stay stuck in its loading state forever. On web the page is
+      // about to redirect anyway, so re-enabling is harmless.
       setLoading(false);
     }
   };
 
+  const BrandHeader = () => (
+    <header className="editorial-container py-6 flex items-center justify-between safe-top">
+      <Link href="/" className="flex items-center gap-3" data-testid="link-home-from-login">
+        <img src={logoImage} alt="ChickenTinders" className="w-10 h-10 rounded-[10px] object-cover" data-testid="img-login-header-logo" />
+        <div>
+          <div className="font-serif font-bold text-xl tracking-tight leading-none">ChickenTinders</div>
+          <div className="font-mono text-[10px] tracking-[0.14em] uppercase opacity-55 mt-1">Swipe Together, Dine Together</div>
+        </div>
+      </Link>
+      <Link href="/" className="text-sm text-muted-foreground hover:text-foreground inline-flex items-center gap-1" data-testid="link-back-home">
+        <ChevronLeft className="w-4 h-4" />
+        Back
+      </Link>
+    </header>
+  );
+
   if (magicLinkSent) {
     return (
-      <div className="min-h-screen bg-background flex flex-col safe-top safe-x safe-bottom">
-        <header className="flex items-center gap-2 p-4 md:p-6">
-          <Link href="/">
-            <Button variant="ghost" className="flex items-center gap-2">
-              <img src={logoImage} alt="ChickenTinders" className="w-8 h-8 rounded-lg object-cover shadow-md shadow-primary/20" />
-              <span className="text-lg font-bold bg-gradient-to-r from-primary to-orange-500 bg-clip-text text-transparent">
-                ChickenTinders
-              </span>
-            </Button>
-          </Link>
-        </header>
+      <div className="editorial-page min-h-screen flex flex-col safe-x">
+        <BrandHeader />
         <main className="flex-1 flex items-center justify-center px-4 pb-12">
-          <Card className="w-full max-w-md border-2">
-            <CardContent className="p-6 text-center space-y-4">
-              <Mail className="w-12 h-12 text-primary mx-auto" />
-              <h2 className="text-xl font-bold">Check your email</h2>
+          <Card className="w-full max-w-md editorial-card">
+            <CardContent className="p-8 text-center space-y-5">
+              <div className="w-14 h-14 mx-auto rounded-full grid place-items-center" style={{ background: "hsl(var(--paprika) / 0.12)" }}>
+                <Mail className="w-6 h-6" style={{ color: "hsl(var(--paprika))" }} />
+              </div>
+              <div className="section-num">Check your email</div>
+              <h2 className="editorial-display text-3xl">We sent you a link.</h2>
               <p className="text-muted-foreground">
-                We sent a {isSignUp ? "confirmation" : "login"} link to <strong>{email}</strong>.
-                Click the link to continue.
+                {isSignUp ? "Confirmation" : "Login"} link is in your inbox at <strong className="text-foreground">{email}</strong>.
               </p>
               <Button variant="ghost" onClick={() => { setMagicLinkSent(false); setIsSignUp(false); }}>
                 Back to sign in
@@ -129,19 +203,10 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col safe-top safe-x safe-bottom">
-      <header className="flex items-center gap-2 p-4 md:p-6">
-        <Link href="/">
-          <Button variant="ghost" className="flex items-center gap-2" data-testid="link-home-from-login">
-            <img src={logoImage} alt="ChickenTinders" className="w-8 h-8 rounded-lg object-cover shadow-md shadow-primary/20" data-testid="img-login-header-logo" />
-            <span className="text-lg font-bold bg-gradient-to-r from-primary to-orange-500 bg-clip-text text-transparent">
-              ChickenTinders
-            </span>
-          </Button>
-        </Link>
-      </header>
+    <div className="editorial-page min-h-screen flex flex-col safe-x">
+      <BrandHeader />
 
-      <main className="flex-1 flex items-center justify-center px-4 pb-12">
+      <main className="flex-1 flex items-center justify-center px-4 pb-16 pt-4 relative z-[1]">
         <div className="w-full max-w-md">
           <motion.div
             initial={{ y: 20, opacity: 0 }}
@@ -149,59 +214,65 @@ export default function LoginPage() {
             transition={{ duration: 0.4 }}
             className="text-center mb-8"
           >
-            <motion.img
-              src={logoImage}
-              alt="ChickenTinders logo"
-              className="w-20 h-20 rounded-2xl object-cover shadow-xl shadow-primary/30 mx-auto mb-4"
-              initial={{ scale: 0.8 }}
-              animate={{ scale: 1 }}
-              transition={{ delay: 0.1, type: "spring", stiffness: 200 }}
-              data-testid="img-login-logo"
-            />
-            <h1 className="text-2xl sm:text-3xl font-extrabold mb-2" data-testid="text-login-title">
-              Welcome to{" "}
-              <span className="bg-gradient-to-r from-primary to-orange-500 bg-clip-text text-transparent">
-                ChickenTinders
-              </span>
+            <div className="eyebrow mb-5 inline-flex">
+              <span className="dot"></span>
+              {isSignUp ? "Create your account" : "Welcome back"}
+            </div>
+            <h1 className="editorial-display text-5xl sm:text-6xl mb-4" data-testid="text-login-title">
+              {isSignUp ? (<>Let's <em>begin.</em></>) : (<>Sign <em>in.</em></>)}
             </h1>
-            <p className="text-muted-foreground" data-testid="text-login-subtitle">
-              Sign in to save your crews, track your taste, and never argue about dinner again.
+            <p className="text-muted-foreground max-w-xs mx-auto" data-testid="text-login-subtitle">
+              Save your crews, track your taste, and never argue about dinner again.
             </p>
           </motion.div>
 
           <motion.div
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            transition={{ delay: 0.2, duration: 0.4 }}
+            transition={{ delay: 0.15, duration: 0.4 }}
           >
-            <Card className="border-2">
-              <CardContent className="p-6 space-y-6">
-                <div className="space-y-3">
-                  <div className="flex items-center gap-3 text-sm" data-testid="text-benefit-crews">
-                    <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                      <Users className="w-4 h-4 text-primary" />
-                    </div>
-                    <span className="text-muted-foreground">Create and manage your dining crews</span>
-                  </div>
-                  <div className="flex items-center gap-3 text-sm" data-testid="text-benefit-tracking">
-                    <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                      <Utensils className="w-4 h-4 text-primary" />
-                    </div>
-                    <span className="text-muted-foreground">Track restaurants you've visited together</span>
-                  </div>
-                  <div className="flex items-center gap-3 text-sm" data-testid="text-benefit-security">
-                    <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                      <Shield className="w-4 h-4 text-primary" />
-                    </div>
-                    <span className="text-muted-foreground">Your data stays secure with industry-standard auth</span>
-                  </div>
+            <Card className="editorial-card !p-0">
+              <CardContent className="p-7 space-y-6">
+                {/* Tab-style mode switcher. Testers were missing the small
+                    "Don't have an account? Sign up" link at the bottom of
+                    the card, so the choice is now the first thing in the
+                    form, full-width and obvious. */}
+                <div
+                  role="tablist"
+                  aria-label="Sign in or sign up"
+                  className="grid grid-cols-2 rounded-full bg-muted p-1 text-sm font-medium"
+                >
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={!isSignUp}
+                    className={`rounded-full px-4 py-2 transition-colors ${
+                      !isSignUp ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"
+                    }`}
+                    onClick={() => { setIsSignUp(false); setError(null); }}
+                    data-testid="tab-signin"
+                  >
+                    Sign in
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={isSignUp}
+                    className={`rounded-full px-4 py-2 transition-colors ${
+                      isSignUp ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"
+                    }`}
+                    onClick={() => { setIsSignUp(true); setError(null); }}
+                    data-testid="tab-signup"
+                  >
+                    Sign up
+                  </button>
                 </div>
 
                 {/* Google OAuth */}
                 <Button
                   size="lg"
                   variant="outline"
-                  className="w-full text-base"
+                  className="w-full h-12 text-base rounded-full border-[1.5px]"
                   onClick={handleGoogleLogin}
                   disabled={loading}
                   data-testid="button-google-signin"
@@ -216,18 +287,15 @@ export default function LoginPage() {
                 </Button>
 
                 <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t" />
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-background px-2 text-muted-foreground">or</span>
+                  <div className="absolute inset-0 flex items-center"><span className="w-full border-t" /></div>
+                  <div className="relative flex justify-center">
+                    <span className="bg-card px-3 font-mono text-[10px] tracking-[0.16em] uppercase text-muted-foreground">Or with email</span>
                   </div>
                 </div>
 
-                {/* Email/Password form */}
                 <form onSubmit={handleEmailAuth} className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
+                    <Label htmlFor="email" className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground">Email</Label>
                     <Input
                       id="email"
                       type="email"
@@ -235,10 +303,11 @@ export default function LoginPage() {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       required
+                      className="h-11"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="password">Password</Label>
+                    <Label htmlFor="password" className="font-mono text-[10px] tracking-[0.14em] uppercase text-muted-foreground">Password</Label>
                     <Input
                       id="password"
                       type="password"
@@ -247,6 +316,7 @@ export default function LoginPage() {
                       onChange={(e) => setPassword(e.target.value)}
                       required
                       minLength={6}
+                      className="h-11"
                     />
                   </div>
 
@@ -257,47 +327,46 @@ export default function LoginPage() {
                   <Button
                     type="submit"
                     size="lg"
-                    className="w-full text-base bg-gradient-to-r from-primary to-orange-500"
+                    className="w-full h-12 text-base rounded-full"
                     disabled={loading}
                     data-testid="button-continue-signin"
                   >
-                    {loading ? "Loading..." : isSignUp ? "Create Account" : "Sign In"}
+                    {loading ? "Loading..." : isSignUp ? "Create account" : "Sign in"}
                     <ArrowRight className="w-5 h-5 ml-2" />
                   </Button>
                 </form>
 
-                <div className="flex flex-col gap-2 items-center">
+                <div className="flex flex-col gap-2 items-center pt-2 border-t border-border">
                   <button
                     type="button"
-                    className="text-xs text-primary hover:underline"
+                    className="text-sm text-primary hover:underline pt-3"
                     onClick={handleMagicLink}
                     disabled={loading}
                   >
-                    Send me a magic link instead
+                    Email me a magic link instead
                   </button>
-                  <button
-                    type="button"
-                    className="text-xs text-muted-foreground hover:underline"
-                    onClick={() => { setIsSignUp(!isSignUp); setError(null); }}
-                  >
-                    {isSignUp ? "Already have an account? Sign in" : "Don't have an account? Sign up"}
-                  </button>
+                </div>
+
+                {/* Benefits strip */}
+                <div className="pt-5 border-t border-border">
+                  <div className="font-mono text-[10px] tracking-[0.16em] uppercase text-muted-foreground mb-3">What you unlock</div>
+                  <div className="space-y-2.5">
+                    <div className="flex items-center gap-3 text-sm" data-testid="text-benefit-crews">
+                      <Users className="w-4 h-4" style={{ color: "hsl(var(--paprika))" }} />
+                      <span className="text-muted-foreground">Saved crews that stick around</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-sm" data-testid="text-benefit-tracking">
+                      <Utensils className="w-4 h-4" style={{ color: "hsl(var(--sage))" }} />
+                      <span className="text-muted-foreground">History of where you've been</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-sm" data-testid="text-benefit-security">
+                      <Shield className="w-4 h-4" style={{ color: "hsl(var(--ink))" }} />
+                      <span className="text-muted-foreground">Secure, industry-standard auth</span>
+                    </div>
+                  </div>
                 </div>
               </CardContent>
             </Card>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.5 }}
-            className="text-center mt-6"
-          >
-            <Link href="/">
-              <Button variant="ghost" size="sm" data-testid="link-back-home">
-                Back to Home
-              </Button>
-            </Link>
           </motion.div>
         </div>
       </main>
